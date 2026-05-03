@@ -1,0 +1,20 @@
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY . .
+ARG DEEPSEEK_API_KEY
+ARG APP_URL=https://stack-audit.casahacker.org
+ENV DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
+ENV APP_URL=$APP_URL
+RUN npm run build
+
+FROM node:22-alpine
+WORKDIR /app
+RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-por
+COPY package.json ./
+RUN npm install
+COPY --from=builder /app/dist ./dist
+COPY server.ts ./
+EXPOSE 3000
+CMD ["npx", "tsx", "server.ts"]

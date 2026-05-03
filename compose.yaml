@@ -1,0 +1,30 @@
+services:
+  stack-audit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+        APP_URL: ${APP_URL}
+    image: localhost/stack-audit:latest
+    container_name: stack-audit
+    restart: "no"
+    environment:
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - APP_URL=${APP_URL}
+      - NODE_ENV=production
+    volumes:
+      - /data/stack-audit/data:/app/data
+    ports:
+      - "127.0.0.1:18088:3000"
+    networks:
+      - stack-audit-net
+
+networks:
+  stack-audit-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.89.10.0/24
