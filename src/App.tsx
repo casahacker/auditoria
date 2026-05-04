@@ -228,13 +228,15 @@ export default function App() {
 
   const [history, setHistory] = useState<AuditResult[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Conciliado' | 'Ressalva' | 'Pendente'>('Todos');
   const [rapcSearch, setRapcSearch] = useState('');
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsChecked, setTermsChecked] = useState([false, false, false, false]);
   const [selectedItem, setSelectedItem] = useState<AuditItem | null>(null);
-  const [cnpjCache, setCnpjCache] = useState<Record<string, CNPJData | null>>({});
+  const [cnpjCache, setCnpjCache] = useState<Record<string, CNPJData | 'error' | null>>({});
   const [cnpjLoading, setCnpjLoading] = useState<Record<string, boolean>>({});
   const [showCnpjPanel, setShowCnpjPanel] = useState(false);
   const [shareAudit, setShareAudit] = useState<AuditResult | null>(null);
@@ -273,14 +275,23 @@ export default function App() {
     setCnpjLoading(prev => ({ ...prev, [digits]: true }));
     try {
       const r = await fetch(`/api/cnpj/${digits}`);
-      const data = r.ok ? await r.json() : null;
-      setCnpjCache(prev => ({ ...prev, [digits]: data }));
+      if (r.ok) {
+        const data = await r.json();
+        setCnpjCache(prev => ({ ...prev, [digits]: data }));
+      } else {
+        setCnpjCache(prev => ({ ...prev, [digits]: 'error' }));
+      }
     } catch {
-      setCnpjCache(prev => ({ ...prev, [digits]: null }));
+      setCnpjCache(prev => ({ ...prev, [digits]: 'error' }));
     } finally {
       setCnpjLoading(prev => ({ ...prev, [digits]: false }));
     }
   }, [cnpjCache]);
+
+  const retryFetchCnpj = useCallback((taxId: string) => {
+    const digits = taxId.replace(/\D/g, '');
+    setCnpjCache(prev => { const next = { ...prev }; delete next[digits]; return next; });
+  }, []);
 
   useEffect(() => {
     setShowCnpjPanel(false);
@@ -326,14 +337,19 @@ export default function App() {
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         console.error('Falha ao salvar auditoria no servidor:', err);
+        setSaveError('Falha ao salvar a auditoria no servidor. Tente novamente.');
       } else {
         const resp = await r.json();
-        // Use actual saved filenames from server response for download links
         const savedSourceFiles = resp.savedFiles || sourceFiles;
-        setLastAuditResult({ ...fullResult, sourceFiles: savedSourceFiles });
+        const saved = { ...fullResult, sourceFiles: savedSourceFiles };
+        setLastAuditResult(saved);
+        setHistory(prev => [{ ...saved, itemCount: saved.items?.length ?? 0 } as any, ...prev]);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 4000);
       }
     } catch (e) {
       console.error('Falha ao salvar auditoria no servidor:', e);
+      setSaveError('Erro de rede ao salvar a auditoria. Verifique sua conexão.');
     }
   };
 
@@ -1124,7 +1140,7 @@ export default function App() {
                         <td className="px-4 py-2.5 text-text border-r border-line/20 font-sans uppercase">{item.description}</td>
                         <td className="px-4 py-2.5 text-text-secondary border-r border-line/20 font-sans uppercase">{item.activity}</td>
                         <td className="px-4 py-2.5 text-center whitespace-nowrap border-r border-line/20 uppercase">{item.date}</td>
-                        <td className="px-4 py-2.5 border-r border-line/20 uppercase">{(() => { const d = item.taxId?.replace(/\D/g,''); return (d?.length === 14 && cnpjCache[d]?.razao_social) ? cnpjCache[d]!.razao_social : item.entity; })()}</td>
+                        <td className="px-4 py-2.5 border-r border-line/20 uppercase">{(() => { const d = item.taxId?.replace(/\D/g,''); const cached = d?.length === 14 ? cnpjCache[d] : undefined; return (cached && cached !== 'error' && (cached as CNPJData).razao_social) ? (cached as CNPJData).razao_social : item.entity; })()}</td>
                         <td className="px-4 py-2.5 text-[9px] text-primary border-r border-line/20 uppercase">{item.docId}</td>
                         <td className="px-4 py-2.5 text-[9px] whitespace-nowrap border-r border-line/20 uppercase">{item.taxId}</td>
                         <td className="px-4 py-2.5 text-right font-bold border-r border-line/20">{formatCurrency(item.value)}</td>
@@ -1638,7 +1654,8 @@ export default function App() {
                       {(() => {
                         const taxDigits = selectedItem.taxId?.replace(/\D/g, '');
                         const isCnpj = taxDigits?.length === 14;
-                        const cnpjData = isCnpj ? cnpjCache[taxDigits!] : undefined;
+                        const cnpjRaw = isCnpj ? cnpjCache[taxDigits!] : undefined;
+                        const cnpjData = (cnpjRaw && cnpjRaw !== 'error') ? cnpjRaw as CNPJData : undefined;
                         const isLoadingCnpj = isCnpj ? cnpjLoading[taxDigits!] : false;
                         const displayName = cnpjData?.razao_social || selectedItem.entity;
                         const fields: [string, React.ReactNode][] = [
@@ -1678,8 +1695,33 @@ export default function App() {
                     {/* CNPJ data panel */}
                     {showCnpjPanel && (() => {
                       const taxDigits = selectedItem.taxId?.replace(/\D/g, '');
-                      const cnpjData = taxDigits?.length === 14 ? cnpjCache[taxDigits] : undefined;
-                      if (!cnpjData) return null;
+                      if (!taxDigits || taxDigits.length !== 14) return null;
+                      const isLoading = cnpjLoading[taxDigits];
+                      const cacheVal = cnpjCache[taxDigits];
+
+                      if (isLoading) return (
+                        <div className="mt-4 border-t border-line pt-4 flex items-center gap-2 text-text-secondary text-[11px]">
+                          <Loader2 size={13} className="animate-spin" /> Consultando Receita Federal...
+                        </div>
+                      );
+
+                      if (cacheVal === 'error') return (
+                        <div className="mt-4 border-t border-line pt-4">
+                          <p className="text-red-400 text-[11px] flex items-center gap-1.5">
+                            <AlertCircle size={13} /> Falha ao consultar dados do CNPJ.
+                          </p>
+                          <button
+                            onClick={() => { retryFetchCnpj(selectedItem.taxId!); fetchCnpj(selectedItem.taxId!); }}
+                            className="mt-2 text-[10px] text-primary underline"
+                          >
+                            Tentar novamente
+                          </button>
+                        </div>
+                      );
+
+                      if (!cacheVal) return null;
+
+                      const cnpjData = cacheVal as CNPJData;
                       const labelMap: Record<string, string> = {
                         razao_social: 'Razão Social', nome_fantasia: 'Nome Fantasia', situacao_cadastral: 'Situação Cadastral',
                         data_situacao_cadastral: 'Data Situação', tipo: 'Tipo', natureza_juridica: 'Natureza Jurídica',
@@ -1775,6 +1817,20 @@ export default function App() {
       <footer className="fixed bottom-0 left-[180px] right-0 py-3 px-6 bg-sidebar border-t border-line text-[10px] text-text-secondary text-center leading-relaxed z-40">
         <p className="font-bold tracking-widest uppercase">CONFIDENCIAL - USO INTERNO &nbsp;&bull;&nbsp; &copy; 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97 &nbsp;&bull;&nbsp; R. DR. RENATO PAES DE BARROS, 618 – ITAIM BIBI, SÃO PAULO – SP, 04530-000</p>
       </footer>
+
+      {/* ── Save toasts ────────────────────────────────────────────────────── */}
+      {saveError && (
+        <div className="fixed bottom-16 right-4 z-50 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-[12px] max-w-sm">
+          <AlertCircle size={15} className="shrink-0" />
+          <span className="flex-1">{saveError}</span>
+          <button onClick={() => setSaveError(null)} className="ml-1 opacity-70 hover:opacity-100"><X size={14} /></button>
+        </div>
+      )}
+      {saveSuccess && (
+        <div className="fixed bottom-16 right-4 z-50 bg-green-700 text-white px-4 py-3 rounded-lg shadow-lg text-[12px]">
+          Auditoria salva com sucesso.
+        </div>
+      )}
     </div>
   );
 }

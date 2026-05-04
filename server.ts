@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import FileStoreFactory from "session-file-store";
+import DocumentIntelligence, { getLongRunningPoller, isUnexpected } from "@azure-rest/ai-document-intelligence";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,27 +27,47 @@ passport.deserializeUser((user: any, done) => done(null, user));
 
 const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
+let googleCallbackURL = "";
 if (googleConfigured) {
-  passport.use(
-    new GoogleStrategy(
-      {
-        clientID: process.env.GOOGLE_CLIENT_ID!,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        callbackURL: `${process.env.APP_URL}/auth/google/callback`,
-      },
-      (_accessToken, _refreshToken, profile, done) => {
-        const email = profile.emails?.[0]?.value || "";
-        if (!email.endsWith("@casahacker.org")) {
-          return done(null, false);
+  const rawAppUrl = process.env.APP_URL;
+  if (!rawAppUrl) {
+    console.error("[Auth] GOOGLE_CLIENT_ID/SECRET definidos mas APP_URL está ausente. Google OAuth desativado.");
+  } else {
+    try {
+      new URL(rawAppUrl);
+      googleCallbackURL = rawAppUrl.replace(/\/$/, "") + "/auth/google/callback";
+    } catch {
+      console.error(`[Auth] APP_URL "${rawAppUrl}" não é uma URL válida. Google OAuth desativado.`);
+    }
+  }
+}
+
+if (googleCallbackURL) {
+  try {
+    passport.use(
+      new GoogleStrategy(
+        {
+          clientID: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          callbackURL: googleCallbackURL,
+        },
+        (_accessToken, _refreshToken, profile, done) => {
+          const email = profile.emails?.[0]?.value || "";
+          if (!email.endsWith("@casahacker.org")) {
+            return done(null, false);
+          }
+          return done(null, {
+            email,
+            name: profile.displayName,
+            photo: profile.photos?.[0]?.value,
+          });
         }
-        return done(null, {
-          email,
-          name: profile.displayName,
-          photo: profile.photos?.[0]?.value,
-        });
-      }
-    )
-  );
+      )
+    );
+  } catch (err: any) {
+    console.error("[Auth] Falha ao inicializar GoogleStrategy:", err.message);
+    googleCallbackURL = "";
+  }
 }
 
 // ── Express app ───────────────────────────────────────────────────────────────
@@ -89,7 +110,16 @@ app.get(
 
 app.get(
   "/auth/google/callback",
-  passport.authenticate("google", { failureRedirect: "/login?error=domain" }),
+  (req, res, next) => {
+    if (!googleCallbackURL) {
+      return res.status(503).redirect("/login?error=oauth_not_configured");
+    }
+    next();
+  },
+  passport.authenticate("google", {
+    failureRedirect: "/login?error=domain",
+    failureMessage: true,
+  }),
   (_req, res) => res.redirect("/")
 );
 
@@ -109,6 +139,12 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 app.get("/api/me", (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ error: "Não autenticado" });
   res.json(req.user);
+});
+
+// ── API: health check ─────────────────────────────────────────────────────────
+
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", ts: new Date().toISOString() });
 });
 
 // ── File upload (multer) ──────────────────────────────────────────────────────
@@ -149,9 +185,55 @@ const pdfUpload = multer({
 // are treated as scanned images and sent to Tesseract OCR.
 const OCR_THRESHOLD = 50;
 
+// ── Azure Document Intelligence configuration ─────────────────────────────────
+const AZURE_DI_ENDPOINT = (process.env.AZURE_DI_ENDPOINT || "").replace(/\/$/, "");
+const AZURE_DI_KEY = process.env.AZURE_DI_KEY || "";
+const EXTRACTION_ENGINE = process.env.EXTRACTION_ENGINE || "local";
+const useAzure = !!(AZURE_DI_ENDPOINT && AZURE_DI_KEY && EXTRACTION_ENGINE === "azure");
+
+console.log(`[Extraction] Engine: ${useAzure ? "Azure Document Intelligence" : "local (pdftotext + Tesseract)"}`);
+
+async function extractWithAzureDI(fileBuffer: Buffer): Promise<{ text: string; pages: number; ocrPages: number; engine: string }> {
+  const client = DocumentIntelligence(AZURE_DI_ENDPOINT, { key: AZURE_DI_KEY });
+  const initialResponse = await client.path("/documentModels/{modelId}:analyze", "prebuilt-read").post({
+    contentType: "application/json",
+    body: { base64Source: fileBuffer.toString("base64") },
+  });
+  if (isUnexpected(initialResponse)) {
+    throw new Error(`Azure DI error: ${JSON.stringify(initialResponse.body)}`);
+  }
+  const poller = getLongRunningPoller(client, initialResponse);
+  const result = await poller.pollUntilDone();
+  if (isUnexpected(result)) {
+    throw new Error(`Azure DI polling error: ${JSON.stringify(result.body)}`);
+  }
+  const pages = result.body.analyzeResult?.pages ?? [];
+  const totalPages = pages.length;
+  const text = pages
+    .map((page: any, i: number) => {
+      const lines = (page.lines ?? []).map((l: any) => l.content).join("\n");
+      return `[Página ${i + 1}]\n${lines}`;
+    })
+    .filter((p: string) => p.replace(/\[Página \d+\]/, "").trim().length > 0)
+    .join("\n\n");
+  return { text, pages: totalPages, ocrPages: 0, engine: "azure-document-intelligence" };
+}
+
 app.post("/api/extract-pdf", requireAuth, pdfUpload.single("file"), async (req: any, res) => {
   if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
 
+  // ── Azure Document Intelligence path ────────────────────────────────────────
+  if (useAzure) {
+    try {
+      const result = await extractWithAzureDI(req.file.buffer);
+      return res.json(result);
+    } catch (e: any) {
+      console.warn("[Azure DI] Extração falhou, usando fallback local:", e.message);
+      // fall through to local extraction
+    }
+  }
+
+  // ── Local extraction path (pdftotext + Tesseract OCR) ────────────────────────
   const uid = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const tmpIn = path.join("/tmp", `pdf_${uid}.pdf`);
   const tmpDir = path.join("/tmp", `ocr_${uid}`);
@@ -222,7 +304,7 @@ app.post("/api/extract-pdf", requireAuth, pdfUpload.single("file"), async (req: 
       .filter(p => p.replace(/\[Página \d+\]/, "").trim().length > 0)
       .join("\n\n");
 
-    res.json({ text, pages: totalPages, ocrPages: ocrPageCount });
+    res.json({ text, pages: totalPages, ocrPages: ocrPageCount, engine: "local" });
 
   } catch (e: any) {
     res.status(500).json({ error: "Falha na extração de PDF", detail: e.message });
@@ -358,7 +440,15 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(distDir, "index.html"));
 });
 
+// ── Global error handler ──────────────────────────────────────────────────────
+
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("[Unhandled Express Error]", err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Erro interno do servidor", detail: err.message });
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Stack Audit™ server running on port ${PORT}`);
-  console.log(`Google OAuth: ${googleConfigured ? "configurado" : "NÃO configurado"}`);
+  console.log(`Google OAuth: ${googleCallbackURL ? "configurado" : "NÃO configurado"}`);
 });
