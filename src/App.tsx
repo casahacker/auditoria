@@ -656,6 +656,249 @@ export default function App() {
     XLSX.writeFile(wb, `RAPC_${lastAuditResult.contractNumber}.xlsx`);
   };
 
+  // ── Exportar PDF (#9) ─────────────────────────────────────────────────────────
+  const handleExportPDF = () => {
+    if (!lastAuditResult) return;
+    const r = lastAuditResult;
+
+    const esc = (s: string | undefined | null) =>
+      String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const verdictClass = r.verdict === 'APROVADO' ? 'ok' : r.verdict === 'DILIGÊNCIA' ? 'err' : 'res';
+    const diligenced = r.items.filter(i => i.status === 'Pendente' || i.status === 'Ressalva');
+    const noConciliated = r.items.filter(i => i.status === 'Conciliado').length;
+
+    const bLines = r.budgetLines && r.budgetLines.length > 0
+      ? r.budgetLines
+      : Object.entries(r.items.reduce((acc: Record<string, number>, item) => {
+          const act = item.activity || 'Não Classificado';
+          acc[act] = (acc[act] || 0) + (item.value || 0);
+          return acc;
+        }, {}))
+        .map(([activity, executedValue]) => ({ activity, plannedValue: 0, executedValue: executedValue as number }))
+        .sort((a: any, b: any) => b.executedValue - a.executedValue);
+
+    const hasBudget = bLines.some((l: any) => l.plannedValue > 0);
+    const budgetTotalPlanned = bLines.reduce((s: number, l: any) => s + l.plannedValue, 0);
+    const budgetTotalExecuted = bLines.reduce((s: number, l: any) => s + l.executedValue, 0);
+
+    const getEntityName = (item: AuditItem): string => {
+      const digits = item.taxId?.replace(/\D/g, '') ?? '';
+      if (digits.length === 14 && r.cnpjData?.[digits] && r.cnpjData[digits] !== 'error') {
+        return (r.cnpjData[digits] as CNPJData).razao_social || item.entity;
+      }
+      return item.entity;
+    };
+
+    const rapcRows = r.items.map(item => {
+      const rowClass = item.status === 'Ressalva' ? 'row-res' : item.status === 'Pendente' ? 'row-pend' : '';
+      const badgeClass = item.status === 'Conciliado' ? 'badge-ok' : item.status === 'Ressalva' ? 'badge-res' : 'badge-pend';
+      return `<tr class="${rowClass}">
+        <td style="text-align:center">${item.id}</td>
+        <td>${esc(item.description)}</td>
+        <td>${esc(item.activity)}</td>
+        <td style="text-align:center;white-space:nowrap">${esc(item.date)}</td>
+        <td>${esc(getEntityName(item))}</td>
+        <td>${esc(item.docId)}</td>
+        <td style="white-space:nowrap;font-family:'IBM Plex Mono',monospace">${esc(formatTaxId(item.taxId))}</td>
+        <td style="text-align:right;font-weight:700">${formatCurrency(item.value)}</td>
+        <td style="text-align:center"><span class="${badgeClass}">${esc(item.status)}</span></td>
+        <td style="text-align:center">${esc(item.nfPage) || '—'}</td>
+        <td style="text-align:center">${esc(item.paymentPage) || '—'}</td>
+        <td style="font-size:7.5pt">${esc(item.observations)}</td>
+      </tr>`;
+    }).join('\n');
+
+    const budgetRows = bLines.map((l: any) => {
+      const saldo = l.plannedValue - l.executedValue;
+      const pct = l.plannedValue > 0 ? ((l.executedValue / l.plannedValue) * 100).toFixed(1) : '—';
+      const over = l.plannedValue > 0 && l.executedValue > l.plannedValue;
+      return `<tr${over ? ' style="background:#fff1f2"' : ''}>
+        <td>${esc(l.activity)}</td>
+        ${hasBudget ? `<td style="text-align:right">${formatCurrency(l.plannedValue)}</td>` : ''}
+        <td style="text-align:right;font-weight:600">${formatCurrency(l.executedValue)}</td>
+        ${hasBudget ? `<td style="text-align:right;color:${saldo < 0 ? '#da1e28' : '#198038'};font-weight:600">${formatCurrency(saldo)}</td>` : ''}
+        ${hasBudget ? `<td style="text-align:right">${pct}%</td>` : ''}
+      </tr>`;
+    }).join('\n');
+
+    const diligencedHtml = diligenced.length === 0
+      ? `<div style="text-align:center;padding:24px;border:1px dashed #e0e0e0;border-radius:4px;color:#525252;font-size:9pt;text-transform:uppercase;letter-spacing:0.1em">Integridade de dados 100% — nenhum lançamento diligenciado</div>`
+      : diligenced.map(item => `
+          <div class="dilig-item ${item.status === 'Pendente' ? 'dilig-pend' : 'dilig-res'}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <span style="font-weight:700;font-size:10pt">${esc(item.description)}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-weight:700;white-space:nowrap;margin-left:16px">${formatCurrency(item.value)}</span>
+            </div>
+            <div style="font-size:8pt;color:#525252;font-family:'IBM Plex Mono',monospace;margin-bottom:6px">
+              #${item.id} &bull; ${esc(item.activity)} &bull; ${esc(item.date)} &bull; ${esc(getEntityName(item))}
+              ${item.taxId && item.taxId !== 'N/A' ? `&bull; ${esc(formatTaxId(item.taxId))}` : ''}
+            </div>
+            ${item.observations ? `<div style="font-size:8.5pt;color:#393939;margin-bottom:6px">${esc(item.observations)}</div>` : ''}
+            ${item.auditorNote ? `<div style="font-size:8pt;color:#0f62fe;border-top:1px solid #e0e0e0;padding-top:6px;margin-top:6px"><strong>Anotação do Auditor:</strong> ${esc(item.auditorNote)}</div>` : ''}
+          </div>`).join('\n');
+
+    const auditedDate = (() => { try { return new Date(r.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }); } catch { return r.date; } })();
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Auditoria ${esc(r.contractNumber)} — ${esc(r.organization)}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;600;700;900&display=swap');
+@page { margin: 18mm 15mm 18mm 15mm; size: A4 portrait; }
+*,*::before,*::after { box-sizing: border-box; }
+body { font-family: 'IBM Plex Sans',system-ui,sans-serif; color: #161616; background: #fff; font-size: 10pt; line-height: 1.4; }
+.page-break { page-break-before: always; padding-top: 4mm; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
+a { color: inherit; text-decoration: none; }
+/* Cover */
+.cover { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 250mm; text-align: center; }
+.cover-logo { font-size: 30pt; font-weight: 900; letter-spacing: 0.18em; color: #0f62fe; margin-bottom: 6px; }
+.cover-sub { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.18em; color: #6f6f6f; margin-bottom: 40px; }
+.cover-box { border: 1px solid #e0e0e0; border-radius: 6px; padding: 32px 48px; text-align: left; min-width: 340px; margin-bottom: 40px; }
+.field-label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.1em; color: #6f6f6f; display: block; margin-bottom: 2px; }
+.field-value { font-size: 12pt; font-weight: 600; display: block; margin-bottom: 16px; }
+.field-value:last-child { margin-bottom: 0; }
+.verdict-ok  { color: #198038; border-color: #198038; }
+.verdict-res { color: #9e6900; border-color: #f1c21b; }
+.verdict-err { color: #da1e28; border-color: #da1e28; }
+.verdict-badge { font-size: 20pt; font-weight: 900; letter-spacing: 0.15em; border: 3px solid; padding: 12px 32px; border-radius: 6px; }
+/* Section heading */
+h2.section { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #525252; border-bottom: 1px solid #e0e0e0; padding-bottom: 5px; margin: 0 0 14px 0; }
+/* Metrics */
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 22px; }
+.metric-card { border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px 14px; }
+.metric-label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.1em; color: #525252; margin-bottom: 4px; }
+.metric-value { font-size: 20pt; font-family: 'IBM Plex Mono',monospace; font-weight: 700; line-height: 1.1; }
+.metric-sub { font-size: 7.5pt; color: #525252; margin-top: 2px; }
+/* Budget table */
+table.budget { width: 100%; border-collapse: collapse; font-size: 9pt; margin-bottom: 8px; }
+table.budget th { background: #f4f4f4; padding: 5px 9px; border: 1px solid #e0e0e0; font-size: 8pt; text-align: left; }
+table.budget td { padding: 5px 9px; border: 1px solid #e0e0e0; }
+table.budget tfoot td { background: #f4f4f4; font-weight: 700; }
+/* RAPC table */
+table.rapc { width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono',monospace; font-size: 7.5pt; }
+table.rapc th { background: #f4f4f4; font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid #e0e0e0; padding: 5px 7px; white-space: nowrap; }
+table.rapc td { border: 1px solid #e0e0e0; padding: 4px 7px; vertical-align: top; font-size: 7.5pt; }
+table.rapc tr.row-res td { background: #fffbeb; }
+table.rapc tr.row-pend td { background: #fff1f2; }
+.badge-ok   { background: #d9f5e5; color: #198038; border: 1px solid #24a148; padding: 1px 5px; border-radius: 3px; font-weight: 700; font-size: 7pt; white-space: nowrap; }
+.badge-res  { background: #fef3c7; color: #9e6900; border: 1px solid #f1c21b; padding: 1px 5px; border-radius: 3px; font-weight: 700; font-size: 7pt; white-space: nowrap; }
+.badge-pend { background: #ffe0e0; color: #da1e28; border: 1px solid #fa4d56; padding: 1px 5px; border-radius: 3px; font-weight: 700; font-size: 7pt; white-space: nowrap; }
+/* Diligenced items */
+.dilig-item { border: 1px solid; border-radius: 4px; padding: 10px 13px; margin-bottom: 9px; }
+.dilig-pend { border-color: #fa4d56; background: #fff1f2; }
+.dilig-res  { border-color: #f1c21b; background: #fffbeb; }
+/* Footer */
+.footer { border-top: 1px solid #e0e0e0; padding-top: 8px; margin-top: 30px; text-align: center; font-size: 7.5pt; color: #8d8d8d; }
+@media print {
+  .no-print { display: none !important; }
+  .footer { position: fixed; bottom: 0; left: 0; right: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── CAPA ──────────────────────────────────────────────────────────────────── -->
+<div class="cover">
+  <div class="cover-logo">STACK AUDIT™</div>
+  <div class="cover-sub">Plataforma de Auditoria Financeira com IA · Casa Hacker</div>
+  <div class="cover-box">
+    <span class="field-label">Organização</span><span class="field-value">${esc(r.organization)}</span>
+    <span class="field-label">Número do Contrato</span><span class="field-value">#${esc(r.contractNumber)}</span>
+    <span class="field-label">Período Auditado</span><span class="field-value">${esc(r.periodStart)} → ${esc(r.periodEnd)}</span>
+    <span class="field-label">Data da Auditoria</span><span class="field-value" style="margin-bottom:0">${auditedDate}</span>
+  </div>
+  <div class="verdict-badge verdict-${verdictClass}">${esc(r.verdict)}</div>
+  ${r.createdBy ? `<div style="margin-top:18px;font-size:9pt;color:#525252">Auditor responsável: ${esc(r.createdBy)}</div>` : ''}
+  <div style="margin-top:8px;font-size:7.5pt;color:#a8a8a8;font-family:'IBM Plex Mono',monospace">ID ${r.id.slice(0, 8).toUpperCase()}</div>
+</div>
+
+<!-- ── RESUMO EXECUTIVO ──────────────────────────────────────────────────────── -->
+<div class="page-break">
+  <h2 class="section">Resumo Executivo</h2>
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-label">Itens Auditados</div>
+      <div class="metric-value">${r.metrics.totalItems}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Itens Conciliados</div>
+      <div class="metric-value" style="color:#198038">${noConciliated}</div>
+      <div class="metric-sub">${r.metrics.totalItems > 0 ? ((noConciliated / r.metrics.totalItems) * 100).toFixed(1) : 0}% do total</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Pendências / Ressalvas</div>
+      <div class="metric-value" style="color:${diligenced.length > 0 ? '#da1e28' : '#198038'}">${diligenced.length}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Valor Total Auditado</div>
+      <div class="metric-value" style="font-size:14pt">${formatCurrency(r.metrics.totalValue)}</div>
+    </div>
+  </div>
+
+  <h2 class="section" style="margin-top:8px">Execução Orçamentária por Rubrica</h2>
+  <table class="budget">
+    <thead>
+      <tr>
+        <th style="width:45%">Rubrica / Atividade</th>
+        ${hasBudget ? `<th style="text-align:right">Planejado (R$)</th>` : ''}
+        <th style="text-align:right">Executado (R$)</th>
+        ${hasBudget ? `<th style="text-align:right">Saldo (R$)</th><th style="text-align:right">% Exec.</th>` : ''}
+      </tr>
+    </thead>
+    <tbody>${budgetRows}</tbody>
+    <tfoot>
+      <tr>
+        <td><strong>TOTAL</strong></td>
+        ${hasBudget ? `<td style="text-align:right">${formatCurrency(budgetTotalPlanned)}</td>` : ''}
+        <td style="text-align:right">${formatCurrency(budgetTotalExecuted)}</td>
+        ${hasBudget ? `<td style="text-align:right;color:${budgetTotalExecuted > budgetTotalPlanned ? '#da1e28' : '#198038'}">${formatCurrency(budgetTotalPlanned - budgetTotalExecuted)}</td>
+        <td style="text-align:right">${budgetTotalPlanned > 0 ? ((budgetTotalExecuted / budgetTotalPlanned) * 100).toFixed(1) : '—'}%</td>` : ''}
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<!-- ── RAPC ──────────────────────────────────────────────────────────────────── -->
+<div class="page-break">
+  <h2 class="section">Relatório de Conciliação — RAPC (${r.items.length} lançamentos)</h2>
+  <table class="rapc">
+    <thead>
+      <tr>
+        <th>#</th><th>Descrição</th><th>Atividade</th><th>Data</th>
+        <th>Razão Social</th><th>Doc Fiscal</th><th>CNPJ / CPF</th>
+        <th style="text-align:right">Valor</th><th>Status</th>
+        <th>Pág NF</th><th>Pág PG</th><th>Observações</th>
+      </tr>
+    </thead>
+    <tbody>${rapcRows}</tbody>
+  </table>
+</div>
+
+<!-- ── DILIGENCIADOS ─────────────────────────────────────────────────────────── -->
+<div class="page-break">
+  <h2 class="section">Lançamentos Diligenciados (${diligenced.length})</h2>
+  ${diligencedHtml}
+</div>
+
+<div class="footer">
+  Stack Audit™ &nbsp;·&nbsp; casahacker.org &nbsp;·&nbsp; Contrato #${esc(r.contractNumber)} &nbsp;·&nbsp; ${esc(r.organization)} &nbsp;·&nbsp; ID ${r.id.slice(0, 8).toUpperCase()}
+</div>
+
+<script>window.onload = function() { setTimeout(function() { window.focus(); window.print(); }, 150); };</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=960,height=760');
+    if (!win) { alert('Permita pop-ups para exportar o PDF.'); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
   // ── Reauditoria seletiva (#26) ────────────────────────────────────────────────
   const handleReauditSelectiva = async () => {
     if (!lastAuditResult) return;
@@ -1459,6 +1702,9 @@ export default function App() {
                   </button>
                   <button onClick={handleDownloadXLSX} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[10px] font-bold uppercase tracking-widest transition-all">
                     <Download size={12} /> XLSX
+                  </button>
+                  <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[10px] font-bold uppercase tracking-widest transition-all">
+                    <FileDown size={12} /> PDF
                   </button>
                   {/* #26 — Reauditoria seletiva */}
                   {diligencedItems.length > 0 && (
