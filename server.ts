@@ -411,6 +411,52 @@ app.get("/api/audits", requireAuth, (_req, res) => {
   res.json(audits);
 });
 
+// ── API: related items by taxId across all audits ────────────────────────────
+app.get("/api/audits/related", requireAuth, (req, res) => {
+  const taxId = String(req.query.taxId || "").replace(/\D/g, "");
+  if (!taxId || taxId.length < 11) return res.status(400).json({ error: "taxId inválido" });
+
+  if (!fs.existsSync(AUDITS_DIR)) return res.json([]);
+
+  const results: any[] = [];
+  const dirs = fs.readdirSync(AUDITS_DIR).filter(d =>
+    fs.statSync(path.join(AUDITS_DIR, d)).isDirectory()
+  );
+
+  for (const id of dirs) {
+    const metaPath = path.join(AUDITS_DIR, id, "result.json");
+    if (!fs.existsSync(metaPath)) continue;
+    try {
+      const audit = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+      const matched = (audit.items || []).filter((item: any) =>
+        String(item.taxId || "").replace(/\D/g, "") === taxId
+      );
+      if (matched.length > 0) {
+        results.push({
+          auditId: audit.id,
+          contractNumber: audit.contractNumber,
+          organization: audit.organization,
+          periodStart: audit.periodStart,
+          periodEnd: audit.periodEnd,
+          date: audit.date,
+          items: matched.map((item: any) => ({
+            id: item.id,
+            description: item.description,
+            date: item.date,
+            value: item.value,
+            status: item.status,
+            docId: item.docId,
+            activity: item.activity,
+          })),
+        });
+      }
+    } catch { /* skip corrupted */ }
+  }
+
+  results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  res.json(results);
+});
+
 app.get("/api/audits/:id", requireAuth, (req, res) => {
   const auditDir = path.join(AUDITS_DIR, req.params.id);
   const resultPath = path.join(auditDir, "result.json");

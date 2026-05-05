@@ -236,6 +236,8 @@ export default function App() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsChecked, setTermsChecked] = useState([false, false, false, false]);
   const [selectedItem, setSelectedItem] = useState<AuditItem | null>(null);
+  const [relatedItems, setRelatedItems] = useState<any[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
   const [cnpjCache, setCnpjCache] = useState<Record<string, CNPJData | 'error' | null>>({});
   const [cnpjLoading, setCnpjLoading] = useState<Record<string, boolean>>({});
   const [showCnpjPanel, setShowCnpjPanel] = useState(false);
@@ -295,7 +297,19 @@ export default function App() {
 
   useEffect(() => {
     setShowCnpjPanel(false);
-    if (selectedItem?.taxId) fetchCnpj(selectedItem.taxId);
+    setRelatedItems([]);
+    if (!selectedItem) return;
+    if (selectedItem.taxId) fetchCnpj(selectedItem.taxId);
+    // Fetch related items across all audits
+    const digits = selectedItem.taxId?.replace(/\D/g, '') || '';
+    if (digits.length >= 11) {
+      setRelatedLoading(true);
+      fetch(`/api/audits/related?taxId=${digits}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setRelatedItems(data))
+        .catch(() => setRelatedItems([]))
+        .finally(() => setRelatedLoading(false));
+    }
   }, [selectedItem]);
 
   useEffect(() => {
@@ -309,7 +323,9 @@ export default function App() {
 
   const saveAuditToServer = async (result: AuditResult, budgetCsv: any[]) => {
     try {
-      const budgetLines = budgetCsv.length > 0 ? computeBudgetLines(budgetCsv, result.items) : undefined;
+      // Prefer AI-computed budget lines from processAudit; fall back to deterministic
+      const budgetLines = result.budgetLines
+        ?? (budgetCsv.length > 0 ? computeBudgetLines(budgetCsv, result.items) : undefined);
       const sourceFiles: Record<string, string> = {};
       if (files.budget) sourceFiles.budget = files.budget.name;
       if (files.report) sourceFiles.report = files.report.name;
@@ -676,7 +692,7 @@ export default function App() {
         {/* Item detail modal (reused) */}
         {selectedItem && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedItem(null)}>
-            <div className="bg-card border border-line rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-card border border-line rounded-xl w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-line sticky top-0 bg-card z-10">
                 <h2 className="text-xs font-bold uppercase tracking-widest">Apuração Stack Audit™ — Lançamento #{selectedItem.id}</h2>
                 <button onClick={() => setSelectedItem(null)} className="p-1 hover:text-primary transition-colors"><X size={16} /></button>
@@ -958,7 +974,7 @@ export default function App() {
               <ProcessStep step={1} current={processingStep} label="Leitura e indexação dos arquivos" />
               <ProcessStep step={2} current={processingStep} label="Extração de texto dos documentos PDF" />
               <ProcessStep step={3} current={processingStep} label="Verificação quádrupla por lançamento" />
-              <ProcessStep step={4} current={processingStep} label="Geração do RAPC e parecer final" />
+              <ProcessStep step={4} current={processingStep} label="Período, métricas e execução orçamentária com IA" />
               <ProcessStep step={5} current={processingStep} label="Formatando o relatório em tela" />
             </div>
             <div className="mt-12 p-3 bg-sidebar border border-line rounded italic text-center">
@@ -1834,6 +1850,66 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Related items across audits */}
+                {(relatedLoading || relatedItems.length > 0) && (
+                  <div className="border-t border-line p-8">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest mb-4 text-primary flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                      Outros Lançamentos — mesmo {selectedItem.taxId?.replace(/\D/g,'').length === 14 ? 'CNPJ' : 'CPF'} ({selectedItem.taxId})
+                    </h3>
+                    {relatedLoading ? (
+                      <div className="flex items-center gap-2 text-[11px] text-text-secondary"><Loader2 size={12} className="animate-spin" /> Buscando em todas as auditorias...</div>
+                    ) : (
+                      <div className="space-y-4">
+                        {relatedItems.map((audit, ai) => {
+                          const otherItems = audit.items.filter((it: any) => !(audit.auditId === lastAuditResult?.id && it.id === selectedItem.id));
+                          if (otherItems.length === 0) return null;
+                          return (
+                            <div key={ai}>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">
+                                {audit.contractNumber} — {audit.organization}
+                                <span className="ml-2 font-normal opacity-60">{audit.periodStart} → {audit.periodEnd}</span>
+                              </p>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-[10px] font-mono border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-line text-text-secondary">
+                                      <th className="text-left py-1 pr-4 font-semibold uppercase">#</th>
+                                      <th className="text-left py-1 pr-4 font-semibold uppercase">Descrição</th>
+                                      <th className="text-left py-1 pr-4 font-semibold uppercase">Atividade</th>
+                                      <th className="text-left py-1 pr-4 font-semibold uppercase">Data</th>
+                                      <th className="text-right py-1 pr-4 font-semibold uppercase">Valor</th>
+                                      <th className="text-left py-1 font-semibold uppercase">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {otherItems.map((it: any, ii: number) => (
+                                      <tr key={ii} className="border-b border-line/20 hover:bg-primary/5">
+                                        <td className="py-1.5 pr-4 text-text-secondary">{it.id}</td>
+                                        <td className="py-1.5 pr-4 uppercase max-w-[200px] truncate">{it.description}</td>
+                                        <td className="py-1.5 pr-4 uppercase text-text-secondary max-w-[150px] truncate">{it.activity}</td>
+                                        <td className="py-1.5 pr-4 text-text-secondary">{it.date}</td>
+                                        <td className="py-1.5 pr-4 text-right">{formatCurrency(it.value)}</td>
+                                        <td className="py-1.5">
+                                          <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
+                                            it.status === 'Conciliado' && 'bg-success/10 text-success',
+                                            it.status === 'Ressalva' && 'bg-warning/10 text-warning',
+                                            it.status === 'Pendente' && 'bg-error/10 text-error'
+                                          )}>{it.status}</span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
