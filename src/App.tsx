@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
   PlusCircle,
   Loader2,
@@ -22,11 +23,13 @@ import {
   Building2,
   ExternalLink,
   Link2,
+  RefreshCw,
+  NotebookPen,
 } from 'lucide-react';
 import { cn, formatCurrency, truncateFileName } from './lib/utils';
 import Papa from 'papaparse';
 import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from './types';
-import { processAudit } from './services/auditService';
+import { processAudit, reprocessItems } from './services/auditService';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'documentacao';
 
@@ -62,7 +65,14 @@ function normalizeStr(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
-function computeBudgetLines(budgetCsv: any[], items: AuditItem[]): BudgetLine[] {
+function formatTaxId(taxId: string): string {
+  const d = taxId?.replace(/\D/g, '') ?? '';
+  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  return taxId;
+}
+
+function computeBudgetLines(budgetCsv: any[], items: AuditItem[], pcCsv?: any[]): BudgetLine[] {
   const sampleRow = budgetCsv[0];
   if (!sampleRow) return [];
   const budgetCols = Object.keys(sampleRow);
@@ -82,7 +92,7 @@ function computeBudgetLines(budgetCsv: any[], items: AuditItem[]): BudgetLine[] 
     });
   }
 
-  // ── Budget CSV: find VALUE column ──
+  // ── Budget CSV: find VALUE column (col H — "VALOR TOTAL") ──
   const valueKeys = ['valor total', 'total', 'valor', 'value', 'montante', 'orcado', 'planejado', 'previsto', 'dotacao', 'aprovado', 'autorizado', 'limite'];
   let valueCol: string | undefined;
   for (const key of valueKeys) {
@@ -118,14 +128,7 @@ function computeBudgetLines(budgetCsv: any[], items: AuditItem[]): BudgetLine[] 
     plannedByDesc[desc] = (plannedByDesc[desc] || 0) + parseVal(valRaw);
   }
 
-  // ── Group executed values by item.activity (rubrica declarada no lançamento) ──
-  const executedByActivity: Record<string, number> = {};
-  for (const item of items) {
-    const key = (item.activity || 'Não Classificado').trim();
-    executedByActivity[key] = (executedByActivity[key] || 0) + (item.value || 0);
-  }
-
-  // ── Match declared activities to budget rubrics via normalized exact match ──
+  // ── Build normalized budget key lookup ──
   const budgetKeyByNorm: Record<string, string> = {};
   for (const key of Object.keys(plannedByDesc)) {
     budgetKeyByNorm[normalizeStr(key)] = key;
@@ -133,12 +136,57 @@ function computeBudgetLines(budgetCsv: any[], items: AuditItem[]): BudgetLine[] 
 
   const executedByBudgetKey: Record<string, number> = {};
   let unmatchedTotal = 0;
-  for (const [activity, value] of Object.entries(executedByActivity)) {
-    const budgetKey = budgetKeyByNorm[normalizeStr(activity)];
-    if (budgetKey) {
-      executedByBudgetKey[budgetKey] = (executedByBudgetKey[budgetKey] || 0) + value;
-    } else {
-      unmatchedTotal += value;
+
+  if (pcCsv && pcCsv.length > 0) {
+    // ── Use raw PC CSV: "Descrição da despesa (exatamente como no Orçamento)" + "Saída (-)" ──
+    const pcCols = Object.keys(pcCsv[0] ?? {});
+
+    // Col B: "Descrição da despesa (exatamente como no Orçamento)"
+    const pcDescKeys = ['descri', 'rubrica', 'atividade', 'objeto', 'linha'];
+    let pcDescCol: string | undefined;
+    for (const key of pcDescKeys) {
+      pcDescCol = pcCols.find(c => normalizeStr(c).includes(key));
+      if (pcDescCol) break;
+    }
+
+    // Col J: "Saída (-)" — expense/debit column
+    const pcSaidaKeys = ['saida', 'debito', 'despesa', 'pagto', 'pagamento'];
+    let pcSaidaCol: string | undefined;
+    for (const key of pcSaidaKeys) {
+      pcSaidaCol = pcCols.find(c => normalizeStr(c).includes(key));
+      if (pcSaidaCol) break;
+    }
+
+    for (const row of pcCsv) {
+      // Only count rows with a positive "Saída" value — skip credits ("Entrada") and zero rows
+      const saidaVal = parseVal(pcSaidaCol ? String(row[pcSaidaCol] ?? '') : '');
+      if (saidaVal <= 0) continue;
+
+      const desc = pcDescCol ? String(row[pcDescCol] ?? '').trim() : '';
+      if (!desc) continue;
+
+      const budgetKey = budgetKeyByNorm[normalizeStr(desc)];
+      if (budgetKey) {
+        executedByBudgetKey[budgetKey] = (executedByBudgetKey[budgetKey] || 0) + saidaVal;
+      } else {
+        unmatchedTotal += saidaVal;
+      }
+    }
+  } else {
+    // ── Fallback: use AI-extracted item.activity; exclude negative values (credits) ──
+    const executedByActivity: Record<string, number> = {};
+    for (const item of items) {
+      if ((item.value || 0) <= 0) continue;
+      const key = (item.activity || 'Não Classificado').trim();
+      executedByActivity[key] = (executedByActivity[key] || 0) + (item.value || 0);
+    }
+    for (const [activity, value] of Object.entries(executedByActivity)) {
+      const budgetKey = budgetKeyByNorm[normalizeStr(activity)];
+      if (budgetKey) {
+        executedByBudgetKey[budgetKey] = (executedByBudgetKey[budgetKey] || 0) + value;
+      } else {
+        unmatchedTotal += value;
+      }
     }
   }
 
@@ -203,6 +251,7 @@ const SHARE_TOKEN = (() => {
   const parts = window.location.pathname.split('/share/');
   return parts.length > 1 ? parts[1].split('?')[0] || null : null;
 })();
+const SHARE_CODE_FROM_URL = new URLSearchParams(window.location.search).get('code')?.toUpperCase() ?? '';
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 
@@ -246,46 +295,110 @@ export default function App() {
   const [shareAudit, setShareAudit] = useState<AuditResult | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(!!SHARE_TOKEN);
+  const [shareRequiresCode, setShareRequiresCode] = useState(false);
+  const [shareCodeInput, setShareCodeInput] = useState(SHARE_CODE_FROM_URL);
+  const [shareCodeError, setShareCodeError] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // ── Reauditoria seletiva (#26) ────────────────────────────────────────────────
+  const [reauditLoading, setReauditLoading] = useState(false);
+  const [reauditMessage, setReauditMessage] = useState('');
+
+  // ── Reanálise individual + anotações ─────────────────────────────────────────
+  const [reanalyzeContext, setReanalyzeContext] = useState('');
+  const [reanalyzingItem, setReanalyzingItem] = useState(false);
+  const [noteValue, setNoteValue] = useState('');
+  const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── #18: apiFetch — wrapper that redirects to login on 401 ──────────────────
+  const apiFetch = useCallback(async (url: string, opts?: RequestInit) => {
+    const r = await fetch(url, opts);
+    if (r.status === 401) { setUser(null); throw new Error('Unauthorized'); }
+    return r;
+  }, []);
+
+  // ── Load saved files from server into files state ────────────────────────────
+  const loadAuditFiles = useCallback(async (auditId: string, sourceFiles: Record<string, string>) => {
+    const slots = ['budget', 'report', 'invoices', 'payments'] as const;
+    const updates: Record<string, FileData | null> = {};
+    await Promise.all(slots.map(async (slot) => {
+      const filename = sourceFiles[slot];
+      if (!filename) return;
+      try {
+        const r = await apiFetch(`/api/audits/${auditId}/files/${filename}`);
+        if (!r.ok) return;
+        const isPdf = filename.endsWith('.pdf');
+        if (isPdf) {
+          const buf = await r.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          const base64 = btoa(binary);
+          updates[slot] = { id: slot, name: filename, size: buf.byteLength, type: 'pdf', content: base64, pages: 0 };
+        } else {
+          const text = await r.text();
+          const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+          updates[slot] = { id: slot, name: filename, size: text.length, type: 'csv', content: parsed.data };
+        }
+      } catch { /* file fetch failed, leave null */ }
+    }));
+    if (Object.keys(updates).length > 0) {
+      setFiles(prev => ({ ...prev, ...updates }));
+    }
+  }, [apiFetch]);
 
   // ── Auth check ──────────────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/me')
       .then(r => r.ok ? r.json() : null)
-      .then(data => { setUser(data); setAuthLoading(false); })
+      .then(data => {
+        // #19: save pending deep link item code before redirecting to login
+        if (!data) {
+          const code = new URLSearchParams(window.location.search).get('item');
+          if (code) sessionStorage.setItem('pendingItemCode', code);
+        }
+        setUser(data); setAuthLoading(false);
+      })
       .catch(() => setAuthLoading(false));
   }, []);
 
   // ── Item deep link: ?item=XXXXXXXX ──────────────────────────────────────────
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('item');
+    // #19: also check sessionStorage for code saved before OAuth redirect
+    const code = new URLSearchParams(window.location.search).get('item')
+              || sessionStorage.getItem('pendingItemCode');
     if (!code || !user) return;
-    fetch(`/api/items/${code}`)
+    sessionStorage.removeItem('pendingItemCode');
+    apiFetch(`/api/items/${code}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
         // Load the full audit then open the item modal
-        fetch(`/api/audits/${data.auditId}`)
+        apiFetch(`/api/audits/${data.auditId}`)
           .then(r => r.ok ? r.json() : null)
           .then(audit => {
-            if (audit) setLastAuditResult(audit);
+            if (audit) {
+              setLastAuditResult(audit);
+              if (audit.sourceFiles) loadAuditFiles(audit.id, audit.sourceFiles);
+            }
             setSelectedItem(data.item);
             setActiveSection('resultado');
           });
       })
       .catch(() => {});
-  }, [user]);
+  }, [user, apiFetch, loadAuditFiles]);
 
   // ── History API ─────────────────────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const r = await fetch('/api/audits');
+      const r = await apiFetch('/api/audits');
       if (r.ok) setHistory(await r.json());
-    } finally {
+    } catch { /* 401 handled by apiFetch */ }
+    finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [apiFetch]);
 
   useEffect(() => {
     if (activeSection === 'historico' && user) loadHistory();
@@ -298,10 +411,21 @@ export default function App() {
     if (cnpjCache[digits] !== undefined) return;
     setCnpjLoading(prev => ({ ...prev, [digits]: true }));
     try {
-      const r = await fetch(`/api/cnpj/${digits}`);
+      const r = await apiFetch(`/api/cnpj/${digits}`);
       if (r.ok) {
         const data = await r.json();
         setCnpjCache(prev => ({ ...prev, [digits]: data }));
+        // Persist in audit result so it survives sessions
+        setLastAuditResult(prev => {
+          if (!prev) return prev;
+          const updated = { ...prev, cnpjData: { ...(prev.cnpjData || {}), [digits]: data } };
+          apiFetch(`/api/audits/${prev.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cnpjData: updated.cnpjData }),
+          }).catch(() => {});
+          return updated;
+        });
       } else {
         setCnpjCache(prev => ({ ...prev, [digits]: 'error' }));
       }
@@ -310,7 +434,7 @@ export default function App() {
     } finally {
       setCnpjLoading(prev => ({ ...prev, [digits]: false }));
     }
-  }, [cnpjCache]);
+  }, [cnpjCache, apiFetch]);
 
   const retryFetchCnpj = useCallback((taxId: string) => {
     const digits = taxId.replace(/\D/g, '');
@@ -320,32 +444,50 @@ export default function App() {
   useEffect(() => {
     setShowCnpjPanel(false);
     setRelatedItems([]);
+    setReanalyzeContext('');
+    setNoteValue(selectedItem?.auditorNote ?? '');
     if (!selectedItem) return;
-    if (selectedItem.taxId) fetchCnpj(selectedItem.taxId);
+    const tidDigits = selectedItem.taxId?.replace(/\D/g, '') ?? '';
+    if (tidDigits.length === 14) fetchCnpj(selectedItem.taxId!);
     // Fetch related items across all audits
     const digits = selectedItem.taxId?.replace(/\D/g, '') || '';
     if (digits.length >= 11) {
       setRelatedLoading(true);
-      fetch(`/api/audits/related?taxId=${digits}`)
+      apiFetch(`/api/audits/related?taxId=${digits}`)
         .then(r => r.ok ? r.json() : [])
         .then(data => setRelatedItems(data))
         .catch(() => setRelatedItems([]))
         .finally(() => setRelatedLoading(false));
     }
-  }, [selectedItem]);
+  }, [selectedItem, fetchCnpj, apiFetch]);
 
-  useEffect(() => {
+  const fetchShareAudit = useCallback((code: string) => {
     if (!SHARE_TOKEN) return;
-    fetch(`/api/share/${SHARE_TOKEN}`)
-      .then(r => r.ok ? r.json() : r.json().then((e: any) => Promise.reject(e.error)))
-      .then((data: AuditResult) => setShareAudit(data))
-      .catch((e: any) => setShareError(String(e)))
+    setShareLoading(true);
+    setShareError(null);
+    const url = code ? `/api/share/${SHARE_TOKEN}?code=${encodeURIComponent(code)}` : `/api/share/${SHARE_TOKEN}`;
+    fetch(url)
+      .then(r => r.json().then((body: any) => {
+        if (!r.ok) {
+          if (body.requiresCode) { setShareRequiresCode(true); if (code) setShareCodeError('Código inválido. Tente novamente.'); }
+          else setShareError(body.error ?? 'Erro desconhecido');
+          return null;
+        }
+        return body as AuditResult;
+      }))
+      .then(data => { if (data) { setShareAudit(data); setShareRequiresCode(false); setShareCodeError(''); } })
       .finally(() => setShareLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!SHARE_TOKEN) return;
+    fetchShareAudit(SHARE_CODE_FROM_URL);
+  }, [fetchShareAudit]);
+
   const saveAuditToServer = async (result: AuditResult, budgetCsv: any[]) => {
     try {
-      const budgetLines = budgetCsv.length > 0 ? computeBudgetLines(budgetCsv, result.items) : undefined;
+      const pcCsv = (files.report?.content as any[] | undefined) ?? [];
+      const budgetLines = budgetCsv.length > 0 ? computeBudgetLines(budgetCsv, result.items, pcCsv) : undefined;
       const sourceFiles: Record<string, string> = {};
       if (files.budget) sourceFiles.budget = files.budget.name;
       if (files.report) sourceFiles.report = files.report.name;
@@ -369,7 +511,7 @@ export default function App() {
         fd.append('payments', base64ToBlob(files.payments.content as string, 'application/pdf'), files.payments.name);
       }
 
-      const r = await fetch('/api/audits', { method: 'POST', body: fd });
+      const r = await apiFetch('/api/audits', { method: 'POST', body: fd });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         console.error('Falha ao salvar auditoria no servidor:', err);
@@ -391,7 +533,7 @@ export default function App() {
 
   const deleteAudit = async (id: string) => {
     if (!confirm('Excluir esta auditoria e todos os arquivos relacionados?')) return;
-    await fetch(`/api/audits/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/audits/${id}`, { method: 'DELETE' });
     setHistory(h => h.filter(a => a.id !== id));
     if (lastAuditResult?.id === id) setLastAuditResult(null);
   };
@@ -418,10 +560,7 @@ export default function App() {
     }
   };
 
-  const periodValid =
-    isValidDate(metadata.periodStart) &&
-    isValidDate(metadata.periodEnd) &&
-    parseBrDate(metadata.periodStart) <= parseBrDate(metadata.periodEnd);
+  const periodValid = true;
 
   // ── File upload ──────────────────────────────────────────────────────────────
   const handleFileUpload = async (slot: string, file: File) => {
@@ -469,6 +608,139 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // ── XLSX download (#28) ───────────────────────────────────────────────────────
+  const handleDownloadXLSX = () => {
+    if (!lastAuditResult) return;
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1 — RAPC
+    const rapcRows = lastAuditResult.items.map(i => ({
+      ID: i.id, Código: i.itemCode ?? '',
+      Descrição: i.description, Atividade: i.activity, Data: i.date,
+      'Razão Social': i.entity, 'Doc Fiscal': i.docId, 'CNPJ/CPF': i.taxId,
+      'Valor (R$)': i.value, Status: i.status,
+      'Pág NF': i.nfPage ?? '', 'Pág Comprovante': i.paymentPage ?? '',
+      Observações: i.observations,
+      ...(i.auditorNote ? { 'Nota do Auditor': i.auditorNote } : {}),
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rapcRows), 'RAPC');
+
+    // Sheet 2 — Resumo
+    const resumo = [
+      { Campo: 'Organização', Valor: lastAuditResult.organization },
+      { Campo: 'Contrato', Valor: lastAuditResult.contractNumber },
+      { Campo: 'Período', Valor: `${lastAuditResult.periodStart} → ${lastAuditResult.periodEnd}` },
+      { Campo: 'Parecer', Valor: lastAuditResult.verdict },
+      { Campo: 'Total Itens', Valor: lastAuditResult.metrics.totalItems },
+      { Campo: 'Conciliados', Valor: lastAuditResult.metrics.conciliatedItems },
+      { Campo: 'Pendentes/Ressalvas', Valor: lastAuditResult.metrics.totalItems - lastAuditResult.metrics.conciliatedItems },
+      { Campo: 'Valor Total Executado', Valor: lastAuditResult.metrics.totalValue },
+      { Campo: 'Valor Aprovado', Valor: lastAuditResult.metrics.approvedValue },
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), 'Resumo');
+
+    // Sheet 3 — Execução Orçamentária
+    if (lastAuditResult.budgetLines && lastAuditResult.budgetLines.length > 0) {
+      const budgetRows = lastAuditResult.budgetLines.map(l => ({
+        Rubrica: l.activity,
+        'Planejado (R$)': l.plannedValue,
+        'Executado (R$)': l.executedValue,
+        'Saldo (R$)': l.plannedValue - l.executedValue,
+        '% Executado': l.plannedValue > 0 ? +((l.executedValue / l.plannedValue) * 100).toFixed(1) : '',
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(budgetRows), 'Execução Orçamentária');
+    }
+
+    XLSX.writeFile(wb, `RAPC_${lastAuditResult.contractNumber}.xlsx`);
+  };
+
+  // ── Reauditoria seletiva (#26) ────────────────────────────────────────────────
+  const handleReauditSelectiva = async () => {
+    if (!lastAuditResult || !files.budget || !files.invoices || !files.payments) return;
+    const targets = lastAuditResult.items.filter(i => i.status === 'Pendente' || i.status === 'Ressalva');
+    if (targets.length === 0) return;
+    setReauditLoading(true);
+    setReauditMessage('Iniciando reanálise...');
+    try {
+      const updated = await reprocessItems(
+        targets,
+        { organization: metadata.organization || lastAuditResult.organization, contractNumber: metadata.contractNumber || lastAuditResult.contractNumber },
+        files.budget.content as any[],
+        files.invoices.content as string,
+        files.payments.content as string,
+        '',
+        (_step, msg) => setReauditMessage(msg)
+      );
+      const merged = lastAuditResult.items.map(i => {
+        const u = updated.find(u => u.id === i.id);
+        return u ?? i;
+      });
+      const newResult = { ...lastAuditResult, items: merged };
+      setLastAuditResult(newResult);
+      setSelectedItem(null);
+      // Persist via PATCH
+      await apiFetch(`/api/audits/${lastAuditResult.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: updated }),
+      });
+      setReauditMessage('');
+    } catch (e) {
+      setReauditMessage(`Erro: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setReauditLoading(false);
+    }
+  };
+
+  // ── Reanálise de item individual ──────────────────────────────────────────────
+  const handleReanalyzeItem = async () => {
+    if (!selectedItem || !lastAuditResult || !files.budget || !files.invoices || !files.payments) return;
+    setReanalyzingItem(true);
+    try {
+      const [updated] = await reprocessItems(
+        [selectedItem],
+        { organization: lastAuditResult.organization, contractNumber: lastAuditResult.contractNumber },
+        files.budget.content as any[],
+        files.invoices.content as string,
+        files.payments.content as string,
+        reanalyzeContext,
+        () => {}
+      );
+      const newItems = lastAuditResult.items.map(i => i.id === updated.id ? updated : i);
+      const newResult = { ...lastAuditResult, items: newItems };
+      setLastAuditResult(newResult);
+      setSelectedItem(updated);
+      await apiFetch(`/api/audits/${lastAuditResult.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [updated] }),
+      });
+      setReanalyzeContext('');
+    } catch (e) {
+      console.error('Reanálise falhou:', e);
+    } finally {
+      setReanalyzingItem(false);
+    }
+  };
+
+  // ── Salvar nota do auditor (debounced) ────────────────────────────────────────
+  const handleNoteChange = (value: string) => {
+    setNoteValue(value);
+    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    noteSaveTimer.current = setTimeout(async () => {
+      if (!selectedItem || !lastAuditResult) return;
+      const updatedItem = { ...selectedItem, auditorNote: value };
+      const newItems = lastAuditResult.items.map(i => i.id === updatedItem.id ? updatedItem : i);
+      setLastAuditResult({ ...lastAuditResult, items: newItems });
+      setSelectedItem(updatedItem);
+      await apiFetch(`/api/audits/${lastAuditResult.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ id: selectedItem.id, auditorNote: value }] }),
+      }).catch(() => {});
+    }, 800);
   };
 
   // ── Start audit ──────────────────────────────────────────────────────────────
@@ -533,7 +805,31 @@ export default function App() {
               <Loader2 className="animate-spin text-primary" size={32} />
             </div>
           )}
-          {shareError && (
+          {!shareLoading && shareRequiresCode && !shareAudit && (
+            <div className="max-w-sm mx-auto mt-20 p-8 border border-line bg-card rounded-xl text-center">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
+              <h2 className="text-sm font-bold uppercase tracking-widest mb-1">Acesso Protegido</h2>
+              <p className="text-[11px] text-text-secondary mb-6">Informe o código de acesso enviado pelo auditor para visualizar esta auditoria.</p>
+              <form onSubmit={e => { e.preventDefault(); setShareCodeError(''); fetchShareAudit(shareCodeInput.trim().toUpperCase()); }} className="space-y-3">
+                <input
+                  type="text"
+                  value={shareCodeInput}
+                  onChange={e => setShareCodeInput(e.target.value.toUpperCase())}
+                  placeholder="EX: AB3K9Z"
+                  maxLength={8}
+                  autoFocus
+                  className="w-full bg-bg border border-line rounded px-4 py-3 text-center text-xl font-mono font-bold tracking-[0.4em] text-primary focus:outline-none focus:border-primary transition-colors uppercase"
+                />
+                {shareCodeError && <p className="text-[11px] text-error">{shareCodeError}</p>}
+                <button type="submit" disabled={shareCodeInput.length < 4} className="w-full py-3 bg-primary text-bg font-bold text-xs uppercase tracking-widest rounded hover:opacity-90 transition-all disabled:opacity-40">
+                  Acessar Auditoria
+                </button>
+              </form>
+            </div>
+          )}
+          {shareError && !shareRequiresCode && (
             <div className="max-w-lg mx-auto mt-16 p-8 border border-error/30 bg-error/5 rounded-xl text-center">
               <AlertCircle size={32} className="text-error mx-auto mb-4" />
               <h2 className="text-sm font-bold uppercase tracking-widest text-error mb-2">Link inválido ou expirado</h2>
@@ -575,6 +871,17 @@ export default function App() {
                     )}
                   </div>
                 </div>
+                {/* #23 — warn if budget columns unrecognized or budget CSV absent */}
+                {sa.budgetLines && sa.budgetLines.length > 0 &&
+                 sa.budgetLines.every(l => l.plannedValue === 0) && (
+                  <div className="mb-3 flex items-start gap-2 text-[11px] text-amber-400 bg-amber-400/10 rounded p-2.5 border border-amber-400/20">
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                    <span>Colunas de rubrica/valor não foram reconhecidas no CSV de orçamento. Valores planejados indisponíveis — exibindo apenas o executado.</span>
+                  </div>
+                )}
+                {!sa.budgetLines && (
+                  <p className="mb-2 text-[10px] text-text-secondary italic">Orçamento aprovado não enviado — exibindo execução por atividade sem comparativo de limite.</p>
+                )}
                 {sa.budgetLines && sa.budgetLines.length > 0 ? (
                   <BudgetLineChart lines={sa.budgetLines} />
                 ) : (
@@ -650,9 +957,9 @@ export default function App() {
                           <td className="px-4 py-2.5 border-r border-line max-w-[200px] truncate uppercase">{item.description}</td>
                           <td className="px-4 py-2.5 border-r border-line text-text-secondary uppercase">{item.activity}</td>
                           <td className="px-4 py-2.5 border-r border-line text-center whitespace-nowrap">{item.date}</td>
-                          <td className="px-4 py-2.5 border-r border-line uppercase">{item.entity}</td>
+                          <td className="px-4 py-2.5 border-r border-line uppercase">{(() => { const d = item.taxId?.replace(/\D/g,'') ?? ''; return (d.length === 14 && shareAudit?.cnpjData?.[d] && shareAudit.cnpjData[d] !== 'error') ? (shareAudit.cnpjData[d] as CNPJData).razao_social || item.entity : item.entity; })()}</td>
                           <td className="px-4 py-2.5 border-r border-line">{item.docId}</td>
-                          <td className="px-4 py-2.5 border-r border-line">{item.taxId}</td>
+                          <td className="px-4 py-2.5 border-r border-line">{formatTaxId(item.taxId)}</td>
                           <td className="px-4 py-2.5 border-r border-line text-right">{formatCurrency(item.value)}</td>
                           <td className="px-4 py-2.5 border-r border-line text-center">
                             <span className={cn('px-2 py-0.5 text-[9px] font-bold rounded-full uppercase', item.status === 'Conciliado' ? 'bg-success/20 text-success' : item.status === 'Ressalva' ? 'bg-warning/20 text-warning' : 'bg-error/20 text-error')}>{item.status}</span>
@@ -915,7 +1222,7 @@ export default function App() {
                   <CheckItem label="Planilha proponente OK" checked={!!files.report} />
                   <CheckItem label="Evidências fiscais detectadas" checked={!!files.invoices} />
                   <CheckItem label="Comprovantes bancários OK" checked={!!files.payments} />
-                  <CheckItem label="Metadados do contrato" checked={!!metadata.organization && !!metadata.contractNumber && periodValid} />
+                  <CheckItem label="Metadados do contrato" checked={!!metadata.organization && !!metadata.contractNumber} />
                 </div>
 
                 <button
@@ -937,50 +1244,6 @@ export default function App() {
                 <label className="text-[10px] uppercase text-text-secondary tracking-widest px-1">Configurar Metadados</label>
                 <div className="space-y-3">
                   <InputGroup label="Organização" value={metadata.organization} onChange={(v) => setMetadata({ ...metadata, organization: v })} placeholder="Nome da organização" />
-
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase tracking-widest text-text-secondary px-1">Início do Período</label>
-                    <input
-                      type="text"
-                      maxLength={10}
-                      value={metadata.periodStart}
-                      onChange={(e) => {
-                        let v = e.target.value.replace(/\D/g, '');
-                        if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
-                        if (v.length > 5) v = v.slice(0,5) + '/' + v.slice(5);
-                        setMetadata({ ...metadata, periodStart: v });
-                      }}
-                      onBlur={(e) => validatePeriodStart(e.target.value)}
-                      placeholder="DD/MM/AAAA"
-                      className={cn(
-                        'w-full bg-sidebar border rounded px-3 py-2 text-[12px] font-mono text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary transition-colors',
-                        periodStartError ? 'border-error' : 'border-line'
-                      )}
-                    />
-                    {periodStartError && <p className="text-[10px] text-error px-1">{periodStartError}</p>}
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase tracking-widest text-text-secondary px-1">Fim do Período</label>
-                    <input
-                      type="text"
-                      maxLength={10}
-                      value={metadata.periodEnd}
-                      onChange={(e) => {
-                        let v = e.target.value.replace(/\D/g, '');
-                        if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
-                        if (v.length > 5) v = v.slice(0,5) + '/' + v.slice(5);
-                        setMetadata({ ...metadata, periodEnd: v });
-                      }}
-                      onBlur={(e) => validatePeriodEnd(e.target.value)}
-                      placeholder="DD/MM/AAAA"
-                      className={cn(
-                        'w-full bg-sidebar border rounded px-3 py-2 text-[12px] font-mono text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary transition-colors',
-                        periodEndError ? 'border-error' : 'border-line'
-                      )}
-                    />
-                    {periodEndError && <p className="text-[10px] text-error px-1">{periodEndError}</p>}
-                  </div>
 
                   <InputGroup label="Nº Contrato" value={metadata.contractNumber} onChange={(v) => setMetadata({ ...metadata, contractNumber: v })} placeholder="#2024.01" />
                 </div>
@@ -1035,29 +1298,49 @@ export default function App() {
 
             {/* Share link bar */}
             {lastAuditResult.shareToken && (
-              <div className="flex items-center justify-between gap-4 mb-8 px-5 py-3 bg-card border border-line rounded-lg">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Link2 size={14} className="text-primary shrink-0" />
-                  <span className="text-[11px] text-text-secondary font-mono truncate">
-                    {`${window.location.origin}/share/${lastAuditResult.shareToken}`}
-                  </span>
+              <div className="mb-8 px-5 py-4 bg-card border border-line rounded-lg space-y-3">
+                {/* URL row */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Link2 size={14} className="text-primary shrink-0" />
+                    <span className="text-[11px] text-text-secondary font-mono truncate">
+                      {`${window.location.origin}/share/${lastAuditResult.shareToken}`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const base = `${window.location.origin}/share/${lastAuditResult.shareToken}`;
+                      const url = lastAuditResult.shareAccessCode ? `${base}?code=${lastAuditResult.shareAccessCode}` : base;
+                      navigator.clipboard.writeText(url);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }}
+                    className={cn(
+                      'shrink-0 flex items-center gap-2 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded border transition-all',
+                      linkCopied ? 'border-success/40 bg-success/10 text-success' : 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'
+                    )}
+                  >
+                    <Link2 size={11} />
+                    {linkCopied ? 'Copiado!' : 'Copiar link'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/share/${lastAuditResult.shareToken}`);
-                    setLinkCopied(true);
-                    setTimeout(() => setLinkCopied(false), 2000);
-                  }}
-                  className={cn(
-                    'shrink-0 flex items-center gap-2 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded border transition-all',
-                    linkCopied
-                      ? 'border-success/40 bg-success/10 text-success'
-                      : 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'
-                  )}
-                >
-                  <Link2 size={11} />
-                  {linkCopied ? 'Copiado!' : 'Copiar link público'}
-                </button>
+                {/* Access code row */}
+                {lastAuditResult.shareAccessCode && (
+                  <div className="flex items-center gap-3 pt-2 border-t border-line">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <div className="flex items-center gap-3 flex-1">
+                      <span className="text-[10px] text-text-secondary uppercase tracking-widest">Código de acesso:</span>
+                      <span className="font-mono font-bold text-primary text-base tracking-[0.3em]">{lastAuditResult.shareAccessCode}</span>
+                      <span className="text-[9px] text-text-secondary/60">· Válido 60 dias · Envie separadamente do link por segurança</span>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(lastAuditResult.shareAccessCode!)}
+                      className="text-[10px] text-text-secondary hover:text-primary transition-colors px-2 py-1 border border-line rounded"
+                    >
+                      Copiar código
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1093,6 +1376,17 @@ export default function App() {
                 </div>
               </div>
 
+              {/* #23 — warn if budget columns unrecognized or budget CSV absent */}
+              {lastAuditResult.budgetLines && lastAuditResult.budgetLines.length > 0 &&
+               lastAuditResult.budgetLines.every(l => l.plannedValue === 0) && (
+                <div className="mb-3 flex items-start gap-2 text-[11px] text-amber-400 bg-amber-400/10 rounded p-2.5 border border-amber-400/20">
+                  <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                  <span>Colunas de rubrica/valor não foram reconhecidas no CSV de orçamento. Valores planejados indisponíveis — exibindo apenas o executado.</span>
+                </div>
+              )}
+              {!lastAuditResult.budgetLines && (
+                <p className="mb-2 text-[10px] text-text-secondary italic">Orçamento aprovado não enviado — exibindo execução por atividade sem comparativo de limite.</p>
+              )}
               {lastAuditResult.budgetLines && lastAuditResult.budgetLines.length > 0 ? (
                 <BudgetLineChart lines={lastAuditResult.budgetLines} />
               ) : (
@@ -1168,8 +1462,27 @@ export default function App() {
                   <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[10px] font-bold uppercase tracking-widest transition-all">
                     <Download size={12} /> CSV
                   </button>
+                  <button onClick={handleDownloadXLSX} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[10px] font-bold uppercase tracking-widest transition-all">
+                    <Download size={12} /> XLSX
+                  </button>
+                  {/* #26 — Reauditoria seletiva */}
+                  {diligencedItems.length > 0 && files.invoices && files.payments && files.budget && (
+                    <button
+                      onClick={handleReauditSelectiva}
+                      disabled={reauditLoading}
+                      className="flex items-center gap-2 px-3 py-1.5 border border-warning/50 text-warning bg-warning/5 hover:bg-warning/10 text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-50"
+                    >
+                      {reauditLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      Reanalisar Pendentes/Ressalvas ({diligencedItems.length})
+                    </button>
+                  )}
                 </div>
               </div>
+              {reauditLoading && reauditMessage && (
+                <div className="px-6 py-2 bg-warning/5 border-b border-warning/20 text-[11px] text-warning flex items-center gap-2">
+                  <Loader2 size={11} className="animate-spin shrink-0" /> {reauditMessage}
+                </div>
+              )}
               {rapcSearch && (
                 <div className="px-6 py-2 bg-primary/5 border-b border-line text-[10px] text-primary font-mono">
                   {filteredItems.length} resultado{filteredItems.length !== 1 ? 's' : ''} para "{rapcSearch}"
@@ -1202,9 +1515,9 @@ export default function App() {
                         <td className="px-4 py-2.5 text-text border-r border-line/20 font-sans uppercase">{item.description}</td>
                         <td className="px-4 py-2.5 text-text-secondary border-r border-line/20 font-sans uppercase">{item.activity}</td>
                         <td className="px-4 py-2.5 text-center whitespace-nowrap border-r border-line/20 uppercase">{item.date}</td>
-                        <td className="px-4 py-2.5 border-r border-line/20 uppercase">{(() => { const d = item.taxId?.replace(/\D/g,''); const cached = d?.length === 14 ? cnpjCache[d] : undefined; return (cached && cached !== 'error' && (cached as CNPJData).razao_social) ? (cached as CNPJData).razao_social : item.entity; })()}</td>
+                        <td className="px-4 py-2.5 border-r border-line/20 uppercase">{(() => { const d = item.taxId?.replace(/\D/g,'') ?? ''; const cached = d.length === 14 ? cnpjCache[d] : undefined; const persisted = d.length === 14 ? lastAuditResult?.cnpjData?.[d] : undefined; const src = (cached && cached !== 'error') ? cached as CNPJData : (persisted && persisted !== 'error') ? persisted as CNPJData : undefined; return src?.razao_social || item.entity; })()}</td>
                         <td className="px-4 py-2.5 text-[9px] text-primary border-r border-line/20 uppercase">{item.docId}</td>
-                        <td className="px-4 py-2.5 text-[9px] whitespace-nowrap border-r border-line/20 uppercase">{item.taxId}</td>
+                        <td className="px-4 py-2.5 text-[9px] whitespace-nowrap border-r border-line/20 uppercase">{formatTaxId(item.taxId)}</td>
                         <td className="px-4 py-2.5 text-right font-bold border-r border-line/20">{formatCurrency(item.value)}</td>
                         <td className="px-4 py-2.5 border-r border-line/20">
                           <div className={cn('mx-auto w-fit px-2 py-0.5 rounded-sm text-[9px] font-bold uppercase', item.status === 'Conciliado' && 'bg-success/10 text-success border border-success/30', item.status === 'Ressalva' && 'bg-warning/10 text-warning border border-warning/30', item.status === 'Pendente' && 'bg-error/10 text-error border border-error/30')}>{item.status}</div>
@@ -1413,10 +1726,12 @@ export default function App() {
                       {item.shareToken && (
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/share/${item.shareToken}`);
+                            const base = `${window.location.origin}/share/${item.shareToken}`;
+                            const url = (item as any).shareAccessCode ? `${base}?code=${(item as any).shareAccessCode}` : base;
+                            navigator.clipboard.writeText(url);
                           }}
                           className="p-1.5 hover:bg-primary/20 rounded text-text-secondary hover:text-primary transition-colors"
-                          title="Copiar link público"
+                          title={(item as any).shareAccessCode ? `Copiar link + código (${(item as any).shareAccessCode})` : 'Copiar link público'}
                         >
                           <Link2 size={13} />
                         </button>
@@ -1424,9 +1739,11 @@ export default function App() {
                       <button
                         onClick={async () => {
                           try {
-                            const r = await fetch(`/api/audits/${item.id}`);
+                            const r = await apiFetch(`/api/audits/${item.id}`);
                             if (r.ok) {
-                              setLastAuditResult(await r.json());
+                              const audit = await r.json();
+                              setLastAuditResult(audit);
+                              if (audit.sourceFiles) loadAuditFiles(audit.id, audit.sourceFiles);
                               setActiveSection('resultado');
                             }
                           } catch (e) {
@@ -1723,9 +2040,12 @@ export default function App() {
               {/* Modal header */}
               <div className="flex justify-between items-center px-8 py-5 border-b border-line bg-card shrink-0">
                 <div className="flex items-center gap-4">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 shrink-0">
+                    <span className="text-primary font-bold font-mono text-sm">#{selectedItem.id}</span>
+                  </div>
                   <div>
                     <h2 className="text-base font-bold uppercase tracking-widest text-primary">Detalhes do Lançamento</h2>
-                    <p className="text-[11px] text-text-secondary font-mono mt-0.5">ID {selectedItem.id} &bull; {selectedItem.date}</p>
+                    <p className="text-[11px] text-text-secondary font-mono mt-0.5">{selectedItem.date}</p>
                   </div>
                   <div className={cn('px-3 py-1 rounded text-[10px] font-bold uppercase border',
                     selectedItem.status === 'Conciliado' && 'bg-success/10 text-success border-success/30',
@@ -1750,8 +2070,8 @@ export default function App() {
                     </h3>
                     <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-3 text-[12px]">
                       {(() => {
-                        const taxDigits = selectedItem.taxId?.replace(/\D/g, '');
-                        const isCnpj = taxDigits?.length === 14;
+                        const taxDigits = selectedItem.taxId?.replace(/\D/g, '') ?? '';
+                        const isCnpj = taxDigits.length === 14 && selectedItem.taxId !== 'N/A';
                         const cnpjRaw = isCnpj ? cnpjCache[taxDigits!] : undefined;
                         const cnpjData = (cnpjRaw && cnpjRaw !== 'error') ? cnpjRaw as CNPJData : undefined;
                         const isLoadingCnpj = isCnpj ? cnpjLoading[taxDigits!] : false;
@@ -1920,6 +2240,12 @@ export default function App() {
                           : 'Nenhuma observação reportada.'
                       )}
                     </div>
+                    {selectedItem.auditorNote && (
+                      <div className="mt-3 p-3 bg-primary/5 border border-primary/20 rounded text-[11px] font-sans text-primary/80 flex items-start gap-2">
+                        <NotebookPen size={12} className="shrink-0 mt-0.5" />
+                        <span>{selectedItem.auditorNote}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="p-8">
                     <h3 className="text-[11px] font-bold uppercase tracking-widest mb-4 text-text-secondary">
@@ -1930,6 +2256,52 @@ export default function App() {
                         ? 'Nenhuma ação necessária. Lançamento conciliado com documentos fiscais e comprovantes de pagamento sem divergências.'
                         : 'Verifique o documento na respectiva página nos comprovantes originais. Divergências foram geradas pelo Stack Audit™ validando o conteúdo textual dos PDFs. Itens sem lastro documental exigem conciliação humana.'}
                     </div>
+                  </div>
+                </div>
+
+                {/* Reanálise individual + Anotação do auditor */}
+                <div className="grid grid-cols-2 gap-0 border-t border-line">
+                  {/* Reanálise individual */}
+                  <div className="p-8 border-r border-line">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest mb-3 text-primary flex items-center gap-2">
+                      <RefreshCw size={13} /> Reanálise Individual pela IA
+                    </h3>
+                    {!files.invoices || !files.payments || !files.budget ? (
+                      <p className="text-[11px] text-text-secondary italic">Arquivos originais não disponíveis nesta sessão. Carregue uma nova auditoria para reanalisar.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <textarea
+                          value={reanalyzeContext}
+                          onChange={e => setReanalyzeContext(e.target.value)}
+                          placeholder="(Opcional) Contexto adicional para a IA: ex. 'A nota fiscal está na pág. 5 e o pagamento foi via PIX em 03/10/2025.'"
+                          rows={3}
+                          className="w-full bg-sidebar border border-line rounded px-3 py-2 text-[11px] font-sans text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary transition-colors resize-none"
+                        />
+                        <button
+                          onClick={handleReanalyzeItem}
+                          disabled={reanalyzingItem}
+                          className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-50 rounded"
+                        >
+                          {reanalyzingItem ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                          {reanalyzingItem ? 'Reanalisando...' : 'Reanalisar este lançamento'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Anotação do auditor */}
+                  <div className="p-8">
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest mb-3 text-text-secondary flex items-center gap-2">
+                      <NotebookPen size={13} /> Anotação do Auditor
+                    </h3>
+                    <textarea
+                      value={noteValue}
+                      onChange={e => handleNoteChange(e.target.value)}
+                      placeholder="Registre observações manuais, documentos adicionais apresentados, decisões de auditoria ou qualquer nota relevante para este lançamento..."
+                      rows={4}
+                      className="w-full bg-sidebar border border-line rounded px-3 py-2 text-[12px] font-sans text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary transition-colors resize-none"
+                    />
+                    <p className="text-[9px] text-text-secondary mt-1 opacity-60">Salvo automaticamente · Visível apenas para auditores autenticados</p>
                   </div>
                 </div>
 
