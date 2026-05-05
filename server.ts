@@ -162,15 +162,60 @@ app.get("/api/cnpj/:cnpj", requireAuth, async (req, res) => {
   if (digits.length !== 14) {
     return res.status(400).json({ error: "CNPJ deve ter 14 dígitos" });
   }
+
+  // Normalize BrasilAPI response to the CNPJData shape expected by the frontend
+  const normalizeBrasilApi = (d: any) => ({
+    razao_social: d.razao_social,
+    nome_fantasia: d.nome_fantasia,
+    situacao_cadastral: d.descricao_situacao_cadastral,
+    data_situacao_cadastral: d.data_situacao_cadastral,
+    tipo: d.descricao_identificador_matriz_filial,
+    natureza_juridica: d.natureza_juridica,
+    abertura: d.data_inicio_atividade,
+    capital_social: d.capital_social != null ? String(d.capital_social) : undefined,
+    porte: d.porte,
+    logradouro: d.logradouro,
+    numero: d.numero,
+    complemento: d.complemento,
+    bairro: d.bairro,
+    municipio: d.municipio,
+    uf: d.uf,
+    cep: d.cep,
+    email: d.email,
+    telefone: [d.ddd_telefone_1, d.ddd_telefone_2].filter(Boolean).join(" / ") || undefined,
+    atividade_principal: d.cnae_fiscal
+      ? [{ code: String(d.cnae_fiscal), text: d.cnae_fiscal_descricao }]
+      : [],
+    atividades_secundarias: Array.isArray(d.cnaes_secundarios)
+      ? d.cnaes_secundarios.map((c: any) => ({ code: String(c.codigo), text: c.descricao }))
+      : [],
+    qsa: d.qsa,
+  });
+
   try {
-    const r = await fetch(`https://opencnpj.org/api/cnpj/${digits}`);
-    if (!r.ok) {
-      return res.status(r.status).json({ error: "Erro na API de CNPJ", status: r.status });
+    const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      return res.json(normalizeBrasilApi(data));
     }
-    const data = await r.json();
-    res.json(data);
+  } catch (_) { /* fallback below */ }
+
+  // Fallback: ReceitaWS (same shape as CNPJData, no normalization needed)
+  try {
+    const r2 = await fetch(`https://www.receitaws.com.br/v1/cnpj/${digits}`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r2.ok) {
+      return res.status(r2.status).json({ error: "Erro ao consultar CNPJ", status: r2.status });
+    }
+    const data2 = await r2.json();
+    return res.json(data2);
   } catch (e: any) {
-    res.status(502).json({ error: "Falha ao consultar CNPJ", detail: e.message });
+    return res.status(502).json({ error: "Falha ao consultar CNPJ", detail: e.message });
   }
 });
 

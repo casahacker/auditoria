@@ -41,7 +41,7 @@ function parseJsonSafe(text: string): any {
 
 function normalizeItem(item: any, idx: number, globalOffset: number) {
   return {
-    id: item.id ?? (globalOffset + idx + 1),
+    id: globalOffset + idx + 1,
     description: item.description || "Sem descrição informada",
     activity: item.activity || "Não Informado",
     date: item.date || "N/A",
