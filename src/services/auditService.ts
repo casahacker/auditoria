@@ -263,7 +263,7 @@ ESTRUTURA JSON ESPERADA (items deve ter ${batch.length} elementos). Campos opcio
     allFindings.push(...batchFindings);
   }
 
-  onProgress(4, "Calculando período, métricas e estruturando execução orçamentária com IA...");
+  onProgress(4, "Calculando período, métricas e gerando parecer final...");
 
   // ── #17: Compute actual period from item dates ────────────────────────────
   const parseDateTs = (d: string): number => {
@@ -280,62 +280,6 @@ ESTRUTURA JSON ESPERADA (items deve ter ${batch.length} elementos). Campos opcio
   const validTs = allItems.map((i: any) => parseDateTs(i.date)).filter(t => t > 0);
   const actualPeriodStart = validTs.length ? formatBrDate(Math.min(...validTs)) : metadata.periodStart || "N/A";
   const actualPeriodEnd   = validTs.length ? formatBrDate(Math.max(...validTs)) : metadata.periodEnd   || "N/A";
-
-  // ── #13: AI-structured budget lines (Planejado × Executado) ──────────────
-  let aiBudgetLines: Array<{ activity: string; plannedValue: number; executedValue: number }> | undefined;
-  if (csv1.length > 0) {
-    try {
-      // Summarise budget CSV → [{rubrica, valorPrevisto}]
-      const budgetSummary = csv1.slice(0, 60).map((row: any) => {
-        const keys = Object.keys(row);
-        const descKey = keys.find(k => /descri|item|rubrica|atividade|linha/i.test(k)) || keys[0];
-        const valKey  = keys.find(k => /valor|total|montante|orcado|planejado|previsto|dotacao|autorizado/i.test(k) && k !== descKey)
-                      || keys.find(k => { const v = String(row[k]||''); return v.length > 0 && !isNaN(Number(v.replace(/[R$.,\s]/g,''))); });
-        const parseV = (s: string) => parseFloat(String(s||0).replace(/[^\d.,-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',','.')) || 0;
-        return { rubrica: String(row[descKey]||'').trim(), valorPrevisto: valKey ? parseV(row[valKey]) : 0 };
-      }).filter(r => r.rubrica && !/custo total|total geral/i.test(r.rubrica));
-
-      // Summarise executed items → [{atividade, totalExecutado}]
-      const execMap: Record<string, number> = {};
-      for (const item of allItems) {
-        const key = (item.activity || item.description || "Não Classificado").trim();
-        execMap[key] = (execMap[key] || 0) + (Number(item.value) || 0);
-      }
-      const execSummary = Object.entries(execMap).map(([atividade, totalExecutado]) => ({ atividade, totalExecutado }));
-
-      const budgetPrompt = `Você é auditor financeiro. Correlacione os itens executados com as rubricas do orçamento.
-
-ORÇAMENTO (rubricas previstas):
-${JSON.stringify(budgetSummary)}
-
-EXECUÇÃO (itens agrupados por atividade):
-${JSON.stringify(execSummary)}
-
-Retorne APENAS JSON válido, sem markdown:
-{"lines":[{"activity":"Nome da Rubrica","plannedValue":0,"executedValue":0}]}
-
-Regras:
-- Inclua TODAS as rubricas do orçamento (executedValue=0 se não houver execução)
-- Agrupe itens executados na rubrica mais próxima semanticamente
-- Itens sem rubrica equivalente: use "Outros / Sem Rubrica"
-- Use os nomes das rubricas do orçamento (não dos itens executados)
-- Os valores devem ser numéricos (float), sem formatação`;
-
-      const budgetResp = await client.chat.completions.create({
-        model: "deepseek-chat",
-        messages: [{ role: "user", content: budgetPrompt }],
-        temperature: 0,
-        max_tokens: 2000,
-      });
-      const raw = (budgetResp.choices[0]?.message?.content || "").replace(/```(?:json)?/g, "").trim();
-      const parsed = JSON.parse(jsonrepair(raw));
-      if (Array.isArray(parsed.lines) && parsed.lines.length > 0) {
-        aiBudgetLines = parsed.lines;
-      }
-    } catch (e) {
-      console.warn("AI budget lines failed, will use fallback:", e);
-    }
-  }
 
   // ── Verdict & metrics ────────────────────────────────────────────────────
   const totalItemsCount = allItems.length;
@@ -392,6 +336,5 @@ Regras:
       subject: emailSubject,
       body: emailBody,
     },
-    ...(aiBudgetLines ? { budgetLines: aiBudgetLines } : {}),
   };
 }

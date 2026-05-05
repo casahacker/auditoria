@@ -118,40 +118,42 @@ function computeBudgetLines(budgetCsv: any[], items: AuditItem[]): BudgetLine[] 
     plannedByDesc[desc] = (plannedByDesc[desc] || 0) + parseVal(valRaw);
   }
 
-  // ── Report CSV: find "Descrição da despesa (exatamente como no Orçamento)" column ──
-  // This is column B of the report/prestação CSV — stored in item.originalRow
-  const getReportDesc = (item: AuditItem): string => {
-    if (!item.originalRow) return item.description || '';
-    const rowKeys = Object.keys(item.originalRow);
-    // Prioritise column containing 'despesa' (Descrição da despesa...) then generic 'descri'
-    for (const pattern of ['despesa', 'descri', 'historico']) {
-      const found = rowKeys.find(k => normalizeStr(k).includes(pattern));
-      if (found) return String(item.originalRow[found] ?? '').trim();
-    }
-    return item.description || '';
-  };
-
-  // ── Group executed values by report description ──
-  const executedByDesc: Record<string, number> = {};
+  // ── Group executed values by item.activity (rubrica declarada no lançamento) ──
+  const executedByActivity: Record<string, number> = {};
   for (const item of items) {
-    const desc = getReportDesc(item) || 'Não Classificado';
-    executedByDesc[desc] = (executedByDesc[desc] || 0) + (item.value || 0);
+    const key = (item.activity || 'Não Classificado').trim();
+    executedByActivity[key] = (executedByActivity[key] || 0) + (item.value || 0);
   }
 
-  // ── Merge: all descriptions from both CSVs ──
-  const allDescs = new Set([
-    ...Object.keys(plannedByDesc),
-    ...Object.keys(executedByDesc),
-  ]);
+  // ── Match declared activities to budget rubrics via normalized exact match ──
+  const budgetKeyByNorm: Record<string, string> = {};
+  for (const key of Object.keys(plannedByDesc)) {
+    budgetKeyByNorm[normalizeStr(key)] = key;
+  }
 
-  return Array.from(allDescs)
-    .filter(d => d && !normalizeStr(d).includes('custo total') && !normalizeStr(d).includes('total geral'))
-    .map(desc => ({
-      activity: desc,
-      plannedValue: plannedByDesc[desc] || 0,
-      executedValue: executedByDesc[desc] || 0,
-    }))
-    .sort((a, b) => b.plannedValue - a.plannedValue || b.executedValue - a.executedValue);
+  const executedByBudgetKey: Record<string, number> = {};
+  let unmatchedTotal = 0;
+  for (const [activity, value] of Object.entries(executedByActivity)) {
+    const budgetKey = budgetKeyByNorm[normalizeStr(activity)];
+    if (budgetKey) {
+      executedByBudgetKey[budgetKey] = (executedByBudgetKey[budgetKey] || 0) + value;
+    } else {
+      unmatchedTotal += value;
+    }
+  }
+
+  // ── One line per budget rubric + catch-all for unmatched ──
+  const lines: BudgetLine[] = Object.keys(plannedByDesc).map(rubric => ({
+    activity: rubric,
+    plannedValue: plannedByDesc[rubric] || 0,
+    executedValue: executedByBudgetKey[rubric] || 0,
+  }));
+
+  if (unmatchedTotal > 0) {
+    lines.push({ activity: 'Outros / Não Classificado', plannedValue: 0, executedValue: unmatchedTotal });
+  }
+
+  return lines.sort((a, b) => b.plannedValue - a.plannedValue || b.executedValue - a.executedValue);
 }
 
 // ── Login Screen ──────────────────────────────────────────────────────────────
@@ -323,9 +325,7 @@ export default function App() {
 
   const saveAuditToServer = async (result: AuditResult, budgetCsv: any[]) => {
     try {
-      // Prefer AI-computed budget lines from processAudit; fall back to deterministic
-      const budgetLines = result.budgetLines
-        ?? (budgetCsv.length > 0 ? computeBudgetLines(budgetCsv, result.items) : undefined);
+      const budgetLines = budgetCsv.length > 0 ? computeBudgetLines(budgetCsv, result.items) : undefined;
       const sourceFiles: Record<string, string> = {};
       if (files.budget) sourceFiles.budget = files.budget.name;
       if (files.report) sourceFiles.report = files.report.name;
@@ -974,7 +974,7 @@ export default function App() {
               <ProcessStep step={1} current={processingStep} label="Leitura e indexação dos arquivos" />
               <ProcessStep step={2} current={processingStep} label="Extração de texto dos documentos PDF" />
               <ProcessStep step={3} current={processingStep} label="Verificação quádrupla por lançamento" />
-              <ProcessStep step={4} current={processingStep} label="Período, métricas e execução orçamentária com IA" />
+              <ProcessStep step={4} current={processingStep} label="Geração do RAPC e parecer final" />
               <ProcessStep step={5} current={processingStep} label="Formatando o relatório em tela" />
             </div>
             <div className="mt-12 p-3 bg-sidebar border border-line rounded italic text-center">
