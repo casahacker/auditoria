@@ -117,7 +117,10 @@ app.set("trust proxy", 1);
 // CSP disabled: SPA loads Google Fonts + Casa Hacker CDN; configure separately.
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// ── Body parsing (SEC-04: reduced from 50mb to prevent JSON DoS) ──────────────
+// ── Body parsing ──────────────────────────────────────────────────────────────
+// General endpoints: 1mb limit (SEC-04). Audit run gets its own higher limit
+// because the request contains extracted PDF text which can be large.
+app.use("/api/audit-run", express.json({ limit: "20mb" }));
 app.use(express.json({ limit: "1mb" }));
 
 const FileStore = FileStoreFactory(session);
@@ -645,6 +648,161 @@ function parseJsonSafe(text: string): any {
 }
 
 const REPROCESS_BATCH = 25;
+const AUDIT_BATCH = 25;
+
+// ── API: full audit run — server-side DeepSeek call ───────────────────────────
+app.post("/api/audit-run", requireAuth, async (req: any, res) => {
+  const { metadata, csv1, csv2, pdfNfText, pdfPayText } = req.body as {
+    metadata: { organization: string; periodStart: string; periodEnd: string; contractNumber: string };
+    csv1: any[];
+    csv2: any[];
+    pdfNfText: string;
+    pdfPayText: string;
+  };
+
+  if (!metadata || !Array.isArray(csv2) || csv2.length === 0) {
+    return res.status(400).json({ error: "Dados inválidos para auditoria" });
+  }
+
+  const batches: any[][] = [];
+  for (let i = 0; i < csv2.length; i += AUDIT_BATCH) batches.push(csv2.slice(i, i + AUDIT_BATCH));
+
+  const baseSystem = `Você é um Auditor Financeiro Sênior e Especialista em Compliance atuando com rigor militar em projetos sociais do terceiro setor.
+
+### INSTRUÇÃO MÁXIMA E OBRIGATÓRIA (CRÍTICO):
+1. **EXAUSTIVIDADE TOTAL**: Você receberá um lote de registros de prestação de contas. Você DEVE processar e retornar **TODOS** os registros do lote sem exceção. O array "items" DEVE ter EXATAMENTE O MESMO NÚMERO DE ELEMENTOS que os registros recebidos no lote.
+2. NUNCA resuma, agrupe ou omita itens. Cada objeto em "items" corresponde a UM registro do lote.
+
+### REGRAS DE AUDITORIA:
+- **Verificação Quádrupla**: Valide se o mesmo gasto bate com o CSV de Orçamento, se o texto extraído da Nota Fiscal está compatível, e se o texto do Comprovante confirma o pagamento real com a data/valor da Nota e CSV.
+- **Tarifas Bancárias**: Tarifas bancárias de até 150 reais devem ser sempre consideradas como status "Conciliado" e dispensadas de comprovação fiscal. Nesses casos, preencha OBRIGATORIAMENTE: "docId": "Dispensado", "nfPage": "Dispensado", "paymentPage": "Dispensado".
+- **Mobilidade (Uber/99/Táxi)**: Recibos de aplicativos de transporte (Uber, Táxi, 99) são considerados Comprovantes Aprovados válidos por si mesmos, sem necessidade de outro documento fiscal. Devem ser classificados como "Conciliado" se os valores/data baterem com o lançamento.
+- **Documentos Fiscais Aceitos**: São documentos fiscais válidos: NF-e, NFS-e, Nota de Débito, Recibo Uber/Táxi/99 e Recibo de Aluguel. NÃO são documentos fiscais suficientes: comprovantes de pagamento (PIX, TED, DOC, boleto, extrato). Se o único documento for comprovante sem doc fiscal: status 'Pendente'.
+- **Identificação**: Status pode ser apenas: 'Conciliado', 'Ressalva' ou 'Pendente'.
+- **Rastreabilidade de Páginas**: Identifique em qual página do doc fiscal/comprovante está a comprovação. Se não achar: "Não localizado".
+- **Razão Social (entity)**: Utilize SEMPRE a razão social completa conforme consta no documento fiscal.
+- **Atividade / Rubrica (activity)**: Copie FIELMENTE o valor exato da coluna de atividade/rubrica conforme registrado no CSV de prestação de contas.
+- **Linguagem**: Português do Brasil, terminologia formal e financeira.
+
+### DADOS DO CONTRATO:
+- **Organização:** ${metadata.organization}
+- **Período Auditado:** ${metadata.periodStart} a ${metadata.periodEnd}
+- **Contrato:** ${metadata.contractNumber}
+
+### REFERÊNCIA ORÇAMENTÁRIA (Aprovado previamente):
+${JSON.stringify(csv1, null, 2)}`;
+
+  const allItems: any[] = [];
+  const allFindings: any[] = [];
+  let firstParsedMeta: any = {};
+
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batch = batches[batchIdx];
+    const globalOffset = batchIdx * AUDIT_BATCH;
+    const batchStart = globalOffset + 1;
+    const batchEnd = globalOffset + batch.length;
+
+    const systemMsg = `${baseSystem}\n\n### LOTE DE REGISTROS A AUDITAR (${batch.length} registros — lote ${batchIdx + 1} de ${batches.length}, registros ${batchStart}–${batchEnd}):\n${JSON.stringify(batch, null, 2)}`;
+    const userMsg = `INSTRUÇÃO FINAL: Analise os textos dos PDFs abaixo e correlacione com os ${batch.length} registros do lote acima.\nRetorne EXCLUSIVAMENTE JSON válido. O array "items" DEVE ter EXATAMENTE ${batch.length} elementos na mesma ordem dos registros recebidos.\n\n=== TEXTO EXTRAÍDO — NOTAS FISCAIS ===\n${pdfNfText}\n\n=== TEXTO EXTRAÍDO — COMPROVANTES DE PAGAMENTO ===\n${pdfPayText}\n\nESTRUTURA JSON ESPERADA:\n{"items":[{"id":${batchStart},"description":"...","activity":"...","date":"...","entity":"...","docId":"...","taxId":"...","value":0,"status":"Conciliado","nfPage":"...","paymentPage":"...","observations":"..."}],"findings":[]}`;
+
+    let batchText = "";
+    try {
+      const resp = await aiClient.chat.completions.create({
+        model: "deepseek-chat",
+        messages: [{ role: "system", content: systemMsg }, { role: "user", content: userMsg }],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 8192,
+      });
+      batchText = resp.choices[0]?.message?.content || "";
+    } catch (e: any) {
+      console.error(`[audit-run] batch ${batchIdx + 1} DeepSeek error:`, e.message);
+      for (let j = 0; j < batch.length; j++) {
+        allItems.push(fallbackFromRow(batch[j], globalOffset + j));
+      }
+      continue;
+    }
+
+    const parsed = parseJsonSafe(batchText);
+    if (batchIdx === 0 && parsed) firstParsedMeta = parsed;
+    let batchItems: any[] = parsed?.items ?? [];
+    const batchFindings: any[] = parsed?.findings ?? [];
+
+    batchItems = batchItems.map((item: any, j: number) => normalizeAuditItem(item, j, globalOffset));
+
+    if (batchItems.length < batch.length) {
+      for (let j = batchItems.length; j < batch.length; j++) {
+        batchItems.push(fallbackFromRow(batch[j], globalOffset + j));
+      }
+    }
+
+    for (let j = 0; j < batchItems.length; j++) {
+      batchItems[j] = { ...batchItems[j], originalRow: batch[Math.min(j, batch.length - 1)] };
+    }
+
+    allItems.push(...batchItems);
+    allFindings.push(...batchFindings);
+  }
+
+  res.json({ items: allItems, findings: allFindings, meta: firstParsedMeta });
+});
+
+function normalizeAuditItem(item: any, idx: number, globalOffset: number) {
+  return {
+    id: globalOffset + idx + 1,
+    itemCode: crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase(),
+    description: item.description || "Sem descrição informada",
+    activity: item.activity || "Não Informado",
+    date: item.date || "N/A",
+    entity: item.entity || "N/A",
+    docId: item.docId || "N/A",
+    taxId: item.taxId || "N/A",
+    value: Number(item.value) || 0,
+    status: (["Conciliado", "Ressalva", "Pendente"].includes(item.status) ? item.status : "Pendente") as string,
+    nfPage: item.nfPage || "N/A",
+    paymentPage: item.paymentPage || "N/A",
+    observations: item.observations || (item.status === "Conciliado" ? "Item apurado e validado sem ressalvas." : "Análise pendente ou ressalvada."),
+    ...(item.emissionDateTime ? { emissionDateTime: item.emissionDateTime } : {}),
+    ...(item.serviceDescription ? { serviceDescription: item.serviceDescription } : {}),
+    ...(item.taxInfo ? { taxInfo: item.taxInfo } : {}),
+    ...(item.paymentDateTime ? { paymentDateTime: item.paymentDateTime } : {}),
+    ...(item.transactionId ? { transactionId: item.transactionId } : {}),
+    ...(item.payerInfo ? { payerInfo: item.payerInfo } : {}),
+    ...(item.payeeInfo ? { payeeInfo: item.payeeInfo } : {}),
+    ...(item.paymentMethod ? { paymentMethod: item.paymentMethod } : {}),
+  };
+}
+
+function fallbackFromRow(row: any, globalIdx: number) {
+  const getVal = (keys: string[]) => {
+    const rowKeys = Object.keys(row);
+    const match = rowKeys.find(rk => {
+      const clean = rk.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+      return keys.some(k => clean.includes(k.toLowerCase()));
+    });
+    return match ? (row[match] ?? "") : "";
+  };
+  const valRaw = getVal(["saida", "saída", "valor", "total", "montante", "pago"]);
+  let valStr = String(valRaw || 0).replace(/[^\d.,-]/g, "").replace(",", ".");
+  const lastSep = Math.max(valStr.lastIndexOf(","), valStr.lastIndexOf("."));
+  if (lastSep > -1) valStr = valStr.substring(0, lastSep).replace(/[.,]/g, "") + "." + valStr.substring(lastSep + 1);
+  return {
+    id: globalIdx + 1,
+    itemCode: crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase(),
+    description: String(getVal(["despesa", "descri", "historico", "item", "lancamento"]) || Object.values(row).find((x: any) => x && isNaN(Number(x)) && String(x).length > 5) || "Sem descrição"),
+    activity: String(getVal(["atividade", "rubrica", "categoria"]) || "Não Informado"),
+    date: String(getVal(["data", "emissao", "pagamento"]) || "N/A"),
+    entity: String(getVal(["razao", "fornecedor", "favorecido", "nome"]) || "N/A"),
+    docId: String(getVal(["doc", "nota", "nf", "comprovante"]) || "Pendente"),
+    taxId: String(getVal(["cnpj", "cpf"]) || "N/A"),
+    value: Number(valStr) || 0,
+    status: "Pendente",
+    nfPage: "N/A",
+    paymentPage: "N/A",
+    observations: "Item recuperado por fallback — auditoria automatizada falhou.",
+    originalRow: row,
+  };
+}
 
 app.post("/api/audits/:id/reprocess", requireAuth, async (req: any, res) => {
   const safeId = sanitizeSegment(req.params.id as string);

@@ -3,9 +3,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install
 COPY . .
-ARG DEEPSEEK_API_KEY
 ARG APP_URL=https://stack-audit.casahacker.org
-ENV DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY
 ENV APP_URL=$APP_URL
 RUN npm run build
 

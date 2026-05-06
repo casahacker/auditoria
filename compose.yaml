@@ -18,6 +18,7 @@ services:
       - AZURE_DI_ENDPOINT=${AZURE_DI_ENDPOINT:-}
       - AZURE_DI_KEY=${AZURE_DI_KEY:-}
       - EXTRACTION_ENGINE=${EXTRACTION_ENGINE:-local}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     deploy:
       resources:
         limits:
@@ -38,4 +39,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 10.89.10.0/24
+        - subnet: 10.89.11.0/24
