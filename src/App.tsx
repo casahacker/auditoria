@@ -485,6 +485,31 @@ const [a11yTheme, setA11yTheme] = useState<A11yTheme>(() => {
     if (activeSection === 'historico' && user) loadHistory();
   }, [activeSection, user, loadHistory]);
 
+  // ── Search (debounced) ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeSection !== 'pesquisa') return;
+    const q = searchQuery.trim();
+    if (!q) { setSearchResults([]); setSearchMeta(null); setSearchError(''); return; }
+    setSearchLoading(true);
+    setSearchError('');
+    const timer = setTimeout(async () => {
+      try {
+        const r = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        setSearchResults(data.results ?? []);
+        setSearchMeta({ total: data.total ?? 0, detectedType: data.detectedType ?? 'fulltext' });
+      } catch (e: any) {
+        setSearchError(e.message || 'Erro na pesquisa');
+        setSearchResults([]);
+        setSearchMeta(null);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeSection, apiFetch]);
+
   // ── CNPJ lookup ──────────────────────────────────────────────────────────────
   const fetchCnpj = useCallback(async (taxId: string) => {
     const digits = taxId.replace(/\D/g, '');
@@ -2236,6 +2261,162 @@ table.rapc tr.row-pend td { background: #fff1f2; }
                 </div>
               )}
             </div>
+          </section>
+        )}
+
+        {/* ── PESQUISA ───────────────────────────────────────────────────────── */}
+        {activeSection === 'pesquisa' && (
+          <section className="px-10 py-8 animate-in fade-in slide-in-from-left-4 duration-500 overflow-y-auto pb-24">
+            <div className="flex items-center gap-3 mb-8">
+              <Search size={22} className="text-primary" />
+              <div>
+                <h1 className="text-xl font-bold uppercase tracking-widest">Pesquisa</h1>
+                <p className="text-[11px] text-text-secondary font-mono mt-0.5">Busca global em todas as auditorias — fornecedores, lançamentos, notas fiscais</p>
+              </div>
+            </div>
+
+            {/* Search input */}
+            <div className="relative mb-6 max-w-2xl">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="CNPJ, CPF, nome do fornecedor, nº NF, código do item, descrição…"
+                autoFocus
+                className="w-full pl-9 pr-4 py-3 bg-card border border-line rounded text-[13px] font-mono text-text placeholder:text-text-secondary/40 focus:outline-none focus:border-primary transition-colors"
+                aria-label="Pesquisar em todas as auditorias"
+              />
+              {searchLoading && (
+                <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-primary animate-spin" />
+              )}
+            </div>
+
+            {/* Detected type badge */}
+            {searchMeta && searchQuery.trim() && (
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-[10px] font-mono text-text-secondary uppercase">
+                  {searchMeta.total} resultado{searchMeta.total !== 1 ? 's' : ''} &bull;&nbsp;
+                  tipo detectado:&nbsp;
+                  <span className="text-primary font-bold">
+                    {searchMeta.detectedType === 'itemCode' ? 'Código de item' :
+                     searchMeta.detectedType === 'taxId' ? 'CNPJ / CPF' : 'Texto livre'}
+                  </span>
+                </span>
+              </div>
+            )}
+
+            {/* Error */}
+            {searchError && (
+              <div className="flex items-center gap-2 text-error text-[12px] font-mono mb-4">
+                <AlertCircle size={14} /> {searchError}
+              </div>
+            )}
+
+            {/* Results */}
+            {!searchLoading && searchMeta && searchResults.length === 0 && searchQuery.trim() && (
+              <EmptyState icon={Search} title="Nenhum resultado encontrado" description={`Nenhum lançamento, fornecedor ou NF corresponde a "${searchQuery}"`} />
+            )}
+
+            {searchResults.length > 0 && (() => {
+              // Group by auditId
+              const groups: Record<string, { meta: any; items: any[] }> = {};
+              for (const r of searchResults) {
+                if (!groups[r.auditId]) groups[r.auditId] = { meta: r, items: [] };
+                groups[r.auditId].items.push(r);
+              }
+              return (
+                <div className="space-y-6">
+                  {Object.entries(groups).map(([auditId, group]) => (
+                    <div key={auditId} className="bg-card border border-line rounded overflow-hidden">
+                      {/* Group header */}
+                      <div className="px-5 py-3 border-b border-line bg-sidebar flex items-center gap-3">
+                        <FileText size={14} className="text-primary shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[11px] font-bold uppercase tracking-widest text-text">{group.meta.organization}</span>
+                          <span className="text-[10px] font-mono text-text-secondary ml-3">{group.meta.contractNumber}</span>
+                          <span className="text-[10px] text-text-secondary ml-2 opacity-60">{group.meta.periodStart} → {group.meta.periodEnd}</span>
+                        </div>
+                        <span className={cn('text-[9px] font-bold uppercase px-2 py-0.5 rounded border',
+                          group.meta.verdict === 'APROVADO' && 'bg-success/10 text-success border-success/30',
+                          group.meta.verdict === 'APROVADO COM RESSALVAS' && 'bg-warning/10 text-warning border-warning/30',
+                          group.meta.verdict === 'DILIGÊNCIA' && 'bg-error/10 text-error border-error/30',
+                        )}>{group.meta.verdict}</span>
+                        <span className="text-[9px] text-text-secondary/40 font-mono">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+                      </div>
+
+                      {/* Items */}
+                      <table className="w-full text-[11px] font-mono border-collapse">
+                        <tbody>
+                          {group.items.map((r: any, i: number) => (
+                            <tr
+                              key={i}
+                              className="border-b border-line/30 hover:bg-primary/5 cursor-pointer transition-colors"
+                              onClick={() => {
+                                // Load this audit into context then open modal
+                                if (lastAuditResult?.id === r.auditId) {
+                                  setSelectedItem(r.item);
+                                } else {
+                                  // Navigate to audit from history
+                                  apiFetch(`/api/audits/${r.auditId}`).then(async res => {
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setLastAuditResult(data);
+                                      setActiveSection('resultado');
+                                      setTimeout(() => setSelectedItem(r.item), 100);
+                                    }
+                                  });
+                                }
+                              }}
+                            >
+                              <td className="py-3 pl-5 pr-2 w-10 text-text-secondary">{r.item.id}</td>
+                              <td className="py-3 pr-3">
+                                <span className={cn('inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
+                                  r.item.status === 'Conciliado' && 'bg-success/10 text-success',
+                                  r.item.status === 'Ressalva' && 'bg-warning/10 text-warning',
+                                  r.item.status === 'Pendente' && 'bg-error/10 text-error',
+                                )}>{r.item.status}</span>
+                              </td>
+                              <td className="py-3 pr-4 uppercase max-w-[240px] truncate text-text">{r.item.entity}</td>
+                              <td className="py-3 pr-4 text-text-secondary uppercase max-w-[200px] truncate">{r.item.description}</td>
+                              <td className="py-3 pr-4 text-text-secondary">{r.item.date}</td>
+                              <td className="py-3 pr-4 text-right font-bold text-text">{formatCurrency(r.item.value)}</td>
+                              <td className="py-3 pr-5 text-text-secondary/50 text-[9px] capitalize">{r.matchField}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Empty state with tips — shown when no query */}
+            {!searchQuery.trim() && !searchLoading && (
+              <div className="max-w-xl">
+                <div className="bg-card border border-line rounded p-6 space-y-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">O que você pode pesquisar</h3>
+                  <div className="space-y-3">
+                    {[
+                      ['CNPJ / CPF', '43.283.811/0001-75 ou 12345678000195', 'Todos os lançamentos deste fornecedor em qualquer auditoria'],
+                      ['Nome do fornecedor', 'KALUNGA ou SEBRAE', 'Busca por razão social ou nome fantasia'],
+                      ['Nº documento fiscal', 'NF 42 ou NFSE 1234', 'Encontra a nota fiscal específica'],
+                      ['Código de item', 'AB3K7F', 'Localiza o lançamento exato pelo código único'],
+                      ['Descrição', 'GESTÃO DE PROJETOS', 'Busca livre na descrição e atividade'],
+                    ].map(([type, example, desc], i) => (
+                      <div key={i} className="grid grid-cols-[120px_1fr] gap-x-4 text-[11px]">
+                        <span className="text-primary font-bold uppercase">{type}</span>
+                        <span className="text-text-secondary">
+                          <code className="font-mono bg-sidebar px-1 rounded text-[10px]">{example}</code>
+                          <span className="ml-2 opacity-60">{desc}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
