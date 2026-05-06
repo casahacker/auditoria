@@ -38,6 +38,7 @@ export interface AuditItem {
   paymentPage?: string;
   observations: string;
   originalRow?: Record<string, any>;
+  auditorNote?: string;
   emissionDateTime?: string;
   serviceDescription?: string;
   taxInfo?: string;
@@ -69,6 +70,7 @@ export interface AuditResult {
   date: string;
   createdBy?: string;
   shareToken?: string;
+  shareAccessCode?: string;
   verdict: AuditVerdict;
   metrics: {
     totalItems: number;
@@ -85,7 +87,7 @@ export interface AuditResult {
   };
   budgetLines?: BudgetLine[];
   sourceFiles?: Record<string, string>;
-  cnpjData?: Record<string, CNPJData>;
+  cnpjData?: Record<string, CNPJData | string>;
 }
 
 export interface FileData {

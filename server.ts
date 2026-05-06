@@ -13,6 +13,8 @@ import FileStoreFactory from "session-file-store";
 import DocumentIntelligence, { getLongRunningPoller, isUnexpected } from "@azure-rest/ai-document-intelligence";
 import OpenAI from "openai";
 import { jsonrepair } from "jsonrepair";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,8 +22,41 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const AUDITS_DIR = path.join(DATA_DIR, "audits");
 const SESSIONS_DIR = path.join(DATA_DIR, "sessions");
 const PORT = Number(process.env.PORT) || 3000;
+const IS_PROD = process.env.NODE_ENV === "production";
 
 [AUDITS_DIR, SESSIONS_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
+
+// ── Security: path segment sanitizer (SEC-01) ─────────────────────────────────
+// Rejects segments containing path separators or traversal sequences.
+function sanitizeSegment(segment: string): string | null {
+  if (!segment || /[/\\]|\.\./.test(segment)) return null;
+  return segment;
+}
+
+// ── Security: rate limiters (SEC-03) ─────────────────────────────────────────
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas. Tente novamente em 15 minutos." },
+});
+
+const pdfLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Limite de extração de PDF atingido. Aguarde 1 minuto." },
+});
+
+const cnpjLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Limite de consulta CNPJ atingido. Aguarde 1 minuto." },
+});
 
 // ── Auth setup ────────────────────────────────────────────────────────────────
 
@@ -77,7 +112,13 @@ if (googleCallbackURL) {
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "50mb" }));
+
+// ── Security headers (SEC-02) ─────────────────────────────────────────────────
+// CSP disabled: SPA loads Google Fonts + Casa Hacker CDN; configure separately.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// ── Body parsing (SEC-04: reduced from 50mb to prevent JSON DoS) ──────────────
+app.use(express.json({ limit: "1mb" }));
 
 const FileStore = FileStoreFactory(session);
 
@@ -102,6 +143,7 @@ app.use(passport.session());
 
 app.get(
   "/auth/google",
+  authLimiter,
   (req, res, next) => {
     if (!googleConfigured) {
       return res.status(503).json({ error: "Google OAuth não configurado. Adicione GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET ao .env e recrie o container." });
@@ -152,15 +194,33 @@ app.get("/api/health", (_req, res) => {
 
 // ── File upload (multer) ──────────────────────────────────────────────────────
 
+// SEC-05: MIME type allowlist — only CSV and PDF files accepted
+const allowedMimeTypes = new Set([
+  "text/csv",
+  "text/plain",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "application/pdf",
+]);
+
+function auditFileFilter(_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const mimeOk = allowedMimeTypes.has(file.mimetype);
+  const extOk = ext === ".csv" || ext === ".pdf";
+  if (mimeOk && extOk) return cb(null, true);
+  cb(new Error(`Tipo de arquivo não permitido: ${file.mimetype} (${ext})`));
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: auditFileFilter,
 });
 
 // ── API: CNPJ proxy ───────────────────────────────────────────────────────────
 
-app.get("/api/cnpj/:cnpj", requireAuth, async (req, res) => {
-  const { cnpj } = req.params;
+app.get("/api/cnpj/:cnpj", cnpjLimiter, requireAuth, async (req, res) => {
+  const cnpj = req.params.cnpj as string;
   const digits = cnpj.replace(/\D/g, "");
   if (digits.length !== 14) {
     return res.status(400).json({ error: "CNPJ deve ter 14 dígitos" });
@@ -252,9 +312,16 @@ app.get("/api/cnpj/:cnpj", requireAuth, async (req, res) => {
 
 // ── API: PDF extraction (pdftotext + Tesseract OCR fallback per page) ────────
 
+function pdfOnlyFilter(_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (file.mimetype === "application/pdf" && ext === ".pdf") return cb(null, true);
+  cb(new Error(`Apenas arquivos PDF são aceitos neste endpoint (recebido: ${file.mimetype})`));
+}
+
 const pdfUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: pdfOnlyFilter,
 });
 
 // Pages with fewer meaningful (non-whitespace) characters than this threshold
@@ -283,7 +350,7 @@ async function extractWithAzureDI(fileBuffer: Buffer): Promise<{ text: string; p
   if (isUnexpected(result)) {
     throw new Error(`Azure DI polling error: ${JSON.stringify(result.body)}`);
   }
-  const pages = result.body.analyzeResult?.pages ?? [];
+  const pages = (result.body as any).analyzeResult?.pages ?? [];
   const totalPages = pages.length;
   const text = pages
     .map((page: any, i: number) => {
@@ -295,7 +362,7 @@ async function extractWithAzureDI(fileBuffer: Buffer): Promise<{ text: string; p
   return { text, pages: totalPages, ocrPages: 0, engine: "azure-document-intelligence" };
 }
 
-app.post("/api/extract-pdf", requireAuth, pdfUpload.single("file"), async (req: any, res) => {
+app.post("/api/extract-pdf", pdfLimiter, requireAuth, pdfUpload.single("file"), async (req: any, res) => {
   if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
 
   // ── Azure Document Intelligence path ────────────────────────────────────────
@@ -461,7 +528,9 @@ app.get("/api/audits/related", requireAuth, (req, res) => {
 });
 
 app.get("/api/audits/:id", requireAuth, (req, res) => {
-  const auditDir = path.join(AUDITS_DIR, req.params.id);
+  const safeId = sanitizeSegment(req.params.id as string);
+  if (!safeId) return res.status(400).json({ error: "ID inválido" });
+  const auditDir = path.join(AUDITS_DIR, safeId);
   const resultPath = path.join(auditDir, "result.json");
   if (!fs.existsSync(resultPath)) return res.status(404).json({ error: "Auditoria não encontrada" });
   try {
@@ -482,7 +551,9 @@ app.get("/api/audits/:id", requireAuth, (req, res) => {
 });
 
 app.patch("/api/audits/:id", requireAuth, (req: any, res) => {
-  const auditDir = path.join(AUDITS_DIR, req.params.id);
+  const safeId = sanitizeSegment(req.params.id as string);
+  if (!safeId) return res.status(400).json({ error: "ID inválido" });
+  const auditDir = path.join(AUDITS_DIR, safeId);
   const resultPath = path.join(auditDir, "result.json");
   if (!fs.existsSync(resultPath)) return res.status(404).json({ error: "Auditoria não encontrada" });
 
@@ -576,7 +647,9 @@ function parseJsonSafe(text: string): any {
 const REPROCESS_BATCH = 25;
 
 app.post("/api/audits/:id/reprocess", requireAuth, async (req: any, res) => {
-  const auditDir = path.join(AUDITS_DIR, req.params.id);
+  const safeId = sanitizeSegment(req.params.id as string);
+  if (!safeId) return res.status(400).json({ error: "ID inválido" });
+  const auditDir = path.join(AUDITS_DIR, safeId);
   const resultPath = path.join(auditDir, "result.json");
   if (!fs.existsSync(resultPath)) return res.status(404).json({ error: "Auditoria não encontrada" });
 
@@ -704,9 +777,19 @@ ${JSON.stringify(budgetCsv, null, 2)}`;
   res.json({ items: updatedItems });
 });
 
-app.delete("/api/audits/:id", requireAuth, (req, res) => {
-  const auditDir = path.join(AUDITS_DIR, req.params.id);
+app.delete("/api/audits/:id", requireAuth, (req: any, res) => {
+  const safeId = sanitizeSegment(req.params.id as string);
+  if (!safeId) return res.status(400).json({ error: "ID inválido" });
+  const auditDir = path.join(AUDITS_DIR, safeId);
   if (!fs.existsSync(auditDir)) return res.status(404).json({ error: "Auditoria não encontrada" });
+
+  // SEC-04: only the audit owner may delete
+  const resultPath = path.join(auditDir, "result.json");
+  try {
+    const audit = JSON.parse(fs.readFileSync(resultPath, "utf-8"));
+    if (audit.createdBy !== req.user?.email) return res.status(403).json({ error: "Proibido" });
+  } catch { /* allow deletion if result.json missing */ }
+
   fs.rmSync(auditDir, { recursive: true, force: true });
   res.json({ ok: true });
 });
@@ -750,9 +833,30 @@ app.post(
   }
 );
 
-app.get("/api/audits/:id/files/:filename", requireAuth, (req, res) => {
-  const filePath = path.join(AUDITS_DIR, req.params.id, req.params.filename);
+app.get("/api/audits/:id/files/:filename", requireAuth, (req: any, res) => {
+  // SEC-01: reject path segments containing traversal sequences
+  const safeId = sanitizeSegment(req.params.id as string);
+  const safeFilename = sanitizeSegment(req.params.filename as string);
+  if (!safeId || !safeFilename) return res.status(400).json({ error: "Parâmetros inválidos" });
+
+  const filePath = path.join(AUDITS_DIR, safeId, safeFilename);
+
+  // SEC-01: belt-and-suspenders — resolved path must stay inside AUDITS_DIR
+  if (!path.resolve(filePath).startsWith(path.resolve(AUDITS_DIR) + path.sep)) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Arquivo não encontrado" });
+
+  // SEC-04: only the audit owner may download its files
+  const resultPath = path.join(AUDITS_DIR, safeId, "result.json");
+  try {
+    const audit = JSON.parse(fs.readFileSync(resultPath, "utf-8"));
+    if (audit.createdBy !== req.user?.email) return res.status(403).json({ error: "Proibido" });
+  } catch {
+    return res.status(404).json({ error: "Auditoria não encontrada" });
+  }
+
   res.download(filePath);
 });
 
@@ -813,7 +917,12 @@ app.get("/api/share/:token", (req, res) => {
         if (!codeParam) {
           return res.status(401).json({ error: "Código de acesso obrigatório", requiresCode: true });
         }
-        if (codeParam !== result.shareAccessCode.toUpperCase()) {
+        // SEC-05: constant-time comparison to prevent timing attacks
+        const expected = Buffer.from(result.shareAccessCode.toUpperCase().padEnd(32, '\0'));
+        const actual   = Buffer.from(codeParam.toUpperCase().padEnd(32, '\0'));
+        const match = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+        const codeMatch = match && codeParam.toUpperCase() === result.shareAccessCode.toUpperCase();
+        if (!codeMatch) {
           return res.status(401).json({ error: "Código de acesso inválido", requiresCode: true });
         }
       }
@@ -844,7 +953,11 @@ app.get("*", (req, res) => {
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("[Unhandled Express Error]", err);
   if (res.headersSent) return;
-  res.status(500).json({ error: "Erro interno do servidor", detail: err.message });
+  // SEC-04: hide internal error details in production
+  res.status(500).json({
+    error: "Erro interno do servidor",
+    ...(IS_PROD ? {} : { detail: err.message }),
+  });
 });
 
 app.listen(PORT, "0.0.0.0", () => {

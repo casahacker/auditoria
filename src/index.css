@@ -10,6 +10,8 @@
   --color-line: #e0e0e0;
   --color-text: #161616;
   --color-text-secondary: #525252;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f4f4f4;
   --color-success: #198038;
   --color-warning: #f1c21b;
   --color-error: #da1e28;
@@ -35,4 +37,67 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
   @apply bg-line rounded-full hover:bg-gray-600;
+}
+
+/* ── Dark mode ───────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --color-bg: #161616;
+  --color-card: #262626;
+  --color-sidebar: #262626;
+  --color-sidebar-active: #393939;
+  --color-line: #393939;
+  --color-text: #f4f4f4;
+  --color-text-secondary: #a8a8a8;
+  --color-surface: #262626;
+  --color-surface-hover: #393939;
+}
+
+/* ── High contrast (WCAG AA) — overrides dark mode ──────────────────────────── */
+.high-contrast {
+  --color-bg: #000000 !important;
+  --color-card: #000000 !important;
+  --color-sidebar: #000000 !important;
+  --color-sidebar-active: #1a1a1a !important;
+  --color-line: #ffffff !important;
+  --color-text: #ffffff !important;
+  --color-text-secondary: #e0e0e0 !important;
+  --color-primary: #ffff00 !important;
+  --color-success: #00ff00 !important;
+  --color-error: #ff6666 !important;
+  --color-warning: #ffff00 !important;
+  --color-surface: #000000 !important;
+  --color-surface-hover: #1a1a1a !important;
+}
+.high-contrast * {
+  outline-color: #ffff00 !important;
+}
+.high-contrast a:focus,
+.high-contrast button:focus,
+.high-contrast [tabindex]:focus {
+  outline: 3px solid #ffff00 !important;
+  outline-offset: 2px !important;
+}
+
+/* ── Font size ───────────────────────────────────────────────────────────────── */
+.font-small  { font-size: 14px; }
+.font-normal { font-size: 16px; }
+.font-large  { font-size: 18px; }
+
+/* ── Skeleton loading (UX-05) ────────────────────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+.skeleton {
+  background-color: var(--color-line, #e0e0e0);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Toast slide-in (UX-01) ──────────────────────────────────────────────────── */
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.toast-slide-in {
+  animation: toast-slide-in 0.25s ease-out forwards;
 }

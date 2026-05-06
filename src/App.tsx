@@ -25,6 +25,12 @@ import {
   Link2,
   RefreshCw,
   NotebookPen,
+  CheckCircle2,
+  Info,
+  Accessibility,
+  Sun,
+  Moon,
+  Contrast,
 } from 'lucide-react';
 import { cn, formatCurrency, truncateFileName } from './lib/utils';
 import Papa from 'papaparse';
@@ -207,6 +213,8 @@ function computeBudgetLines(budgetCsv: any[], items: AuditItem[], pcCsv?: any[])
 // ── Login Screen ──────────────────────────────────────────────────────────────
 
 function LoginScreen({ errorParam }: { errorParam: string | null }) {
+  const [redirecting, setRedirecting] = React.useState(false);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg">
       <div className="text-center p-10 border border-line rounded-xl bg-card max-w-sm w-full shadow-2xl">
@@ -214,6 +222,7 @@ function LoginScreen({ errorParam }: { errorParam: string | null }) {
           src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg"
           alt="Casa Hacker"
           className="h-12 mx-auto mb-6 invert opacity-90"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
         <h1 className="text-2xl font-extrabold tracking-widest uppercase text-primary mb-2">Stack Audit™</h1>
         <p className="text-text-secondary text-[11px] mb-8 uppercase tracking-widest">
@@ -221,22 +230,41 @@ function LoginScreen({ errorParam }: { errorParam: string | null }) {
         </p>
 
         {errorParam === 'domain' && (
-          <div className="mb-6 p-3 bg-error/10 border border-error/30 rounded text-[11px] text-error">
-            Acesso negado. Utilize uma conta <strong>@casahacker.org</strong>.
+          <div className="mb-6 p-3 bg-error/5 border-l-4 border-error rounded-r flex items-start gap-3 text-left">
+            <AlertCircle size={15} className="text-error shrink-0 mt-0.5" />
+            <p className="text-[11px] text-error">
+              Acesso negado. Utilize uma conta <strong>@casahacker.org</strong>.
+            </p>
+          </div>
+        )}
+        {errorParam && errorParam !== 'domain' && (
+          <div className="mb-6 p-3 bg-error/5 border-l-4 border-error rounded-r flex items-start gap-3 text-left">
+            <AlertCircle size={15} className="text-error shrink-0 mt-0.5" />
+            <p className="text-[11px] text-error">Erro de autenticação. Tente novamente.</p>
           </div>
         )}
 
-        <a href="/auth/google">
-          <button className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-white text-gray-800 font-bold text-sm rounded-lg hover:bg-gray-100 transition-all shadow">
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
+        <button
+          onClick={() => {
+            setRedirecting(true);
+            window.location.href = '/auth/google';
+          }}
+          disabled={redirecting}
+          className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-white text-gray-800 font-bold text-sm rounded-lg hover:bg-gray-100 transition-all shadow disabled:opacity-60 disabled:cursor-not-allowed"
+          aria-label="Entrar com Google Workspace"
+        >
+          {redirecting ? (
+            <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
+          ) : (
+            <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
-            Entrar com Google Workspace
-          </button>
-        </a>
+          )}
+          {redirecting ? 'Redirecionando...' : 'Entrar com Google Workspace'}
+        </button>
 
         <p className="mt-6 text-[10px] text-text-secondary">
           Acesso restrito ao domínio <strong>@casahacker.org</strong>
@@ -279,8 +307,16 @@ export default function App() {
 
   const [history, setHistory] = useState<AuditResult[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // ── UX-01: Unified toast notification system ─────────────────────────────────
+  type ToastKind = 'success' | 'error' | 'info';
+  interface Toast { id: string; kind: ToastKind; message: string; }
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const addToast = useCallback((kind: ToastKind, message: string) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(prev => [...prev, { id, kind, message }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500);
+  }, []);
 
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Conciliado' | 'Ressalva' | 'Pendente'>('Todos');
   const [rapcSearch, setRapcSearch] = useState('');
@@ -299,6 +335,38 @@ export default function App() {
   const [shareCodeInput, setShareCodeInput] = useState(SHARE_CODE_FROM_URL);
   const [shareCodeError, setShareCodeError] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // ── UX-07: Accessibility bar state ───────────────────────────────────────────
+  type A11yTheme = 'light' | 'dark';
+  type A11yFontSize = 'small' | 'normal' | 'large';
+  const [a11yPanelOpen, setA11yPanelOpen] = useState(false);
+  const [a11yTheme, setA11yTheme] = useState<A11yTheme>(() => {
+    const saved = localStorage.getItem('a11y-theme') as A11yTheme | null;
+    if (saved) return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+  const [a11yHighContrast, setA11yHighContrast] = useState<boolean>(() => localStorage.getItem('a11y-contrast') === 'high');
+  const [a11yFontSize, setA11yFontSize] = useState<A11yFontSize>(() => (localStorage.getItem('a11y-font-size') as A11yFontSize) || 'normal');
+
+  // Apply a11y preferences to <html> element
+  useEffect(() => {
+    const html = document.documentElement;
+    // Theme (high contrast overrides dark)
+    if (a11yHighContrast) {
+      html.removeAttribute('data-theme');
+      html.classList.add('high-contrast');
+    } else {
+      html.classList.remove('high-contrast');
+      html.setAttribute('data-theme', a11yTheme);
+    }
+    // Font size
+    html.classList.remove('font-small', 'font-normal', 'font-large');
+    html.classList.add(`font-${a11yFontSize}`);
+    // Persist
+    localStorage.setItem('a11y-theme', a11yTheme);
+    localStorage.setItem('a11y-contrast', a11yHighContrast ? 'high' : 'normal');
+    localStorage.setItem('a11y-font-size', a11yFontSize);
+  }, [a11yTheme, a11yHighContrast, a11yFontSize]);
 
   // ── Reauditoria seletiva (#26) ────────────────────────────────────────────────
   const [reauditLoading, setReauditLoading] = useState(false);
@@ -515,19 +583,18 @@ export default function App() {
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         console.error('Falha ao salvar auditoria no servidor:', err);
-        setSaveError('Falha ao salvar a auditoria no servidor. Tente novamente.');
+        addToast('error', 'Falha ao salvar a auditoria no servidor. Tente novamente.');
       } else {
         const resp = await r.json();
         const savedSourceFiles = resp.savedFiles || sourceFiles;
         const saved = { ...fullResult, sourceFiles: savedSourceFiles };
         setLastAuditResult(saved);
         setHistory(prev => [{ ...saved, itemCount: saved.items?.length ?? 0 } as any, ...prev]);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 4000);
+        addToast('success', 'Auditoria salva com sucesso.');
       }
     } catch (e) {
       console.error('Falha ao salvar auditoria no servidor:', e);
-      setSaveError('Erro de rede ao salvar a auditoria. Verifique sua conexão.');
+      addToast('error', 'Erro de rede ao salvar a auditoria. Verifique sua conexão.');
     }
   };
 
@@ -1341,6 +1408,14 @@ table.rapc tr.row-pend td { background: #fff1f2; }
 
   return (
     <div className="flex min-h-screen">
+      {/* UX-02: Skip to main content link */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:bg-primary focus:text-white focus:px-4 focus:py-2 focus:rounded focus:text-xs focus:font-bold focus:uppercase focus:tracking-widest focus:outline-none"
+      >
+        Ir para conteúdo principal
+      </a>
+
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-full w-[180px] bg-sidebar border-r border-line flex flex-col z-50">
         <div className="pt-6 pb-8 px-5 flex flex-col gap-4">
@@ -1382,7 +1457,7 @@ table.rapc tr.row-pend td { background: #fff1f2; }
       </aside>
 
       {/* Main Content */}
-      <main className="ml-[180px] flex-1 min-w-[844px] flex flex-col">
+      <main id="main-content" className="ml-[180px] flex-1 min-w-[844px] flex flex-col">
         {/* Header */}
         <header className="px-10 py-6 border-bottom border-line flex justify-between items-center bg-bg shrink-0">
           <h1 className="text-[20px] font-light">
@@ -1681,6 +1756,7 @@ table.rapc tr.row-pend td { background: #fff1f2; }
                       value={rapcSearch}
                       onChange={e => setRapcSearch(e.target.value)}
                       placeholder="Buscar lançamento..."
+                      aria-label="Buscar lançamento na tabela RAPC"
                       className="pl-7 pr-3 py-1.5 text-[11px] bg-sidebar border border-line rounded focus:outline-none focus:border-primary transition-colors w-48 text-text placeholder:text-text-secondary/50"
                     />
                     {rapcSearch && (
@@ -1770,8 +1846,12 @@ table.rapc tr.row-pend td { background: #fff1f2; }
                     ))}
                     {filteredItems.length === 0 && (
                       <tr>
-                        <td colSpan={13} className="px-6 py-10 text-center text-text-secondary text-xs uppercase tracking-widest">
-                          Nenhum lançamento encontrado
+                        <td colSpan={13}>
+                          <EmptyState
+                            icon={rapcSearch ? Search : FileText}
+                            title={rapcSearch ? `Nenhum resultado para "${rapcSearch}"` : `Nenhum item com status "${statusFilter}"`}
+                            description={rapcSearch ? 'Tente outros termos de busca.' : 'Mude o filtro de status para ver outros itens.'}
+                          />
                         </td>
                       </tr>
                     )}
@@ -1905,27 +1985,49 @@ table.rapc tr.row-pend td { background: #fff1f2; }
               );
             })()}
 
-            <div className="border border-line rounded overflow-hidden">
-              <div className="grid grid-cols-[2fr_150px_100px_110px_130px_110px_80px] gap-3 px-6 py-2.5 bg-sidebar text-[10px] font-bold text-text-secondary uppercase tracking-widest border-b border-line">
-                <span>Organização / Responsável</span>
-                <span>Período Auditado</span>
-                <span>Contrato</span>
-                <span>Gerado em</span>
-                <span>Lançamentos</span>
-                <span>Parecer</span>
-                <span className="text-right">Ações</span>
+            <div className="border border-line rounded overflow-hidden" role="grid" aria-label="Lista de auditorias">
+              <div role="row" className="grid grid-cols-[2fr_150px_100px_110px_130px_110px_80px] gap-3 px-6 py-2.5 bg-sidebar text-[10px] font-bold text-text-secondary uppercase tracking-widest border-b border-line">
+                <span role="columnheader">Organização / Responsável</span>
+                <span role="columnheader">Período Auditado</span>
+                <span role="columnheader">Contrato</span>
+                <span role="columnheader">Gerado em</span>
+                <span role="columnheader">Lançamentos</span>
+                <span role="columnheader">Parecer</span>
+                <span role="columnheader" className="text-right">Ações</span>
               </div>
               {historyLoading ? (
-                <div className="text-center py-10 bg-card">
-                  <Loader2 className="animate-spin text-primary mx-auto" size={20} />
-                </div>
+                <>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <SkeletonRow key={i} cols={[2, 1.5, 1, 1.1, 1.3, 1.1, 0.8]} />
+                  ))}
+                </>
               ) : history.length > 0 ? history.map((item) => {
                 const total = item.metrics?.totalItems ?? 0;
                 const conciliated = item.metrics?.conciliatedItems ?? 0;
                 const pct = total > 0 ? (conciliated / total) : 0;
                 const countColor = pct === 1 ? 'text-success' : pct >= 0.8 ? 'text-warning' : 'text-error';
                 return (
-                  <div key={item.id} className="grid grid-cols-[2fr_150px_100px_110px_130px_110px_80px] gap-3 items-center px-6 py-4 bg-card hover:bg-sidebar-active transition-all border-b border-line/30 group">
+                  <div
+                    key={item.id}
+                    role="row"
+                    tabIndex={0}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        try {
+                          const r = await apiFetch(`/api/audits/${item.id}`);
+                          if (r.ok) {
+                            const audit = await r.json();
+                            setLastAuditResult(audit);
+                            if (audit.sourceFiles) loadAuditFiles(audit.id, audit.sourceFiles);
+                            setActiveSection('resultado');
+                          }
+                        } catch { /* handled by apiFetch */ }
+                      }
+                    }}
+                    aria-label={`Auditoria: ${item.organization}, ${item.verdict}`}
+                    className="grid grid-cols-[2fr_150px_100px_110px_130px_110px_80px] gap-3 items-center px-6 py-4 bg-card hover:bg-sidebar-active transition-all border-b border-line/30 group focus:outline-none focus:ring-1 focus:ring-primary focus:ring-inset"
+                  >
                     <div className="flex items-start gap-3 min-w-0">
                       <div className={cn('w-2 h-2 rounded-full shrink-0 mt-1.5', item.verdict === 'APROVADO' ? 'bg-success' : item.verdict === 'DILIGÊNCIA' ? 'bg-error' : 'bg-warning')} />
                       <div className="min-w-0">
@@ -2007,8 +2109,8 @@ table.rapc tr.row-pend td { background: #fff1f2; }
                   </div>
                 );
               }) : (
-                <div className="text-center py-20 bg-card">
-                  <p className="text-text-secondary text-[11px] font-mono uppercase tracking-widest">Nenhuma auditoria encontrada no servidor.</p>
+                <div className="bg-card">
+                  <EmptyState icon={History} title="Nenhuma auditoria encontrada" description="Inicie uma nova análise para que ela apareça aqui." />
                 </div>
               )}
             </div>
@@ -2276,30 +2378,28 @@ table.rapc tr.row-pend td { background: #fff1f2; }
 
         {/* ── ITEM DETAIL MODAL (widescreen) ─────────────────────────────────── */}
         {selectedItem && (
-          <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
-            <div className="bg-bg border border-line w-full max-w-6xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 shadow-2xl rounded-lg overflow-hidden">
-              {/* Modal header */}
-              <div className="flex justify-between items-center px-8 py-5 border-b border-line bg-card shrink-0">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 shrink-0">
-                    <span className="text-primary font-bold font-mono text-sm">#{selectedItem.id}</span>
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold uppercase tracking-widest text-primary">Detalhes do Lançamento</h2>
-                    <p className="text-[11px] text-text-secondary font-mono mt-0.5">{selectedItem.date}</p>
-                  </div>
-                  <div className={cn('px-3 py-1 rounded text-[10px] font-bold uppercase border',
-                    selectedItem.status === 'Conciliado' && 'bg-success/10 text-success border-success/30',
-                    selectedItem.status === 'Ressalva' && 'bg-warning/10 text-warning border-warning/30',
-                    selectedItem.status === 'Pendente' && 'bg-error/10 text-error border-error/30'
-                  )}>
-                    {selectedItem.status}
-                  </div>
+          <ItemDetailModal onClose={() => setSelectedItem(null)}>
+            <div className="flex justify-between items-center px-8 py-5 border-b border-line bg-card shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 shrink-0">
+                  <span className="text-primary font-bold font-mono text-sm">#{selectedItem.id}</span>
                 </div>
-                <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-text transition-colors p-1.5 hover:bg-white/5 rounded">
-                  <X size={20} />
-                </button>
+                <div>
+                  <h2 id="item-modal-title" className="text-base font-bold uppercase tracking-widest text-primary">Detalhes do Lançamento</h2>
+                  <p className="text-[11px] text-text-secondary font-mono mt-0.5">{selectedItem.date}</p>
+                </div>
+                <div className={cn('px-3 py-1 rounded text-[10px] font-bold uppercase border',
+                  selectedItem.status === 'Conciliado' && 'bg-success/10 text-success border-success/30',
+                  selectedItem.status === 'Ressalva' && 'bg-warning/10 text-warning border-warning/30',
+                  selectedItem.status === 'Pendente' && 'bg-error/10 text-error border-error/30'
+                )}>
+                  {selectedItem.status}
+                </div>
               </div>
+              <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-text transition-colors p-1.5 hover:bg-white/5 rounded" aria-label="Fechar">
+                <X size={20} />
+              </button>
+            </div>
 
               {/* Modal scrollable body */}
               <div className="overflow-y-auto flex-1 custom-scrollbar">
@@ -2602,8 +2702,7 @@ table.rapc tr.row-pend td { background: #fff1f2; }
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+          </ItemDetailModal>
         )}
 
       </main>
@@ -2612,19 +2711,86 @@ table.rapc tr.row-pend td { background: #fff1f2; }
         <p className="font-bold tracking-widest uppercase">CONFIDENCIAL - USO INTERNO &nbsp;&bull;&nbsp; &copy; 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97 &nbsp;&bull;&nbsp; R. DR. RENATO PAES DE BARROS, 618 – ITAIM BIBI, SÃO PAULO – SP, 04530-000</p>
       </footer>
 
-      {/* ── Save toasts ────────────────────────────────────────────────────── */}
-      {saveError && (
-        <div className="fixed bottom-16 right-4 z-50 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-[12px] max-w-sm">
-          <AlertCircle size={15} className="shrink-0" />
-          <span className="flex-1">{saveError}</span>
-          <button onClick={() => setSaveError(null)} className="ml-1 opacity-70 hover:opacity-100"><X size={14} /></button>
-        </div>
-      )}
-      {saveSuccess && (
-        <div className="fixed bottom-16 right-4 z-50 bg-green-700 text-white px-4 py-3 rounded-lg shadow-lg text-[12px]">
-          Auditoria salva com sucesso.
-        </div>
-      )}
+      {/* ── UX-01: Toast notification region ──────────────────────────────── */}
+      <div role="status" aria-live="polite" aria-label="Notificações" className="fixed bottom-16 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(toast => (
+          <InlineNotification
+            key={toast.id}
+            kind={toast.kind}
+            message={toast.message}
+            onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+          />
+        ))}
+      </div>
+
+      {/* ── UX-07: Accessibility bar ───────────────────────────────────────── */}
+      <div className="fixed bottom-[52px] left-2 z-[60]">
+        <button
+          onClick={() => setA11yPanelOpen(p => !p)}
+          aria-label="Opções de acessibilidade"
+          aria-expanded={a11yPanelOpen}
+          title="Acessibilidade"
+          className="w-9 h-9 rounded-full bg-sidebar border border-line flex items-center justify-center text-text-secondary hover:text-primary hover:border-primary transition-all shadow-sm"
+        >
+          <Accessibility size={16} />
+        </button>
+        {a11yPanelOpen && (
+          <div className="absolute bottom-11 left-0 bg-card border border-line rounded-lg shadow-lg p-4 w-56 animate-in fade-in zoom-in-95 duration-150">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-3">Acessibilidade</p>
+
+            {/* Theme toggle */}
+            <div className="mb-3">
+              <p className="text-[10px] text-text-secondary mb-1.5 uppercase tracking-wider">Tema</p>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => { setA11yHighContrast(false); setA11yTheme('light'); }}
+                  className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] border transition-all flex-1 justify-center', !a11yHighContrast && a11yTheme === 'light' ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary')}
+                  aria-pressed={!a11yHighContrast && a11yTheme === 'light'}
+                >
+                  <Sun size={12} /> Claro
+                </button>
+                <button
+                  onClick={() => { setA11yHighContrast(false); setA11yTheme('dark'); }}
+                  className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] border transition-all flex-1 justify-center', !a11yHighContrast && a11yTheme === 'dark' ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary')}
+                  aria-pressed={!a11yHighContrast && a11yTheme === 'dark'}
+                >
+                  <Moon size={12} /> Escuro
+                </button>
+              </div>
+            </div>
+
+            {/* High contrast */}
+            <div className="mb-3">
+              <button
+                onClick={() => setA11yHighContrast(p => !p)}
+                className={cn('w-full flex items-center gap-2 px-3 py-1.5 rounded text-[11px] border transition-all', a11yHighContrast ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary')}
+                aria-pressed={a11yHighContrast}
+              >
+                <Contrast size={12} />
+                Alto Contraste (WCAG AA)
+              </button>
+            </div>
+
+            {/* Font size */}
+            <div>
+              <p className="text-[10px] text-text-secondary mb-1.5 uppercase tracking-wider">Tamanho da Fonte</p>
+              <div className="flex gap-1">
+                {([['small', 'A−', 'text-[10px]'], ['normal', 'A', 'text-[12px]'], ['large', 'A+', 'text-[14px]']] as const).map(([size, label, cls]) => (
+                  <button
+                    key={size}
+                    onClick={() => setA11yFontSize(size)}
+                    className={cn('flex-1 py-1.5 rounded border transition-all font-bold', cls, a11yFontSize === size ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary')}
+                    aria-pressed={a11yFontSize === size}
+                    aria-label={`Fonte ${size === 'small' ? 'pequena' : size === 'normal' ? 'normal' : 'grande'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2780,6 +2946,100 @@ function VerdictBanner({ result }: { result: AuditResult }) {
           {result.createdBy && <p className="mt-1 text-primary">{result.createdBy}</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── UX-03: ItemDetailModal — focus trap modal wrapper ─────────────────────────
+function ItemDetailModal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const overlayRef = React.useRef<HTMLDivElement>(null);
+  const previousFocusRef = React.useRef<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    const focusable = overlayRef.current?.querySelectorAll<HTMLElement>(
+      'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable && focusable.length > 0) focusable[0].focus();
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab' || !focusable || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={overlayRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="item-modal-title"
+        className="bg-surface border border-line rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto custom-scrollbar"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── UX-01: InlineNotification — Carbon-aligned toast ─────────────────────────
+function InlineNotification({ kind, message, onClose }: { kind: 'success' | 'error' | 'info'; message: string; onClose: () => void }) {
+  const config = {
+    success: { border: 'border-l-success', icon: CheckCircle2, iconClass: 'text-success', bg: 'bg-success/5' },
+    error:   { border: 'border-l-error',   icon: AlertCircle,  iconClass: 'text-error',   bg: 'bg-error/5'   },
+    info:    { border: 'border-l-primary',  icon: Info,         iconClass: 'text-primary',  bg: 'bg-primary/5' },
+  }[kind];
+  const Icon = config.icon;
+  return (
+    <div
+      className={cn('pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg border border-l-4 shadow-lg min-w-[280px] max-w-sm toast-slide-in', config.border, config.bg, 'border-line')}
+      role="alert"
+    >
+      <Icon size={16} className={cn('mt-0.5 shrink-0', config.iconClass)} />
+      <p className="flex-1 text-sm text-text-primary leading-snug">{message}</p>
+      <button onClick={onClose} className="shrink-0 text-text-secondary hover:text-text-primary transition-colors" aria-label="Fechar notificação">
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+// ── UX-05: SkeletonRow — animated skeleton for table rows ─────────────────────
+function SkeletonRow({ cols }: { cols: number[] }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-line">
+      {cols.map((flex, i) => (
+        <div key={i} className="skeleton h-4 rounded" style={{ flex }} />
+      ))}
+    </div>
+  );
+}
+
+// ── UX-06: EmptyState — centered icon + title + description ───────────────────
+function EmptyState({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="w-12 h-12 rounded-full bg-surface-hover flex items-center justify-center mb-4">
+        <Icon size={22} className="text-text-secondary" />
+      </div>
+      <p className="text-sm font-semibold text-text-primary mb-1">{title}</p>
+      <p className="text-xs text-text-secondary max-w-xs">{description}</p>
     </div>
   );
 }
