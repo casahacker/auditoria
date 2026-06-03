@@ -1257,10 +1257,15 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
     const owned = loadOwned(req, res);
     if (!owned) return;
     const { id, rec } = owned;
-    let p = path.join(dir(id), "fluxo_atualizado.xlsx");
-    if (!fs.existsSync(p)) p = path.join(dir(id), rec.sourceFiles?.fluxoCaixa || "fluxo.xlsx");
-    if (!fs.existsSync(p)) return res.status(404).json({ error: "Planilha não encontrada" });
-    res.download(p, "fluxo_de_caixa_atualizado.xlsx");
+    const src = path.join(dir(id), rec.sourceFiles?.fluxoCaixa || "fluxo.xlsx");
+    if (!fs.existsSync(src)) return res.status(404).json({ error: "Planilha de fluxo não encontrada" });
+    try {
+      // regenerate live so the 13-column report always reflects the current record
+      const buf = updateFluxoXlsx(src, rec.ledgerSheetName || "Dados", rec.lancamentos || []);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="fluxo_de_caixa_atualizado.xlsx"`);
+      res.send(buf);
+    } catch (e: any) { res.status(500).json({ error: "Falha ao gerar planilha: " + e.message }); }
   });
 
   app.get("/api/feac/:id/zip", requireAuth, (req: any, res) => {
