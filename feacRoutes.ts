@@ -629,6 +629,20 @@ function formatBRL(n: number): string {
   const [int, dec] = v.split(".");
   return "R$ " + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + dec;
 }
+function brNumber(n: number): string { return formatBRL(n).replace(/^R\$\s*/, ""); }
+
+/** Per-document filename: "ID - Nº NF - FORNECEDOR - VALOR.pdf" (filesystem-safe, keeps accents). */
+export function docFileName(l: any): string {
+  const id = l.rowNum ?? "S-ID";
+  const nf = l.nf?.docNumber || "SEM-NF";
+  const forn = String(l.razaoSocial || l.fornecedor || "SEM-FORNECEDOR").trim();
+  const valor = brNumber(Math.abs(parseNum(l.saida)));
+  return `${id} - ${nf} - ${forn} - ${valor}`
+    .replace(/[\/\\:*?"<>|\n\r]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180) + ".pdf";
+}
 
 /** Standardized FEAC left-margin stamp text (always UPPERCASE). */
 function buildStampText(acc: any): string {
@@ -804,32 +818,41 @@ export async function buildRateioPdf(rows: any[], acc: any): Promise<Buffer> {
 }
 
 /** Re-export the cash-flow workbook with reconciliation columns added to the ledger sheet. */
-export function updateFluxoXlsx(srcPath: string, sheetName: string, lancs: any[]): Buffer {
+/** Cash-flow workbook: prepend a fully-filled 13-column "Prestação de Contas" sheet; keep original sheets. */
+export function updateFluxoXlsx(srcPath: string, _sheetName: string, lancs: any[]): Buffer {
   const wb = XLSX.read(fs.readFileSync(srcPath), { type: "buffer", cellDates: true });
-  const sn = wb.SheetNames.includes(sheetName) ? sheetName : (wb.SheetNames.find(n => normalizeStr(n) === "dados") || wb.SheetNames[0]);
-  const ws = wb.Sheets[sn];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: "" }) as any[][];
-  let hdrIdx = rows.findIndex(r => r.some(c => normalizeStr(c) === "chave"));
-  if (hdrIdx < 0) hdrIdx = 0;
-  const headers = rows[hdrIdx];
-  const numCol = headers.findIndex((h: any) => normalizeStr(h) === "#");
-  const extra = ["Status Documentação", "Nº NF", "Nº Comprovante", "Páginas NF", "Páginas Comprovante", "RATEIO", "Observação (Notas Explicativas)"];
-  const base = headers.length;
-  extra.forEach((c, i) => { headers[base + i] = c; });
-  const statusMap: any = { OK: "OK - NF + Comprovante", SEM_NF: "Sem NF", SEM_COMPROVANTE: "Sem comprovante", SEM_AMBOS: "Sem documentos", VALOR_DIVERGENTE: "Valor divergente", DUPLICADO: "Duplicado" };
-  const byRow = new Map(lancs.map(l => [String(l.rowNum), l]));
-  for (let r = hdrIdx + 1; r < rows.length; r++) {
-    const l = numCol >= 0 ? byRow.get(String(rows[r][numCol])) : null;
-    if (!l) continue;
-    rows[r][base + 0] = statusMap[l.matchStatus] || l.matchStatus;
-    rows[r][base + 1] = l.nf?.docNumber || "";
-    rows[r][base + 2] = l.comprovante?.docNumber || "";
-    rows[r][base + 3] = l.nf?.pages?.join(",") || "";
-    rows[r][base + 4] = l.comprovante?.pages?.join(",") || "";
-    rows[r][base + 5] = l.rateio || "NAO";
-    rows[r][base + 6] = (l.notaExplicativa || "").replace(/\*\*/g, "");
+  const headers = [
+    "ID", "Categoria", "Descrição",
+    "Grupo da natureza orçamentária (FEAC)", "Natureza orçamentária (FEAC)",
+    "Razão Social do Fornecedor (conforme API CNPJ)", "CNPJ do Fornecedor",
+    "Data Pagamento", "Data de Emissão do Documento Fiscal", "Número do Documento Fiscal",
+    "Integra Rateio", "Valor", "Observação",
+  ];
+  const aoa: any[][] = [headers];
+  for (const l of lancs) {
+    const valor = (l.entrada && l.entrada > 0) ? parseNum(l.entrada) : parseNum(l.saida); // + entrada / − saída
+    aoa.push([
+      l.rowNum ?? "",
+      l.categoria || "",
+      l.descricao || "",
+      l.grupoNatureza || "",
+      l.natureza || "",
+      l.razaoSocial || l.fornecedor || "",
+      l.taxId ? formatCnpjMask(l.taxId) : "",
+      l.dataPagamento || "",
+      l.nf?.extractedDate || "",
+      l.nf?.docNumber || "",
+      l.rateio === "SIM" ? "Sim" : "Não",
+      valor,
+      (l.notaExplicativa || "").replace(/\*\*/g, ""),
+    ]);
   }
-  wb.Sheets[sn] = XLSX.utils.aoa_to_sheet(rows);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{ wch: 6 }, { wch: 22 }, { wch: 26 }, { wch: 28 }, { wch: 28 }, { wch: 32 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 70 }];
+  const SHEET = "Prestação de Contas";
+  if (wb.SheetNames.includes(SHEET)) { delete wb.Sheets[SHEET]; wb.SheetNames = wb.SheetNames.filter(n => n !== SHEET); }
+  wb.Sheets[SHEET] = ws;
+  wb.SheetNames.unshift(SHEET); // report sheet first
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
 
@@ -1208,10 +1231,10 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
         return sendPdf(res, await extractPages(sp, ref.pages), `${type === "nf" ? "NF" : "Comprovante"}_${slug}.pdf`);
       }
       const treated = path.join(recDir, "treated", `${lancId}.pdf`);
-      if (fs.existsSync(treated)) return sendPdf(res, fs.readFileSync(treated), `NF_Comprovante_${slug}.pdf`);
+      if (fs.existsSync(treated)) return sendPdf(res, fs.readFileSync(treated), docFileName(l));
       if (l.nf || l.comprovante) {
         const merged = await mergeForLanc(recDir, l);
-        return sendPdf(res, await stampLeftMargin(merged, buildStampText(rec.accountability)), `NF_Comprovante_${slug}.pdf`);
+        return sendPdf(res, await stampLeftMargin(merged, buildStampText(rec.accountability)), docFileName(l));
       }
       res.status(404).json({ error: "Sem documentos para este lançamento" });
     } catch (e: any) { res.status(500).json({ error: "Erro ao gerar PDF: " + e.message }); }
@@ -1254,7 +1277,7 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
     for (const l of rec.lancamentos || []) {
       const tp = path.join(treatedDir, `${l.id}.pdf`);
       if (l.treatedPdf && fs.existsSync(tp)) {
-        archive.file(tp, { name: `documentos/${slugify(l.dataPagamento)}_${slugify(l.fornecedor)}_${slugify(String(Math.abs(l.saida)))}.pdf` });
+        archive.file(tp, { name: `documentos/${docFileName(l)}` });
       }
     }
     const rateio = path.join(recDir, "declaracao_rateio.pdf");
