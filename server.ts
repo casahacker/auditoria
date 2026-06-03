@@ -16,6 +16,7 @@ import { jsonrepair } from "jsonrepair";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { registerFeacRoutes } from "./feacRoutes";
+import { registerDiligenciaRoutes } from "./diligenciaRoutes";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1351,6 +1352,9 @@ registerFeacRoutes(app, {
   aiClient,
   execFileAsync,
 });
+
+// ── Diligência de Fornecedores (Tool C) ───────────────────────────────────────
+registerDiligenciaRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
 
 // ── Serve React SPA ───────────────────────────────────────────────────────────
 

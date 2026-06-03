@@ -45,6 +45,7 @@ import Papa from 'papaparse';
 import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from './types';
 import { processAudit, reprocessItems } from './services/auditService';
 import FeacApp from './feac/FeacApp';
+import DiligenciaApp from './diligencia/DiligenciaApp';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' | 'documentacao';
 
@@ -1808,11 +1809,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
     )}
 
     {activeTool === 'diligencia' && (
-      <ToolPlaceholder
-        title="Diligência de Fornecedores"
-        description="Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS / CNEP / CEPIM / Leniência, TCU, Lista Suja do Trabalho Escravo, IBAMA) com relatório auditável e exportável. Em desenvolvimento."
-        onHome={() => setActiveTool('launcher')}
-      />
+      <DiligenciaApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} />
     )}
 
     {activeTool === 'feac' && (
@@ -3619,9 +3616,9 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
       id: 'diligencia',
       title: 'Diligência de Fornecedores',
       subtitle: 'CNPJ + listas de restrição',
-      description: 'Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS/CNEP/CEPIM, TCU, Lista Suja, IBAMA) com relatório auditável.',
+      description: 'Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS/CNEP/CEPIM/Leniência) com relatório auditável e validade de 30 dias.',
       icon: Building2,
-      enabled: false,
+      enabled: true,
     },
   ];
 

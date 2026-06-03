@@ -21,6 +21,7 @@ services:
       - AZURE_DI_KEY=${AZURE_DI_KEY:-}
       - EXTRACTION_ENGINE=${EXTRACTION_ENGINE:-local}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - PORTAL_TRANSPARENCIA_KEY=${PORTAL_TRANSPARENCIA_KEY:-}
     deploy:
       resources:
         limits:
