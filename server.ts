@@ -15,6 +15,7 @@ import OpenAI from "openai";
 import { jsonrepair } from "jsonrepair";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
+import { registerFeacRoutes } from "./feacRoutes";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1336,6 +1337,19 @@ app.get("/api/share/:token", (req, res) => {
   }
 
   res.status(404).json({ error: "Auditoria não encontrada ou link inválido" });
+});
+
+// ── FEAC / SGPP — Processador de Prestação de Contas (Tool B) ─────────────────
+// Registered before the SPA catch-all so /api/feac/* resolves to JSON, not index.html.
+registerFeacRoutes(app, {
+  DATA_DIR,
+  requireAuth,
+  sanitizeSegment,
+  extractTextFromFile,
+  parseJsonSafe,
+  slugify,
+  aiClient,
+  execFileAsync,
 });
 
 // ── Serve React SPA ───────────────────────────────────────────────────────────

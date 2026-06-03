@@ -44,8 +44,12 @@ import { cn, formatCurrency, truncateFileName } from './lib/utils';
 import Papa from 'papaparse';
 import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from './types';
 import { processAudit, reprocessItems } from './services/auditService';
+import FeacApp from './feac/FeacApp';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' | 'documentacao';
+
+// ── Multi-tool suite: top-level tool selector (sits above the audit's Section) ──
+type Tool = 'launcher' | 'audit' | 'feac' | 'diligencia';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -304,6 +308,9 @@ export default function App() {
 
   const [activeSection, setActiveSection] = useState<Section>('nova');
 
+  // Multi-tool suite — which tool is active; 'launcher' is the default landing.
+  const [activeTool, setActiveTool] = useState<Tool>('launcher');
+
   // ── Pesquisa global ───────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -522,6 +529,7 @@ const [a11yTheme, setA11yTheme] = useState<A11yTheme>(() => {
               if (audit.sourceFiles) loadAuditFiles(audit.id, audit.sourceFiles);
             }
             setSelectedItem(data.item);
+            setActiveTool('audit');
             setActiveSection('resultado');
           });
       })
@@ -544,7 +552,7 @@ const [a11yTheme, setA11yTheme] = useState<A11yTheme>(() => {
         setLastAuditResult(audit);
         if (audit.sourceFiles) loadAuditFiles(audit.id, audit.sourceFiles);
         const item = audit.items?.find((it: AuditItem) => String(it.id) === String(itemParam));
-        if (item) { setSelectedItem(item); setActiveSection('resultado'); }
+        if (item) { setSelectedItem(item); setActiveTool('audit'); setActiveSection('resultado'); }
       })
       .catch(() => {});
   }, [user, apiFetch, loadAuditFiles]);
@@ -1795,6 +1803,23 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       ))}
     </div>
 
+    {activeTool === 'launcher' && (
+      <LauncherView user={user} onPick={setActiveTool} />
+    )}
+
+    {activeTool === 'diligencia' && (
+      <ToolPlaceholder
+        title="Diligência de Fornecedores"
+        description="Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS / CNEP / CEPIM / Leniência, TCU, Lista Suja do Trabalho Escravo, IBAMA) com relatório auditável e exportável. Em desenvolvimento."
+        onHome={() => setActiveTool('launcher')}
+      />
+    )}
+
+    {activeTool === 'feac' && (
+      <FeacApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} />
+    )}
+
+    {activeTool === 'audit' && (
     <div className="flex min-h-screen pt-8">
       {/* UX-02: Skip to main content link */}
       <a
@@ -1809,6 +1834,12 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         <div className="pt-6 pb-8 px-5 flex flex-col gap-4">
           <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-10 w-auto object-contain object-left invert opacity-90" />
           <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">Stack Audit</div>
+          <button
+            onClick={() => setActiveTool('launcher')}
+            className="flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors uppercase tracking-widest"
+          >
+            <Layers size={11} /> Ferramentas
+          </button>
         </div>
 
         <nav className="flex-1 px-0 space-y-0">
@@ -2057,7 +2088,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                             apiFetch(`/api/audits/${lastAuditResult.id}`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ shareExpiresAt: val === 'none' ? null : new Date(Date.now() + Number(val) * 86400000).toISOString() }),
+                              body: JSON.stringify({ shareExpiresAt: new Date(Date.now() + Number(val) * 86400000).toISOString() }),
                             }).catch(() => {});
                           }
                         }}
@@ -3546,7 +3577,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         <p className="font-bold tracking-widest uppercase">CONFIDENCIAL - USO INTERNO &nbsp;&bull;&nbsp; &copy; 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97 &nbsp;&bull;&nbsp; R. DR. RENATO PAES DE BARROS, 618 – ITAIM BIBI, SÃO PAULO – SP, 04530-000</p>
       </footer>
 
-      {/* ── UX-01: Toast notification region ──────────────────────────────── */}
+    </div>
+    )}
+
+      {/* ── UX-01: Toast notification region (global — visible across all tools) ── */}
       <div role="status" aria-live="polite" aria-label="Notificações" className="fixed bottom-16 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
         {toasts.map(toast => (
           <InlineNotification
@@ -3557,13 +3591,131 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
           />
         ))}
       </div>
-
-    </div>
     </>
   );
 }
 
 // ── Helper Components ─────────────────────────────────────────────────────────
+
+function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => void }) {
+  const tools: Array<{ id: Tool; title: string; subtitle: string; description: string; icon: React.ElementType; enabled: boolean }> = [
+    {
+      id: 'audit',
+      title: 'Auditoria de Prestação de Contas',
+      subtitle: 'Contratos de Doação com Encargos',
+      description: 'Conciliação automática de notas fiscais, comprovantes e orçamento por rubrica, com IA (DeepSeek + Azure DI) e parecer final (RAPC).',
+      icon: FileText,
+      enabled: true,
+    },
+    {
+      id: 'feac',
+      title: 'Processador de Prestação de Contas',
+      subtitle: 'SGPP — Fundação FEAC',
+      description: 'Auditoria de lançamentos, tratamento de documentos (mesclagem, carimbo de margem, PDF/A-2b), declaração de rateio e empacotamento para a FEAC.',
+      icon: NotebookPen,
+      enabled: true,
+    },
+    {
+      id: 'diligencia',
+      title: 'Diligência de Fornecedores',
+      subtitle: 'CNPJ + listas de restrição',
+      description: 'Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS/CNEP/CEPIM, TCU, Lista Suja, IBAMA) com relatório auditável.',
+      icon: Building2,
+      enabled: false,
+    },
+  ];
+
+  return (
+    <div className="min-h-screen pt-8 bg-bg text-text flex flex-col">
+      <header className="px-6 sm:px-10 py-5 border-b border-line flex items-center justify-between bg-sidebar">
+        <div className="flex items-center gap-4">
+          <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-9 w-auto object-contain invert opacity-90" />
+          <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">Stack Audit™</div>
+          <span className="text-text-secondary text-[11px] font-mono hidden sm:inline">· Suíte de Ferramentas</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {user.photo && <img src={user.photo} alt={user.name} className="w-7 h-7 rounded-full" />}
+          <span className="text-[10px] text-text-secondary truncate max-w-[180px] hidden sm:inline">{user.email}</span>
+          <a href="/auth/logout" className="flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors uppercase tracking-widest">
+            <LogOut size={11} /> Sair
+          </a>
+        </div>
+      </header>
+
+      <main id="main-content" className="flex-1 px-6 sm:px-10 py-12 sm:py-16 max-w-6xl mx-auto w-full">
+        <div className="mb-10">
+          <h1 className="text-2xl sm:text-[28px] font-light">Selecione uma <span className="font-bold text-primary">ferramenta</span></h1>
+          <p className="text-[13px] text-text-secondary mt-2 max-w-2xl">
+            Plataforma de auditoria e prestação de contas para organizações de impacto social.
+          </p>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {tools.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => t.enabled && onPick(t.id)}
+                disabled={!t.enabled}
+                aria-label={t.title}
+                className={cn(
+                  'group text-left bg-card border border-line rounded-xl p-6 flex flex-col gap-4 transition-all duration-200',
+                  t.enabled ? 'hover:border-primary hover:shadow-lg cursor-pointer' : 'opacity-55 cursor-not-allowed'
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-sidebar-active text-primary">
+                    <Icon size={24} />
+                  </div>
+                  {t.enabled ? (
+                    <ChevronRight size={18} className="text-text-secondary group-hover:text-primary transition-colors" />
+                  ) : (
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary border border-line rounded px-2 py-1">Em breve</span>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-[15px] font-bold leading-snug">{t.title}</h2>
+                  <p className="text-[11px] text-primary font-semibold uppercase tracking-wider mt-0.5">{t.subtitle}</p>
+                </div>
+                <p className="text-[12px] text-text-secondary leading-relaxed">{t.description}</p>
+              </button>
+            );
+          })}
+        </div>
+      </main>
+
+      <footer className="py-4 px-6 border-t border-line text-[10px] text-text-secondary text-center leading-relaxed">
+        <p className="font-bold tracking-widest uppercase">CONFIDENCIAL — USO INTERNO &nbsp;&bull;&nbsp; © 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97</p>
+      </footer>
+    </div>
+  );
+}
+
+function ToolPlaceholder({ title, description, onHome }: { title: string; description: string; onHome: () => void }) {
+  return (
+    <div className="min-h-screen pt-8 bg-bg text-text flex flex-col">
+      <header className="px-10 py-6 border-b border-line flex justify-between items-center bg-bg shrink-0">
+        <h1 className="text-[20px] font-light">{title}</h1>
+        <button onClick={onHome} className="flex items-center gap-1.5 text-[11px] text-text-secondary hover:text-primary transition-colors uppercase tracking-widest">
+          <Layers size={13} /> Ferramentas
+        </button>
+      </header>
+      <main className="flex-1 flex items-center justify-center px-6 py-16">
+        <div className="max-w-lg w-full bg-card border border-line rounded-xl p-10 text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-sidebar-active text-primary mb-5">
+            <Building2 size={26} />
+          </div>
+          <h2 className="text-lg font-bold mb-2">Em desenvolvimento</h2>
+          <p className="text-[13px] text-text-secondary leading-relaxed">{description}</p>
+          <button onClick={onHome} className="mt-6 px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-blue-700 transition-colors">
+            Voltar às ferramentas
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}
 
 function BudgetLineChart({ lines }: { lines: BudgetLine[] }) {
   if (!lines.length) return null;

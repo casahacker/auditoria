@@ -9,6 +9,8 @@ services:
     image: localhost/stack-audit:latest
     container_name: stack-audit
     restart: on-failure:3
+    security_opt:
+      - "no-new-privileges:true"
     environment:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
@@ -23,10 +25,10 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 1024M   # FEAC treatment (Ghostscript PDF/A + pdf-lib) is heavier than the audit-only baseline
         reservations:
           cpus: '0.25'
-          memory: 128M
+          memory: 256M
     volumes:
       - /data/stack-audit/data:/app/data
     healthcheck:
