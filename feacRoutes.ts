@@ -30,6 +30,8 @@ import { fileURLToPath } from "url";
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ASSETS_DIR = path.join(APP_DIR, "assets");
+// BrasilAPI sits behind Cloudflare and returns 403 without a User-Agent header.
+const CNPJ_HEADERS = { "Accept": "application/json", "User-Agent": "StackAudit/1.0 (+https://stack-audit.casahacker.org)" };
 
 export interface FeacCtx {
   DATA_DIR: string;
@@ -340,6 +342,18 @@ function labeledCurrency(text: string, labelRe: RegExp): number | undefined {
 function allCurrencies(text: string): number[] {
   return [...String(text || "").matchAll(/(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/g)].map(m => parseNum(m[1])).filter(v => v > 0);
 }
+/** Find a token near a label — pdftotext -layout often puts the value on the line below the label. */
+function labeledToken(text: string, labelRe: RegExp, tokenRe: RegExp): string | undefined {
+  const lines = String(text || "").split(/\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!labelRe.test(lines[i])) continue;
+    for (let j = i; j < Math.min(i + 3, lines.length); j++) {
+      const m = lines[j].match(tokenRe);
+      if (m) return m[1];
+    }
+  }
+  return undefined;
+}
 /** Heuristic supplier name: first non-Casa-Hacker, non-label uppercase-ish line. */
 function docName(text: string): string | undefined {
   const lines = String(text || "").split(/\n/);
@@ -376,9 +390,9 @@ function extractDocFields(doc: DocBlock, kind: "nf" | "comprovante") {
     : labeledCurrency(doc.text, /valor\s*(do\s*servi|total da nfs|l[ií]quido|da nota)/i);
   if (value == null) { const all = allCurrencies(doc.text); if (all.length) value = Math.max(...all); }
   const date = (doc.text.match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1];
-  let docNumber = kind === "nf"
-    ? ((doc.text.match(/n[º°o]?\s*da\s*nfs-?e[^\d]{0,12}(\d{1,9})/i) || [])[1] || (doc.text.match(/n[uú]mero da nfs-?e[^\d]{0,12}(\d{1,9})/i) || [])[1])
-    : ((doc.text.match(/identificador da transa[çc][aã]o[\s:]*([\w-]{6,})/i) || [])[1] || (doc.text.match(/c[oó]digo de autentica[çc][aã]o[\s:]*([\w]{6,})/i) || [])[1]);
+  const docNumber = kind === "nf"
+    ? labeledToken(doc.text, /n[uú]mero da nfs|n[º°]\s*da\s*nfs|n[uú]mero\s*\/\s*s[eé]rie|n[uú]mero da nota/i, /(?<![\d\/:])(\d{1,9})(?![\d\/:])/)
+    : labeledToken(doc.text, /identificador da transa|c[oó]digo de autentica/i, /([0-9a-zA-Z][0-9a-zA-Z-]{7,})/);
   return { pages: doc.pages, text: doc.text, value, date, taxId, taxRoot, name: docName(doc.text), docNumber };
 }
 function scoreMatch(lanc: any, f: any): number {
@@ -473,6 +487,11 @@ export function runMatching(lancamentos: any[], nfText: string, compText: string
   assign(nfDocs, "nf");
   assign(compDocs, "comprovante");
 
+  // backfill the ledger CNPJ from the matched document when the row only had a partial/no id
+  for (const l of lancamentos) {
+    if (!l.taxId) { const t = l.nf?.extractedTaxId || l.comprovante?.extractedTaxId; if (t) l.taxId = t; }
+    if (!l.taxRoot && l.taxId && l.taxId.length === 14) l.taxRoot = l.taxId.slice(0, 8);
+  }
   applyStatus(lancamentos);
 
   const orphan = (docs: any[], kind: "nf" | "comprovante") =>
@@ -481,6 +500,26 @@ export function runMatching(lancamentos: any[], nfText: string, compText: string
       extractedValue: d.value, extractedDate: d.date, extractedName: d.name, extractedTaxId: d.taxId, docNumber: d.docNumber,
     }));
   return { orphans: [...orphan(nfDocs, "nf"), ...orphan(compDocs, "comprovante")] };
+}
+
+/** Resolve official razão social per CNPJ via BrasilAPI (ReceitaWS fallback). Best-effort, cached. */
+export async function enrichRazaoSocial(lancamentos: any[]) {
+  const uniq = [...new Set(lancamentos.map((l: any) => onlyDigits(l.taxId)).filter((d: string) => d.length === 14))];
+  const cache: Record<string, string> = {};
+  await Promise.all(uniq.map(async (d) => {
+    try {
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`, { headers: CNPJ_HEADERS, signal: AbortSignal.timeout(8000) });
+      if (r.ok) { const j: any = await r.json(); cache[d] = j.razao_social || j.nome_fantasia || ""; if (cache[d]) return; }
+    } catch { /* fall through */ }
+    try {
+      const r = await fetch(`https://www.receitaws.com.br/v1/cnpj/${d}`, { headers: CNPJ_HEADERS, signal: AbortSignal.timeout(8000) });
+      if (r.ok) { const j: any = await r.json(); cache[d] = j.nome || ""; }
+    } catch { /* keep ledger name */ }
+  }));
+  for (const l of lancamentos) {
+    const d = onlyDigits(l.taxId);
+    if (cache[d]) l.razaoSocial = cache[d];
+  }
 }
 
 // ── document treatment: merge → left-margin stamp → PDF/A-2b ──────────────────
@@ -862,6 +901,8 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
         if (n) applyStatus(rec.lancamentos);
       } catch (e: any) { console.warn("[feac fuzzy]", e.message); }
     }
+    // Resolve official razão social per CNPJ (Receita) for the final report — best-effort.
+    try { await enrichRazaoSocial(rec.lancamentos); } catch (e: any) { console.warn("[feac cnpj enrich]", e.message); }
     recomputeTotals(rec);
     rec.stage = "auditado";
     writeRecord(rec);
@@ -979,7 +1020,7 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
     let applied = 0;
     if (Array.isArray(art.lancamentos)) {
       const byId = new Map(rec.lancamentos.map((l: any) => [l.id, l]));
-      const allow = ["rateio", "rateioValorProjeto", "rateioValorProprio", "auditorNote", "fornecedor", "dataPagamento", "descricao", "taxId", "saida", "matchStatus", "nf", "comprovante", "valorDivergencia"];
+      const allow = ["rateio", "rateioValorProjeto", "rateioValorProprio", "auditorNote", "fornecedor", "razaoSocial", "categoria", "descricao", "grupoNatureza", "natureza", "dataPagamento", "taxId", "saida", "entrada", "matchStatus", "nf", "comprovante", "valorDivergencia"];
       for (const upd of art.lancamentos) {
         if (!upd?.id) continue;
         const cur = byId.get(upd.id);

@@ -261,7 +261,7 @@ app.get("/api/cnpj/:cnpj", cnpjLimiter, requireAuth, async (req, res) => {
 
   try {
     const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`, {
-      headers: { "Accept": "application/json" },
+      headers: { "Accept": "application/json", "User-Agent": "StackAudit/1.0 (+https://stack-audit.casahacker.org)" },
       signal: AbortSignal.timeout(10000),
     });
     if (r.ok) {
@@ -301,7 +301,7 @@ app.get("/api/cnpj/:cnpj", cnpjLimiter, requireAuth, async (req, res) => {
 
   try {
     const r2 = await fetch(`https://www.receitaws.com.br/v1/cnpj/${digits}`, {
-      headers: { "Accept": "application/json" },
+      headers: { "Accept": "application/json", "User-Agent": "StackAudit/1.0 (+https://stack-audit.casahacker.org)" },
       signal: AbortSignal.timeout(10000),
     });
     if (!r2.ok) {

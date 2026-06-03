@@ -49,7 +49,8 @@ export interface FeacLancamento {
   descricao: string;
   grupoNatureza: string;    // "grupo da natureza orçamentária (FEAC)"
   natureza: string;         // "natureza orçamentária (FEAC)"
-  fornecedor: string;       // "Nome do Fornecedor (Razão Social)"
+  fornecedor: string;       // ledger "Nome do Fornecedor" (free text)
+  razaoSocial?: string;     // official razão social resolved from the CNPJ API (Receita)
   entrada: number;
   saida: number;            // negative in sheet; abs() used for matching
   saldo: number;

@@ -380,7 +380,7 @@ function PreliminarView(p: any) {
             {record.lancamentos.map((l: FeacLancamento) => (
               <tr key={l.id} onClick={() => p.setSelected(l)} className="border-t border-line hover:bg-primary/5 cursor-pointer">
                 <td className="px-3 py-2.5 whitespace-nowrap">{l.dataPagamento || '—'}</td>
-                <td className="px-3 py-2.5 max-w-[260px] truncate">{l.fornecedor || '—'}<div className="text-[10px] text-text-secondary">{l.descricao}</div></td>
+                <td className="px-3 py-2.5 max-w-[260px] truncate">{l.razaoSocial || l.fornecedor || '—'}<div className="text-[10px] text-text-secondary">{l.descricao}</div></td>
                 <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">{formatCurrency(Math.abs(l.saida))}</td>
                 <td className="px-3 py-2.5 text-center text-text-secondary">{l.nf ? `p${l.nf.pages.join(',')}` : '—'}</td>
                 <td className="px-3 py-2.5 text-center text-text-secondary">{l.comprovante ? `p${l.comprovante.pages.join(',')}` : '—'}</td>
@@ -441,10 +441,36 @@ function TratamentoView({ record, busy, progress }: any) {
 }
 
 // ── Relatório view ──────────────────────────────────────────────────────────
+// signed value: + for entrada, − for saída
+const signedValue = (l: FeacLancamento) => (l.entrada && l.entrada > 0 ? l.entrada : l.saida);
+
+const REPORT_COLS: { h: string; get: (l: FeacLancamento) => string | number }[] = [
+  { h: 'ID', get: l => l.rowNum ?? '' },
+  { h: 'Categoria', get: l => l.categoria || '' },
+  { h: 'Descrição', get: l => l.descricao || '' },
+  { h: 'Grupo da natureza orçamentária (FEAC)', get: l => l.grupoNatureza || '' },
+  { h: 'Natureza orçamentária (FEAC)', get: l => l.natureza || '' },
+  { h: 'Razão Social do Fornecedor', get: l => l.razaoSocial || l.fornecedor || '' },
+  { h: 'CNPJ do Fornecedor', get: l => l.taxId || '' },
+  { h: 'Data Pagamento', get: l => l.dataPagamento || '' },
+  { h: 'Data de Emissão do Documento Fiscal', get: l => l.nf?.extractedDate || '' },
+  { h: 'Número do Documento Fiscal', get: l => l.nf?.docNumber || '' },
+  { h: 'Integra Rateio', get: l => (l.rateio === 'SIM' ? 'Sim' : 'Não') },
+  { h: 'Valor', get: l => signedValue(l) },
+];
+
 function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
   const a = record.accountability || {};
   const dl = async (url: string, name: string) => { try { await downloadBlob(apiFetch, url, name); } catch (e: any) { addToast('error', e.message); } };
   const hasRateio = (record.lancamentos || []).some((l: FeacLancamento) => l.rateio === 'SIM');
+  const exportCsv = () => {
+    const esc = (s: any) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+    const lines = [REPORT_COLS.map(c => esc(c.h)).join(';')];
+    for (const l of (record.lancamentos || [])) lines.push(REPORT_COLS.map(c => esc(typeof c.get(l) === 'number' ? String(c.get(l)).replace('.', ',') : c.get(l))).join(';'));
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = `relatorio_prestacao_contas_${record.id.slice(0, 8)}.csv`;
+    document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 1000);
+  };
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-card border border-line rounded-lg p-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -460,32 +486,55 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
 
       <div className="flex flex-wrap gap-2">
         <button onClick={() => dl(`/api/feac/${record.id}/zip`, 'documentos.zip')} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded text-[11px] uppercase tracking-widest font-bold hover:bg-blue-700 transition-colors"><Package size={14} /> Baixar tudo (ZIP)</button>
+        <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 border border-line rounded text-[11px] uppercase tracking-widest text-text-secondary hover:text-primary hover:border-primary transition-colors"><FileDown size={14} /> Relatório (CSV)</button>
         <button onClick={() => dl(`/api/feac/${record.id}/fluxo`, 'fluxo_atualizado.xlsx')} className="flex items-center gap-2 px-4 py-2 border border-line rounded text-[11px] uppercase tracking-widest text-text-secondary hover:text-primary hover:border-primary transition-colors"><FileDown size={14} /> Fluxo de caixa atualizado</button>
         {hasRateio && <button onClick={() => dl(`/api/feac/${record.id}/rateio.pdf`, 'declaracao_rateio.pdf')} className="flex items-center gap-2 px-4 py-2 border border-line rounded text-[11px] uppercase tracking-widest text-text-secondary hover:text-primary hover:border-primary transition-colors"><ScrollText size={14} /> Declaração de rateio</button>}
       </div>
 
-      <div className="bg-card border border-line rounded-lg overflow-hidden">
-        <table className="w-full text-[12px]">
-          <thead className="bg-sidebar text-text-secondary"><tr className="text-left">
-            <th className="px-3 py-2.5 font-semibold">Data</th><th className="px-3 py-2.5 font-semibold">Fornecedor</th>
-            <th className="px-3 py-2.5 font-semibold text-right">Valor</th><th className="px-3 py-2.5 font-semibold">Situação</th>
-            <th className="px-3 py-2.5 font-semibold text-center">Rateio</th><th className="px-3 py-2.5 font-semibold text-center">Documento</th>
-          </tr></thead>
+      <div className="bg-card border border-line rounded-lg overflow-x-auto">
+        <table className="w-full text-[11px] whitespace-nowrap">
+          <thead className="bg-sidebar text-text-secondary">
+            <tr className="text-left">
+              <th className="px-2.5 py-2.5 font-semibold">ID</th>
+              <th className="px-2.5 py-2.5 font-semibold">Categoria</th>
+              <th className="px-2.5 py-2.5 font-semibold">Descrição</th>
+              <th className="px-2.5 py-2.5 font-semibold">Grupo nat. (FEAC)</th>
+              <th className="px-2.5 py-2.5 font-semibold">Natureza (FEAC)</th>
+              <th className="px-2.5 py-2.5 font-semibold">Razão Social (API CNPJ)</th>
+              <th className="px-2.5 py-2.5 font-semibold">CNPJ</th>
+              <th className="px-2.5 py-2.5 font-semibold">Data Pagto</th>
+              <th className="px-2.5 py-2.5 font-semibold">Emissão NF</th>
+              <th className="px-2.5 py-2.5 font-semibold">Nº Doc.</th>
+              <th className="px-2.5 py-2.5 font-semibold text-center">Rateio</th>
+              <th className="px-2.5 py-2.5 font-semibold text-right">Valor</th>
+              <th className="px-2.5 py-2.5 font-semibold text-center">PDF</th>
+            </tr>
+          </thead>
           <tbody>
-            {record.lancamentos.map((l: FeacLancamento) => (
-              <tr key={l.id} className="border-t border-line hover:bg-primary/5">
-                <td className="px-3 py-2.5 whitespace-nowrap">{l.dataPagamento}</td>
-                <td className="px-3 py-2.5 max-w-[240px] truncate cursor-pointer" onClick={() => setSelected(l)}>{l.fornecedor}</td>
-                <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">{formatCurrency(Math.abs(l.saida))}</td>
-                <td className="px-3 py-2.5"><StatusChip status={l.matchStatus} /></td>
-                <td className="px-3 py-2.5 text-center">{l.rateio === 'SIM' ? <span className="text-primary font-bold">Sim</span> : '—'}</td>
-                <td className="px-3 py-2.5 text-center">
-                  {l.treatedPdf
-                    ? <button onClick={() => dl(`/api/feac/${record.id}/items/${l.id}/doc`, `${l.fornecedor}.pdf`)} className="inline-flex items-center gap-1 text-primary hover:underline"><FileDown size={13} /> PDF</button>
-                    : <span className="text-text-secondary">—</span>}
-                </td>
-              </tr>
-            ))}
+            {record.lancamentos.map((l: FeacLancamento) => {
+              const v = signedValue(l);
+              return (
+                <tr key={l.id} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => setSelected(l)}>
+                  <td className="px-2.5 py-2 text-text-secondary">{l.rowNum ?? '—'}</td>
+                  <td className="px-2.5 py-2 max-w-[140px] truncate" title={l.categoria}>{l.categoria || '—'}</td>
+                  <td className="px-2.5 py-2 max-w-[160px] truncate" title={l.descricao}>{l.descricao || '—'}</td>
+                  <td className="px-2.5 py-2 max-w-[150px] truncate" title={l.grupoNatureza}>{l.grupoNatureza || '—'}</td>
+                  <td className="px-2.5 py-2 max-w-[150px] truncate" title={l.natureza}>{l.natureza || '—'}</td>
+                  <td className="px-2.5 py-2 max-w-[180px] truncate font-medium" title={l.razaoSocial || l.fornecedor}>{l.razaoSocial || l.fornecedor || '—'}</td>
+                  <td className="px-2.5 py-2 font-mono">{l.taxId || '—'}</td>
+                  <td className="px-2.5 py-2">{l.dataPagamento || '—'}</td>
+                  <td className="px-2.5 py-2">{l.nf?.extractedDate || '—'}</td>
+                  <td className="px-2.5 py-2">{l.nf?.docNumber || '—'}</td>
+                  <td className="px-2.5 py-2 text-center">{l.rateio === 'SIM' ? <span className="text-primary font-bold">Sim</span> : 'Não'}</td>
+                  <td className={cn('px-2.5 py-2 text-right font-mono', v < 0 ? 'text-error' : 'text-success')}>{v < 0 ? '− ' : '+ '}{formatCurrency(Math.abs(v))}</td>
+                  <td className="px-2.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                    {l.treatedPdf
+                      ? <button onClick={() => dl(`/api/feac/${record.id}/items/${l.id}/doc`, `${l.fornecedor}.pdf`)} className="inline-flex items-center gap-1 text-primary hover:underline"><FileDown size={12} /></button>
+                      : <span className="text-text-secondary">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -510,7 +559,7 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
     <div className="fixed inset-0 z-[120] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-card border border-line rounded-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-line sticky top-0 bg-card">
-          <h3 className="text-[15px] font-bold">{lanc.fornecedor || 'Lançamento'}</h3>
+          <h3 className="text-[15px] font-bold">{lanc.razaoSocial || lanc.fornecedor || 'Lançamento'}</h3>
           <button onClick={onClose} className="text-text-secondary hover:text-text"><X size={18} /></button>
         </div>
         <div className="p-6 space-y-4 text-[13px]">
@@ -519,7 +568,11 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
             <KV label="Valor" v={formatCurrency(Math.abs(lanc.saida))} />
             <KV label="Atividade / rubrica" v={lanc.descricao || lanc.chave} />
             <KV label="Natureza (FEAC)" v={lanc.natureza || '—'} />
-            <KV label="CPF/CNPJ" v={lanc.taxId || '—'} />
+            <KV label="CNPJ do Fornecedor" v={lanc.taxId || '—'} />
+            <KV label="Razão Social (API CNPJ)" v={lanc.razaoSocial || '—'} />
+            <KV label="Nº do Documento Fiscal" v={lanc.nf?.docNumber || '—'} />
+            <KV label="Emissão do Doc. Fiscal" v={lanc.nf?.extractedDate || '—'} />
+            <KV label="Categoria" v={lanc.categoria || '—'} />
             <KV label="Ref. financeira" v={lanc.finRef || '—'} />
           </div>
           <div className="flex items-center gap-2"><span className="text-[11px] uppercase tracking-widest text-text-secondary">Situação:</span> <StatusChip status={lanc.matchStatus} /></div>
