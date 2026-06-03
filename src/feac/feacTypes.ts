@@ -13,6 +13,13 @@ export type CNPJDataLike = Record<string, any>;
 
 export type RateioFlag = 'SIM' | 'NAO';
 
+/** Pix transfer fields parsed from the payment receipt (for the explanatory note). */
+export interface FeacPix {
+  origemNome?: string; origemCnpj?: string; origemBanco?: string; origemAgencia?: string; origemConta?: string;
+  destinoNome?: string; destinoCnpj?: string; destinoBanco?: string; destinoChave?: string;
+  idTransacao?: string;
+}
+
 export type FeacMatchStatus =
   | 'OK'                // NF + comprovante matched, values agree
   | 'SEM_NF'            // missing nota fiscal
@@ -64,7 +71,9 @@ export interface FeacLancamento {
   comprovante?: FeacDocRef | null;
   matchStatus: FeacMatchStatus;
   valorDivergencia?: number; // |doc value − |saida|| when VALOR_DIVERGENTE
-  auditorNote?: string;
+  pix?: FeacPix;             // parsed from the comprovante
+  notaExplicativa?: string;  // auto-generated "Notas explicativas da administração" (the report Observação)
+  auditorNote?: string;      // free-text note typed by the auditor (separate from notaExplicativa)
   treatedPdf?: string;       // filename of merged+stamped+PDF/A output (relative)
 }
 
@@ -116,6 +125,7 @@ export interface FeacProcessing {
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+  auditedAt?: string;       // timestamp of the first /audit run — used as "Apurado em" in the note
   stage: FeacStage;
   schemaVersion: 1;
   accountability: FeacAccountability;

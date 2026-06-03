@@ -482,6 +482,7 @@ export function runMatching(lancamentos: any[], nfText: string, compText: string
         extractedValue: best.value, extractedDate: best.date,
         extractedName: best.name, extractedTaxId: best.taxId, docNumber: best.docNumber,
       };
+      if (kind === "comprovante") lanc.pix = parseComprovantePix(best.text);
     }
   };
   assign(nfDocs, "nf");
@@ -520,6 +521,105 @@ export async function enrichRazaoSocial(lancamentos: any[]) {
     const d = onlyDigits(l.taxId);
     if (cache[d]) l.razaoSocial = cache[d];
   }
+}
+
+// ── explanatory note ("Observação") — deterministic, context-aware generation ──
+
+const MONTHS_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+function compToMesAno(comp?: string, fallbackDateBR?: string): string {
+  let m = String(comp || "").match(/(\d{1,2})\/(\d{4})/);
+  if (!m && fallbackDateBR) { const d = String(fallbackDateBR).match(/\d{2}\/(\d{2})\/(\d{4})/); if (d) m = [d[0], d[1], d[2]] as any; }
+  if (m) { const mi = Math.min(12, Math.max(1, +m[1])) - 1; return `${MONTHS_PT[mi]}/${m[2]}`; }
+  return comp || "—";
+}
+
+function formatCnpjMask(d?: string): string {
+  const x = onlyDigits(d);
+  if (x.length === 14) return `${x.slice(0, 2)}.${x.slice(2, 5)}.${x.slice(5, 8)}/${x.slice(8, 12)}-${x.slice(12)}`;
+  if (x.length === 11) return `${x.slice(0, 3)}.${x.slice(3, 6)}.${x.slice(6, 9)}-${x.slice(9)}`;
+  return d || "—";
+}
+
+/** Parse Pix transfer fields from a payment-receipt text (BTG/Pix layout: label row, value row, 2 columns). */
+function parseComprovantePix(text: string): any {
+  const lines = String(text || "").split(/\n/);
+  const idxDe = lines.findIndex(l => /^\s*De\s*$/.test(l));
+  const para = idxDe >= 0 ? lines.slice(0, idxDe) : lines;
+  const de = idxDe >= 0 ? lines.slice(idxDe) : [];
+  const strip = (s: string) => s.replace(/^\d[\d.\/-]*\s+/, "").trim();
+  const valBelow = (scope: string[], labelRe: RegExp, col: number): string => {
+    for (let i = 0; i < scope.length; i++) {
+      if (!labelRe.test(scope[i])) continue;
+      for (let j = i + 1; j < Math.min(i + 3, scope.length); j++) {
+        const parts = scope[j].split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
+        if (parts.length) return (parts[col] ?? parts[0] ?? "").trim();
+      }
+    }
+    return "";
+  };
+  return {
+    destinoNome: strip(valBelow(para, /\bNome\b/i, 0)),
+    destinoCnpj: onlyDigits(valBelow(para, /CPF\s*\/?\s*CNPJ/i, 1)) || undefined,
+    destinoBanco: valBelow(para, /^\s*Banco\b/i, 0),
+    destinoChave: valBelow(para, /Chave Pix/i, 1) || valBelow(para, /Chave Pix/i, 0),
+    origemNome: strip(valBelow(de, /Origem/i, 0)),
+    origemCnpj: onlyDigits(valBelow(de, /Origem/i, 1)) || undefined,
+    origemAgencia: valBelow(de, /Ag[eê]ncia/i, 0),
+    origemConta: valBelow(de, /\bConta\b/i, 1) || valBelow(de, /Ag[eê]ncia/i, 1),
+    origemBanco: /BTG Pactual/i.test(text) ? "BTG Pactual" : (valBelow(de, /^\s*Banco\b/i, 0) || ""),
+    idTransacao: valBelow(lines, /Identificador da transa/i, 0),
+  };
+}
+
+/** Build the context-aware "Observação" note (markdown ** for emphasis), adapting to status/rateio/Pix. */
+export function generateObservacao(l: any, acc: any, auditDateBR: string): string {
+  const v = formatBRL(Math.abs(parseNum(l.saida)) || Math.abs(parseNum(l.entrada)));
+  const razao = l.razaoSocial || l.fornecedor || "—";
+  const cnpj = formatCnpjMask(l.taxId);
+  const nfNum = l.nf?.docNumber || "—";
+  const nfDate = l.nf?.extractedDate || "—";
+  const pix = l.pix || {};
+  const comp = compToMesAno(acc?.competencia, l.dataPagamento);
+  const out: string[] = ["**Notas explicativas da administração:**", `Apurado em ${auditDateBR}.`];
+
+  if (l.matchStatus === "OK")
+    out.push(`Conferência integral: valor de **${v}** e destinatário **${razao} (CNPJ ${cnpj})** compatíveis entre planilha, comprovante bancário (Pix) e nota fiscal eletrônica (NFS-e nº ${nfNum}, emitida em ${nfDate}).`);
+  else if (l.matchStatus === "VALOR_DIVERGENTE")
+    out.push(`Conferência com **divergência de valor**: planilha indica **${v}** para **${razao} (CNPJ ${cnpj})**; o(s) documento(s) apresentam valor distinto (diferença de R$ ${(l.valorDivergencia ?? 0).toFixed(2).replace(".", ",")}). Recomenda-se verificação.`);
+  else if (l.matchStatus === "SEM_NF")
+    out.push(`Conferência parcial: comprovante bancário (Pix) de **${v}** a **${razao} (CNPJ ${cnpj})** localizado; **nota fiscal eletrônica não localizada**.`);
+  else if (l.matchStatus === "SEM_COMPROVANTE")
+    out.push(`Conferência parcial: nota fiscal eletrônica (nº ${nfNum}, emitida em ${nfDate}) de **${razao} (CNPJ ${cnpj})** localizada; **comprovante de pagamento não localizado**.`);
+  else
+    out.push(`**Documentação não localizada** para o valor de **${v}** ao destinatário **${razao}**.`);
+
+  if (pix.idTransacao || pix.destinoChave || pix.origemConta) {
+    out.push("", "**Pix:**");
+    out.push(`- Banco de origem: ${pix.origemBanco || "—"} (Ag. ${pix.origemAgencia || "—"}, C/C ${pix.origemConta || "—"}) – ${pix.origemNome || "—"} (CNPJ ${formatCnpjMask(pix.origemCnpj)})`);
+    out.push(`- Banco de destino: ${pix.destinoBanco || "—"} (Chave ${pix.destinoChave || "—"})`);
+    out.push(`- Identificador da transação: ${pix.idTransacao || "—"}`);
+  }
+
+  out.push("");
+  if (l.nf || l.comprovante) out.push("Documentação fiscal e bancária anexa.");
+  out.push(`Pagamento referente à competência **${comp}** do serviço prestado.`);
+  if (l.rateio === "SIM")
+    out.push(`Pagamento com **rateio**: ${formatBRL(l.rateioValorProjeto ?? Math.abs(parseNum(l.saida)))} com recurso do projeto e ${formatBRL(l.rateioValorProprio ?? 0)} com recurso próprio da OSC.`);
+  else if (l.matchStatus === "OK")
+    out.push("Sem inconsistências, reembolsos ou rateios.");
+  else if (l.matchStatus === "VALOR_DIVERGENTE")
+    out.push("Pendência: divergência de valor a esclarecer.");
+  else
+    out.push("Pendência: documentação a complementar.");
+
+  return out.join("\n");
+}
+
+/** Regenerate notaExplicativa for all lançamentos from current state (status/rateio/pix). */
+function regenNotas(rec: any) {
+  const auditDateBR = fmtDateBR(rec.auditedAt ? new Date(rec.auditedAt) : new Date());
+  for (const l of rec.lancamentos || []) l.notaExplicativa = generateObservacao(l, rec.accountability, auditDateBR);
 }
 
 // ── document treatment: merge → left-margin stamp → PDF/A-2b ──────────────────
@@ -710,7 +810,7 @@ export function updateFluxoXlsx(srcPath: string, sheetName: string, lancs: any[]
   if (hdrIdx < 0) hdrIdx = 0;
   const headers = rows[hdrIdx];
   const numCol = headers.findIndex((h: any) => normalizeStr(h) === "#");
-  const extra = ["Status Documentação", "Nº NF", "Nº Comprovante", "Páginas NF", "Páginas Comprovante", "RATEIO"];
+  const extra = ["Status Documentação", "Nº NF", "Nº Comprovante", "Páginas NF", "Páginas Comprovante", "RATEIO", "Observação (Notas Explicativas)"];
   const base = headers.length;
   extra.forEach((c, i) => { headers[base + i] = c; });
   const statusMap: any = { OK: "OK - NF + Comprovante", SEM_NF: "Sem NF", SEM_COMPROVANTE: "Sem comprovante", SEM_AMBOS: "Sem documentos", VALOR_DIVERGENTE: "Valor divergente", DUPLICADO: "Duplicado" };
@@ -724,6 +824,7 @@ export function updateFluxoXlsx(srcPath: string, sheetName: string, lancs: any[]
     rows[r][base + 3] = l.nf?.pages?.join(",") || "";
     rows[r][base + 4] = l.comprovante?.pages?.join(",") || "";
     rows[r][base + 5] = l.rateio || "NAO";
+    rows[r][base + 6] = (l.notaExplicativa || "").replace(/\*\*/g, "");
   }
   wb.Sheets[sn] = XLSX.utils.aoa_to_sheet(rows);
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
@@ -903,7 +1004,9 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
     }
     // Resolve official razão social per CNPJ (Receita) for the final report — best-effort.
     try { await enrichRazaoSocial(rec.lancamentos); } catch (e: any) { console.warn("[feac cnpj enrich]", e.message); }
+    if (!rec.auditedAt) rec.auditedAt = new Date().toISOString();
     recomputeTotals(rec);
+    regenNotas(rec);
     rec.stage = "auditado";
     writeRecord(rec);
     res.json(rec);
@@ -978,6 +1081,7 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
       }
     }
     recomputeTotals(rec);
+    regenNotas(rec);
     writeRecord(rec);
     res.json(rec);
   });
@@ -1073,6 +1177,7 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
       }
       rec.treatment = { perItem: true, treatedCount: count, rateioPdf, fluxoCaixaUpdated: fluxoUpd, errors, treatedAt: new Date().toISOString() };
       rec.stage = "concluido";
+      regenNotas(rec);
       writeRecord(rec);
       res.json(rec);
     } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }

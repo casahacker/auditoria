@@ -457,6 +457,7 @@ const REPORT_COLS: { h: string; get: (l: FeacLancamento) => string | number }[] 
   { h: 'Número do Documento Fiscal', get: l => l.nf?.docNumber || '' },
   { h: 'Integra Rateio', get: l => (l.rateio === 'SIM' ? 'Sim' : 'Não') },
   { h: 'Valor', get: l => signedValue(l) },
+  { h: 'Observação', get: l => (l.notaExplicativa || '').replace(/\*\*/g, '') },
 ];
 
 function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
@@ -507,6 +508,7 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
               <th className="px-2.5 py-2.5 font-semibold">Nº Doc.</th>
               <th className="px-2.5 py-2.5 font-semibold text-center">Rateio</th>
               <th className="px-2.5 py-2.5 font-semibold text-right">Valor</th>
+              <th className="px-2.5 py-2.5 font-semibold">Observação</th>
               <th className="px-2.5 py-2.5 font-semibold text-center">PDF</th>
             </tr>
           </thead>
@@ -527,6 +529,7 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
                   <td className="px-2.5 py-2">{l.nf?.docNumber || '—'}</td>
                   <td className="px-2.5 py-2 text-center">{l.rateio === 'SIM' ? <span className="text-primary font-bold">Sim</span> : 'Não'}</td>
                   <td className={cn('px-2.5 py-2 text-right font-mono', v < 0 ? 'text-error' : 'text-success')}>{v < 0 ? '− ' : '+ '}{formatCurrency(Math.abs(v))}</td>
+                  <td className="px-2.5 py-2 max-w-[220px] truncate text-text-secondary" title={(l.notaExplicativa || '').replace(/\*\*/g, '')}>{(l.notaExplicativa || '').replace(/\*\*/g, '').replace(/\n+/g, ' · ').slice(0, 70) || '—'}</td>
                   <td className="px-2.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                     {l.treatedPdf
                       ? <button onClick={() => dl(`/api/feac/${record.id}/items/${l.id}/doc`, `${l.fornecedor}.pdf`)} className="inline-flex items-center gap-1 text-primary hover:underline"><FileDown size={12} /></button>
@@ -538,6 +541,16 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function NoteText({ text }: { text: string }) {
+  return (
+    <div className="whitespace-pre-line text-[12px] leading-relaxed text-text">
+      {text.split('\n').map((ln, i) => (
+        <div key={i}>{ln.split(/(\*\*[^*]+\*\*)/g).map((p, j) => (p.startsWith('**') && p.endsWith('**') ? <strong key={j}>{p.slice(2, -2)}</strong> : <span key={j}>{p}</span>))}</div>
+      ))}
     </div>
   );
 }
@@ -596,6 +609,13 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
                   <div className="text-text-secondary">{(cn_ as any).situacao_cadastral} · {(cn_ as any).municipio}/{(cn_ as any).uf}</div>
                 </div>
               )}
+            </div>
+          )}
+
+          {lanc.notaExplicativa && (
+            <div className="border-t border-line pt-3">
+              <div className="text-[11px] uppercase tracking-widest text-text-secondary mb-2 flex items-center gap-1"><ScrollText size={12} /> Observação — notas explicativas</div>
+              <div className="bg-bg border border-line rounded p-3"><NoteText text={lanc.notaExplicativa} /></div>
             </div>
           )}
 
