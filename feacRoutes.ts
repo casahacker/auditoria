@@ -653,7 +653,7 @@ async function extractPages(srcPath: string, pages?: number[]): Promise<Buffer> 
 }
 
 /** Merge comprovante page(s) then NF page(s) into one PDF (the order required by FEAC). */
-async function mergeForLanc(recDir: string, lanc: any): Promise<Buffer> {
+export async function mergeForLanc(recDir: string, lanc: any): Promise<Buffer> {
   const out = await PDFDocument.create();
   const add = async (file: string, pages?: number[]) => {
     if (!pages?.length) return;
@@ -664,8 +664,8 @@ async function mergeForLanc(recDir: string, lanc: any): Promise<Buffer> {
     if (!idx.length) return;
     (await out.copyPages(src, idx)).forEach(pg => out.addPage(pg));
   };
-  await add(lanc.comprovante?.sourceFile === "comprovantes" ? "comprovantes.pdf" : "comprovantes.pdf", lanc.comprovante?.pages);
-  await add("notas.pdf", lanc.nf?.pages);
+  await add("notas.pdf", lanc.nf?.pages);                   // nota fiscal primeiro
+  await add("comprovantes.pdf", lanc.comprovante?.pages);   // depois o comprovante de pagamento
   return Buffer.from(await out.save());
 }
 
@@ -674,19 +674,19 @@ export async function stampLeftMargin(pdfBuffer: Buffer, stampText: string): Pro
   const src = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
   const out = await PDFDocument.create();
   out.registerFontkit(fontkit);
-  // Casa Hacker design system: text in "Dos" #3C433C (legible on white), accent stripe "Code" #32FA96.
+  // Carimbo: texto PRETO em negrito, separado do documento fiscal por uma linha pontilhada cinza.
   const font = await embedPlex(out, "IBMPlexSans-Bold.ttf", StandardFonts.HelveticaBold);
-  const MARGIN = 46;
-  const INK = rgb(0.235, 0.263, 0.235);     // #3C433C
-  const ACCENT = rgb(0.196, 0.980, 0.588);  // #32FA96
+  const MARGIN = 52;
+  const INK = rgb(0, 0, 0);        // preto
+  const SEP = rgb(0.5, 0.5, 0.5);  // cinza — linha pontilhada
   const embedded = await out.embedPages(src.getPages());
   embedded.forEach((ep: any) => {
     const w = ep.width, h = ep.height;
     const page = out.addPage([w + MARGIN, h]);
     page.drawPage(ep, { x: MARGIN, y: 0, width: w, height: h });
     page.drawRectangle({ x: 0, y: 0, width: MARGIN, height: h, color: rgb(1, 1, 1) });
-    page.drawRectangle({ x: MARGIN - 3, y: 0, width: 3, height: h, color: ACCENT }); // brand accent stripe
-    page.drawText(stampText, { x: 13, y: 16, size: 7, font, color: INK, rotate: degrees(90), maxWidth: h - 32, lineHeight: 8.4 });
+    page.drawLine({ start: { x: MARGIN - 1.5, y: 8 }, end: { x: MARGIN - 1.5, y: h - 8 }, thickness: 0.8, color: SEP, dashArray: [2.5, 2.5] });
+    page.drawText(stampText, { x: 16, y: 20, size: 8.5, font, color: INK, rotate: degrees(90), maxWidth: h - 40, lineHeight: 10 });
   });
   return Buffer.from(await out.save());
 }
@@ -1208,10 +1208,10 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
         return sendPdf(res, await extractPages(sp, ref.pages), `${type === "nf" ? "NF" : "Comprovante"}_${slug}.pdf`);
       }
       const treated = path.join(recDir, "treated", `${lancId}.pdf`);
-      if (fs.existsSync(treated)) return sendPdf(res, fs.readFileSync(treated), `Comprovante_NF_${slug}.pdf`);
+      if (fs.existsSync(treated)) return sendPdf(res, fs.readFileSync(treated), `NF_Comprovante_${slug}.pdf`);
       if (l.nf || l.comprovante) {
         const merged = await mergeForLanc(recDir, l);
-        return sendPdf(res, await stampLeftMargin(merged, buildStampText(rec.accountability)), `Comprovante_NF_${slug}.pdf`);
+        return sendPdf(res, await stampLeftMargin(merged, buildStampText(rec.accountability)), `NF_Comprovante_${slug}.pdf`);
       }
       res.status(404).json({ error: "Sem documentos para este lançamento" });
     } catch (e: any) { res.status(500).json({ error: "Erro ao gerar PDF: " + e.message }); }

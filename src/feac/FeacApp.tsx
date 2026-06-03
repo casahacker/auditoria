@@ -5,17 +5,17 @@
  * FEAC / SGPP — Processador de Prestação de Contas (Tool B).
  * Flow: upload → relatório preliminar editável → tratamento de documentos → Relatório de Prestação de Contas.
  */
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   NotebookPen, Layers, Upload, FileText, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
   Info, Download, FileDown, Search, Building2, X, ChevronRight, Trash2, RefreshCw, Package,
-  FileCheck2, ArrowRight, LogOut, ScrollText,
+  FileCheck2, ArrowRight, LogOut, ScrollText, PlusCircle, History,
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { AuthUser } from '../types';
-import { FeacProcessing, FeacLancamento, FeacMatchStatus, CNPJDataLike } from './feacTypes';
+import { FeacProcessing, FeacLancamento, FeacMatchStatus, CNPJDataLike, FeacSummary } from './feacTypes';
 
-type FeacSection = 'upload' | 'preliminar' | 'tratamento' | 'relatorio';
+type FeacSection = 'historico' | 'upload' | 'preliminar' | 'tratamento' | 'relatorio';
 
 export interface FeacAppProps {
   user: AuthUser;
@@ -118,7 +118,7 @@ async function downloadBlob(apiFetch: FeacAppProps['apiFetch'], url: string, fal
 }
 
 export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppProps) {
-  const [section, setSection] = useState<FeacSection>('upload');
+  const [section, setSection] = useState<FeacSection>('historico');
   const [record, setRecord] = useState<FeacProcessing | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
@@ -225,35 +225,90 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
     } catch { setCnpj(c => ({ ...c, [d]: 'error' })); }
   };
 
-  // ── shell ──────────────────────────────────────────────────────────────────
-  const nav: { id: FeacSection; label: string; icon: React.ElementType; enabled: boolean }[] = [
-    { id: 'upload', label: 'Entrada', icon: Upload, enabled: true },
-    { id: 'preliminar', label: 'Relatório preliminar', icon: ScrollText, enabled: !!record },
-    { id: 'tratamento', label: 'Tratamento', icon: FileCheck2, enabled: !!record && (record.stage === 'tratado' || record.stage === 'concluido' || busy) },
-    { id: 'relatorio', label: 'Prestação de contas', icon: NotebookPen, enabled: !!record && (record.stage === 'tratado' || record.stage === 'concluido') },
+  // ── persistence: saved prestações ───────────────────────────────────────────
+  const [history, setHistory] = useState<FeacSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try { const r = await apiFetch('/api/feac'); if (r.ok) setHistory(await r.json()); } catch { /* */ } finally { setHistoryLoading(false); }
+  };
+  useEffect(() => { loadHistory(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const openRecord = async (id: string) => {
+    try {
+      const r = await apiFetch(`/api/feac/${id}`);
+      if (!r.ok) { addToast('error', 'Falha ao abrir a prestação.'); return; }
+      const rec: FeacProcessing = await r.json();
+      setRecord(rec);
+      setSection(rec.stage === 'concluido' || rec.stage === 'tratado' ? 'relatorio' : (rec.lancamentos?.length ? 'preliminar' : 'upload'));
+    } catch { addToast('error', 'Falha ao abrir a prestação.'); }
+  };
+  const newPrestacao = () => {
+    setRecord(null); setNotas([]); setComprovantes([]); setExtrato([]); setFluxo([]);
+    setMeta({ projeto: '', contractNumber: '', periodoInicio: '', periodoFim: '' });
+    setSection('upload');
+  };
+  const deleteRecord = async (id: string) => {
+    const r = await apiFetch(`/api/feac/${id}`, { method: 'DELETE' });
+    if (r.ok) { addToast('success', 'Prestação excluída.'); if (record?.id === id) setRecord(null); loadHistory(); }
+    else addToast('error', 'Falha ao excluir.');
+  };
+
+  // ── shell: step model ────────────────────────────────────────────────────────
+  const STAGE_RANK: Record<string, number> = { criado: 0, extraido: 1, auditado: 2, tratado: 3, concluido: 4 };
+  const rank = record ? (STAGE_RANK[record.stage] ?? 0) : -1;
+  const steps: { id: FeacSection; label: string; icon: React.ElementType; doneAt: number; enabled: boolean }[] = [
+    { id: 'upload', label: 'Entrada de documentos', icon: Upload, doneAt: 1, enabled: true },
+    { id: 'preliminar', label: 'Relatório preliminar', icon: ScrollText, doneAt: 2, enabled: !!record },
+    { id: 'tratamento', label: 'Tratamento', icon: FileCheck2, doneAt: 4, enabled: !!record && rank >= 2 },
+    { id: 'relatorio', label: 'Prestação de contas', icon: NotebookPen, doneAt: 4, enabled: !!record && rank >= 3 },
   ];
 
   return (
     <div className="flex min-h-screen pt-8">
-      <aside className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-[180px] bg-sidebar border-r border-line flex flex-col z-50">
-        <div className="pt-6 pb-8 px-5 flex flex-col gap-4">
-          <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-10 w-auto object-contain object-left invert opacity-90" />
-          <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase leading-tight">FEAC · SGPP</div>
-          <button onClick={onHome} className="flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors uppercase tracking-widest">
-            <Layers size={11} /> Ferramentas
+      <aside className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-[212px] bg-sidebar border-r border-line flex flex-col z-50">
+        <div className="pt-6 pb-4 px-5">
+          <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-9 w-auto object-contain object-left invert opacity-90 mb-3" />
+          <div className="flex items-center justify-between">
+            <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">FEAC · SGPP</div>
+            <button onClick={onHome} title="Voltar às ferramentas" className="text-text-secondary hover:text-primary transition-colors"><Layers size={15} /></button>
+          </div>
+        </div>
+
+        <div className="px-3 pb-2">
+          <button onClick={newPrestacao} className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary text-white rounded text-[11px] font-bold uppercase tracking-widest hover:bg-blue-700 transition-colors">
+            <PlusCircle size={14} /> Nova prestação
           </button>
         </div>
-        <nav className="flex-1 px-0 space-y-0">
-          {nav.map(item => (
-            <button key={item.id} disabled={!item.enabled}
-              onClick={() => item.enabled && setSection(item.id)}
-              className={cn('w-full flex items-center gap-3 px-5 py-3 text-[13px] transition-all border-l-3 border-transparent',
-                section === item.id ? 'bg-sidebar-active text-primary border-l-primary' : 'text-text-secondary hover:text-text hover:bg-white/5',
-                !item.enabled && 'opacity-25 cursor-not-allowed')}>
-              <item.icon size={16} className={cn('shrink-0', section === item.id ? 'text-primary' : 'opacity-70')} /> {item.label}
-            </button>
-          ))}
+
+        <div className="px-3 pb-1">
+          <button onClick={() => { setSection('historico'); loadHistory(); }}
+            className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] transition-colors',
+              section === 'historico' ? 'bg-sidebar-active text-primary font-semibold' : 'text-text-secondary hover:text-text hover:bg-white/5')}>
+            <History size={15} /> Histórico
+            {history.length > 0 && <span className="ml-auto text-[10px] bg-line/70 text-text px-1.5 py-0.5 rounded-full">{history.length}</span>}
+          </button>
+        </div>
+
+        <div className="px-5 pt-3 pb-1 mt-1 text-[9px] font-bold uppercase tracking-widest text-text-secondary/60 border-t border-line">Etapas {record ? '' : '· nova prestação'}</div>
+        <nav className="flex-1 px-2 pt-1 space-y-0.5 overflow-y-auto">
+          {steps.map((s, i) => {
+            const done = rank >= s.doneAt;
+            const active = section === s.id;
+            return (
+              <button key={s.id} disabled={!s.enabled} onClick={() => s.enabled && setSection(s.id)}
+                className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] transition-colors text-left',
+                  active ? 'bg-sidebar-active text-primary font-semibold' : 'text-text-secondary hover:text-text hover:bg-white/5',
+                  !s.enabled && 'opacity-30 cursor-not-allowed')}>
+                <span className={cn('shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border',
+                  done ? 'bg-primary border-primary text-white' : active ? 'border-primary text-primary' : 'border-line text-text-secondary')}>
+                  {done ? <CheckCircle2 size={12} /> : i + 1}
+                </span>
+                <span className="leading-tight">{s.label}</span>
+              </button>
+            );
+          })}
         </nav>
+
         <div className="px-4 py-4 border-t border-line">
           {user.photo && <img src={user.photo} alt={user.name} className="w-7 h-7 rounded-full mb-2" />}
           <p className="text-[10px] text-text-secondary truncate">{user.email}</p>
@@ -261,18 +316,22 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
         </div>
       </aside>
 
-      <main id="main-content" className="ml-[180px] flex-1 min-w-[844px] flex flex-col">
-        <header className="px-10 py-6 border-b border-line flex justify-between items-center bg-bg shrink-0">
-          <h1 className="text-[20px] font-light">
+      <main id="main-content" className="ml-[212px] flex-1 min-w-[820px] flex flex-col">
+        <header className="px-10 py-6 border-b border-line flex justify-between items-center bg-bg shrink-0 gap-4">
+          <h1 className="text-[20px] font-light shrink-0">
+            {section === 'historico' && <>Prestações de <span className="font-bold text-primary">Contas</span></>}
             {section === 'upload' && <>Entrada de <span className="font-bold text-primary">Documentos</span></>}
             {section === 'preliminar' && <>Relatório <span className="font-bold text-primary">Preliminar</span></>}
             {section === 'tratamento' && <>Tratamento de <span className="font-bold text-primary">Documentos</span></>}
             {section === 'relatorio' && <>Prestação de <span className="font-bold text-primary">Contas — FEAC</span></>}
           </h1>
-          <div className="text-[11px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-bold tracking-widest">SGPP · FEAC</div>
+          {record && <div className="text-[11px] text-text-secondary truncate">{record.accountability?.projeto || '—'} · Contrato {record.accountability?.contractNumber || '—'}</div>}
         </header>
 
         <div className="flex-1 overflow-y-auto px-10 py-8 pb-24">
+          {section === 'historico' && (
+            <HistoricoView {...{ history, historyLoading, openRecord, deleteRecord, newPrestacao }} />
+          )}
           {section === 'upload' && (
             <UploadView {...{ notas, setNotas, comprovantes, setComprovantes, extrato, setExtrato, fluxo, setFluxo, meta, setMeta, busy, progress, canStart, start }} />
           )}
@@ -300,6 +359,44 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
 }
 
 // ── Upload view ─────────────────────────────────────────────────────────────
+function HistoricoView({ history, historyLoading, openRecord, deleteRecord, newPrestacao }: any) {
+  const STAGE_LABEL: Record<string, string> = { criado: 'Rascunho', extraido: 'Processado', auditado: 'Conciliado', tratado: 'Tratado', concluido: 'Concluído' };
+  return (
+    <div className="space-y-5 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-[13px] text-text-secondary max-w-2xl">Prestações de contas salvas. Cada uma fica <b>persistida no servidor</b> e pode ser reaberta, editada ou tratada a qualquer momento.</p>
+        <button onClick={newPrestacao} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded text-[11px] uppercase tracking-widest font-bold hover:bg-blue-700 transition-colors shrink-0"><PlusCircle size={14} /> Nova</button>
+      </div>
+      {historyLoading ? (
+        <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" /> Carregando…</div>
+      ) : !history.length ? (
+        <div className="bg-card border border-line rounded-lg p-10 text-center">
+          <NotebookPen size={28} className="mx-auto text-text-secondary mb-3" />
+          <div className="text-[13px] text-text-secondary">Nenhuma prestação de contas ainda. Clique em <b>Nova</b> para começar.</div>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {history.map((h: FeacSummary) => (
+            <div key={h.id} className="bg-card border border-line rounded-lg p-4 flex flex-col gap-2 hover:border-primary transition-colors">
+              <div className="flex items-start justify-between gap-2">
+                <div className="font-bold text-[13px] leading-snug">{h.projeto || 'Sem projeto'}</div>
+                <button onClick={() => deleteRecord(h.id)} title="Excluir" className="text-text-secondary hover:text-error shrink-0"><Trash2 size={13} /></button>
+              </div>
+              <div className="text-[11px] text-text-secondary">Contrato {h.contractNumber || '—'} · {h.competencia || '—'}</div>
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="px-2 py-0.5 rounded-full bg-sidebar-active text-primary font-bold uppercase tracking-wider">{STAGE_LABEL[h.stage] || h.stage}</span>
+                <span className="text-text-secondary">{h.okCount}/{h.lancamentosCount} conciliados</span>
+              </div>
+              <div className="text-[11px] text-text-secondary">{formatCurrency(h.totalSaidas || 0)} · {new Date(h.updatedAt).toLocaleDateString('pt-BR')}</div>
+              <button onClick={() => openRecord(h.id)} className="mt-1 flex items-center justify-center gap-1.5 px-3 py-1.5 border border-line rounded text-[11px] uppercase tracking-widest text-primary hover:bg-primary/5 transition-colors"><ChevronRight size={13} /> Abrir</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UploadView(p: any) {
   const stampPreview = `AS DESPESAS CUSTEADAS NESTE DOCUMENTO FORAM PAGAS COM RECURSOS DO TERMO DE PARCERIA COM A FEAC PARA O PROJETO ${p.meta.projeto || '[NOME DO PROJETO]'} – CONTRATO ${p.meta.contractNumber || '[Nº DO CONTRATO]'} – ASSOCIAÇÃO CASA HACKER`.toUpperCase();
   return (
@@ -324,8 +421,8 @@ function UploadView(p: any) {
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Carimbo aplicado na margem esquerda de cada documento</div>
-          <div className="border-l-4 rounded bg-bg px-3 py-2" style={{ borderColor: '#32FA96' }}>
-            <p className="text-[11px] font-bold uppercase leading-snug" style={{ color: '#3C433C' }}>{stampPreview}</p>
+          <div className="rounded bg-bg px-3 py-2 border-l-2 border-dashed border-text-secondary/60">
+            <p className="text-[11px] font-bold uppercase leading-snug text-text">{stampPreview}</p>
           </div>
         </div>
       </div>
