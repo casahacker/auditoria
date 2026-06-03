@@ -630,11 +630,11 @@ function formatBRL(n: number): string {
   return "R$ " + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + dec;
 }
 
-/** The left-margin stamp text declared up front: "Número do Contrato e Notas Complementares". */
+/** Standardized FEAC left-margin stamp text (always UPPERCASE). */
 function buildStampText(acc: any): string {
-  const c = acc?.contractNumber ? `Contrato ${acc.contractNumber}` : "";
-  const n = acc?.notasComplementares ? (c ? " — " : "") + acc.notasComplementares : "";
-  return (c + n) || "Documentação Comprobatória";
+  const projeto = String(acc?.projeto || "").trim() || "[NOME DO PROJETO]";
+  const contrato = String(acc?.contractNumber || "").trim() || "[Nº DO CONTRATO]";
+  return `AS DESPESAS CUSTEADAS NESTE DOCUMENTO FORAM PAGAS COM RECURSOS DO TERMO DE PARCERIA COM A FEAC PARA O PROJETO ${projeto} – CONTRATO ${contrato} – ASSOCIAÇÃO CASA HACKER`.toUpperCase();
 }
 
 async function embedPlex(doc: any, file: string, fallback: any) {
@@ -674,16 +674,19 @@ export async function stampLeftMargin(pdfBuffer: Buffer, stampText: string): Pro
   const src = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
   const out = await PDFDocument.create();
   out.registerFontkit(fontkit);
-  const font = await embedPlex(out, "IBMPlexSans-Regular.ttf", StandardFonts.Helvetica);
-  const MARGIN = 38;
+  // Casa Hacker design system: text in "Dos" #3C433C (legible on white), accent stripe "Code" #32FA96.
+  const font = await embedPlex(out, "IBMPlexSans-Bold.ttf", StandardFonts.HelveticaBold);
+  const MARGIN = 46;
+  const INK = rgb(0.235, 0.263, 0.235);     // #3C433C
+  const ACCENT = rgb(0.196, 0.980, 0.588);  // #32FA96
   const embedded = await out.embedPages(src.getPages());
   embedded.forEach((ep: any) => {
     const w = ep.width, h = ep.height;
     const page = out.addPage([w + MARGIN, h]);
     page.drawPage(ep, { x: MARGIN, y: 0, width: w, height: h });
     page.drawRectangle({ x: 0, y: 0, width: MARGIN, height: h, color: rgb(1, 1, 1) });
-    page.drawLine({ start: { x: MARGIN - 0.5, y: 0 }, end: { x: MARGIN - 0.5, y: h }, thickness: 0.5, color: rgb(0.82, 0.82, 0.82) });
-    page.drawText(stampText, { x: 13, y: 12, size: 7, font, color: rgb(0.13, 0.13, 0.13), rotate: degrees(90), maxWidth: h - 24, lineHeight: 8.5 });
+    page.drawRectangle({ x: MARGIN - 3, y: 0, width: 3, height: h, color: ACCENT }); // brand accent stripe
+    page.drawText(stampText, { x: 13, y: 16, size: 7, font, color: INK, rotate: degrees(90), maxWidth: h - 32, lineHeight: 8.4 });
   });
   return Buffer.from(await out.save());
 }

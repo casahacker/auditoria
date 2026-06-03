@@ -128,7 +128,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
   const [comprovantes, setComprovantes] = useState<File[]>([]);
   const [extrato, setExtrato] = useState<File[]>([]);
   const [fluxo, setFluxo] = useState<File[]>([]);
-  const [meta, setMeta] = useState({ projeto: '', contractNumber: '', notasComplementares: '', periodoInicio: '', periodoFim: '' });
+  const [meta, setMeta] = useState({ projeto: '', contractNumber: '', periodoInicio: '', periodoFim: '' });
 
   // preliminar state
   const [selected, setSelected] = useState<FeacLancamento | null>(null);
@@ -143,7 +143,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
     rateio: lancs.filter(l => l.rateio === 'SIM').length,
   }), [lancs]);
 
-  const canStart = fluxo.length > 0 && (notas.length > 0 || comprovantes.length > 0) && meta.contractNumber.trim().length > 0;
+  const canStart = fluxo.length > 0 && (notas.length > 0 || comprovantes.length > 0) && meta.projeto.trim().length > 0 && meta.contractNumber.trim().length > 0;
 
   // ── actions ──────────────────────────────────────────────────────────────────
   const start = async () => {
@@ -301,6 +301,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
 
 // ── Upload view ─────────────────────────────────────────────────────────────
 function UploadView(p: any) {
+  const stampPreview = `AS DESPESAS CUSTEADAS NESTE DOCUMENTO FORAM PAGAS COM RECURSOS DO TERMO DE PARCERIA COM A FEAC PARA O PROJETO ${p.meta.projeto || '[NOME DO PROJETO]'} – CONTRATO ${p.meta.contractNumber || '[Nº DO CONTRATO]'} – ASSOCIAÇÃO CASA HACKER`.toUpperCase();
   return (
     <div className="max-w-4xl space-y-6 animate-in fade-in duration-300">
       <p className="text-[13px] text-text-secondary">
@@ -313,15 +314,21 @@ function UploadView(p: any) {
         <FileField label="Extrato da conta corrente" hint="PDF do extrato (opcional)" multiple accept="application/pdf" files={p.extrato} onChange={p.setExtrato} />
         <FileField label="Fluxo de caixa (planilha)" hint="Arquivo .xlsx do centro de custo" accept=".xlsx,.xls" files={p.fluxo} onChange={p.setFluxo} />
       </div>
-      <div className="grid sm:grid-cols-2 gap-4">
-        <Field label="Projeto" value={p.meta.projeto} onChange={(v: string) => p.setMeta({ ...p.meta, projeto: v })} placeholder="Hub de Cidadania Ativa Integração" />
-        <Field label="Número do Contrato *" value={p.meta.contractNumber} onChange={(v: string) => p.setMeta({ ...p.meta, contractNumber: v })} placeholder="Ex.: 2025NDOES_1 / JUR-361" />
-        <Field label="Período — início" value={p.meta.periodoInicio} onChange={(v: string) => p.setMeta({ ...p.meta, periodoInicio: v })} placeholder="01/04/2026" />
-        <Field label="Período — fim" value={p.meta.periodoFim} onChange={(v: string) => p.setMeta({ ...p.meta, periodoFim: v })} placeholder="30/04/2026" />
+      <div className="bg-card border border-line rounded-lg p-5 space-y-4">
+        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary">Identificação (conforme SGPP)</div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Nome do Projeto (conforme SGPP) *" value={p.meta.projeto} onChange={(v: string) => p.setMeta({ ...p.meta, projeto: v })} placeholder="Ex.: Hub de Cidadania Ativa Integração" />
+          <Field label="Número do Contrato FEAC (conforme SGPP) *" value={p.meta.contractNumber} onChange={(v: string) => p.setMeta({ ...p.meta, contractNumber: v })} placeholder="Ex.: 2025NDOES_1" />
+          <Field label="Período — início" value={p.meta.periodoInicio} onChange={(v: string) => p.setMeta({ ...p.meta, periodoInicio: v })} placeholder="01/04/2026" />
+          <Field label="Período — fim" value={p.meta.periodoFim} onChange={(v: string) => p.setMeta({ ...p.meta, periodoFim: v })} placeholder="30/04/2026" />
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Carimbo aplicado na margem esquerda de cada documento</div>
+          <div className="border-l-4 rounded bg-bg px-3 py-2" style={{ borderColor: '#32FA96' }}>
+            <p className="text-[11px] font-bold uppercase leading-snug" style={{ color: '#3C433C' }}>{stampPreview}</p>
+          </div>
+        </div>
       </div>
-      <Field label="Notas Complementares para Documentação Comprobatória" textarea
-        value={p.meta.notasComplementares} onChange={(v: string) => p.setMeta({ ...p.meta, notasComplementares: v })}
-        placeholder="Texto que será carimbado na margem esquerda de cada página, junto ao Número do Contrato." />
 
       {p.busy ? (
         <div className="flex items-center gap-3 bg-card border border-line rounded-lg p-5">
