@@ -2,7 +2,7 @@
 
 Guia do usuário. O Processador FEAC transforma um conjunto de notas fiscais, comprovantes de pagamento, extrato e a planilha de fluxo de caixa em uma **prestação de contas completa**: concilia cada lançamento com seus documentos, trata os PDFs (mescla, carimbo e PDF/A-2b), gera a Declaração de Rateio e produz o Relatório de Prestação de Contas com tudo pronto para envio à FEAC.
 
-> Acesso: `https://stack-audit.casahacker.org` → faça login com a conta `@casahacker.org` → cartão **"Processador de Prestação de Contas — SGPP / FEAC"**.
+> Acesso: `https://auditoria.casahacker.org` → faça login com a conta `@casahacker.org` → cartão **"Processador de Prestação de Contas — SGPP / FEAC"**.
 
 ---
 
@@ -102,4 +102,4 @@ A tela final reúne tudo:
 
 ## Recursos complementares
 
-A ferramenta reaproveita capacidades do Stack Audit: consulta de **CNPJ na Receita** no modal do lançamento, extração via **Azure Document Intelligence** (quando configurada) e **DeepSeek** como reforço de conciliação para casos ambíguos.
+A ferramenta reaproveita capacidades do Auditoria: consulta de **CNPJ na Receita** no modal do lançamento, extração via **Azure Document Intelligence** (quando configurada) e **DeepSeek** como reforço de conciliação para casos ambíguos.

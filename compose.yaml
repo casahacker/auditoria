@@ -1,13 +1,13 @@
 services:
-  stack-audit:
+  auditoria:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
         APP_URL: ${APP_URL}
-    image: localhost/stack-audit:latest
-    container_name: stack-audit
+    image: localhost/auditoria:latest
+    container_name: auditoria
     restart: on-failure:3
     security_opt:
       - "no-new-privileges:true"
@@ -25,6 +25,7 @@ services:
       - DILIGENCIA_RATE_PER_MIN=${DILIGENCIA_RATE_PER_MIN:-100}
       - DILIGENCIA_SWEEP_MS=${DILIGENCIA_SWEEP_MS:-300000}
       - DILIGENCIA_AUTO=${DILIGENCIA_AUTO:-1}
+      - DILIGENCIA_FORCE_REFRESH=${DILIGENCIA_FORCE_REFRESH:-0}
       # KYS/KYG — assinatura via Documenso (template + formValues)
       - DOCUMENSO_URL=${DOCUMENSO_URL:-https://documenso.casahacker.org}
       - DOCUMENSO_API_TOKEN=${DOCUMENSO_API_TOKEN:-}
@@ -39,7 +40,7 @@ services:
           cpus: '0.25'
           memory: 256M
     volumes:
-      - /data/stack-audit/data:/app/data
+      - /data/auditoria/data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
@@ -49,10 +50,10 @@ services:
     ports:
       - "127.0.0.1:18088:3000"
     networks:
-      - stack-audit-net
+      - auditoria-net
 
 networks:
-  stack-audit-net:
+  auditoria-net:
     driver: bridge
     ipam:
       config:

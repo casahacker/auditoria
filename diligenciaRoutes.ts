@@ -92,13 +92,14 @@ async function limitedFetch(url: string, init: RequestInit, retries = 2): Promis
 // ── external lookups ──────────────────────────────────────────────────────────
 
 async function fetchReceitaRaw(cnpj: string): Promise<any> {
+  let best: any = null; // melhor candidato SEM logradouro (usado se nenhuma fonte trouxer endereço)
   try {
     const r = await limitedFetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
     if (r.ok) {
       const d: any = await r.json();
-      return {
+      const out: any = {
         fonte: "BrasilAPI (Receita Federal)", apiUrl: `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, fetchedAt: new Date().toISOString(),
-        razao_social: d.razao_social, nome_fantasia: d.nome_fantasia,
+        razao_social: d.razao_social, nome_fantasia: d.nome_fantasia, tipo: d.descricao_identificador_matriz_filial,
         situacao_cadastral: d.descricao_situacao_cadastral, data_situacao: d.data_situacao_cadastral, motivo_situacao: d.descricao_motivo_situacao_cadastral,
         natureza_juridica: d.natureza_juridica, porte: d.porte, abertura: d.data_inicio_atividade,
         capital_social: d.capital_social != null ? Number(d.capital_social).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "",
@@ -108,15 +109,16 @@ async function fetchReceitaRaw(cnpj: string): Promise<any> {
         cnaes_secundarios: Array.isArray(d.cnaes_secundarios) ? d.cnaes_secundarios.filter((c: any) => c.codigo).map((c: any) => `${c.codigo} - ${c.descricao}`) : [],
         qsa: Array.isArray(d.qsa) ? d.qsa.map((s: any) => ({ nome: s.nome_socio, qual: s.qualificacao_socio, entrada: s.data_entrada_sociedade, faixa: s.faixa_etaria })) : [],
       };
+      if (out.logradouro) return out; best = best || out; // BrasilAPI às vezes vem sem endereço → tenta próxima fonte
     }
   } catch { /* fall through */ }
   try {
     const r = await limitedFetch(`https://www.receitaws.com.br/v1/cnpj/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
     if (r.ok) {
       const d: any = await r.json();
-      return {
+      const out: any = {
         fonte: "ReceitaWS (Receita Federal)", apiUrl: `https://www.receitaws.com.br/v1/cnpj/${cnpj}`, fetchedAt: new Date().toISOString(),
-        razao_social: d.nome, nome_fantasia: d.fantasia, situacao_cadastral: d.situacao, data_situacao: d.data_situacao, motivo_situacao: d.motivo_situacao,
+        razao_social: d.nome, nome_fantasia: d.fantasia, tipo: d.tipo, situacao_cadastral: d.situacao, data_situacao: d.data_situacao, motivo_situacao: d.motivo_situacao,
         natureza_juridica: typeof d.natureza_juridica === "object" ? d.natureza_juridica?.descricao : d.natureza_juridica,
         porte: d.porte, abertura: d.abertura, capital_social: d.capital_social,
         logradouro: d.logradouro, numero: d.numero, complemento: d.complemento, bairro: d.bairro, municipio: d.municipio, uf: d.uf, cep: d.cep,
@@ -125,31 +127,74 @@ async function fetchReceitaRaw(cnpj: string): Promise<any> {
         cnaes_secundarios: Array.isArray(d.atividades_secundarias) ? d.atividades_secundarias.filter((c: any) => c.code && c.code !== "00.00-0-00").map((c: any) => `${c.code} - ${c.text}`) : [],
         qsa: Array.isArray(d.qsa) ? d.qsa.map((s: any) => ({ nome: s.nome, qual: s.qual })) : [],
       };
+      if (out.logradouro) return out; best = best || out;
     }
   } catch { /* */ }
+  // 3º fallback: CNPJá (open) — quando as anteriores falham ou vêm sem endereço
+  try {
+    const r = await limitedFetch(`https://open.cnpja.com/office/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
+    if (r.ok) {
+      const d: any = await r.json(); const a = d.address || {};
+      const out: any = {
+        fonte: "CNPJá (Receita Federal)", apiUrl: `https://open.cnpja.com/office/${cnpj}`, fetchedAt: new Date().toISOString(),
+        razao_social: d.company?.name, nome_fantasia: d.alias || "", tipo: d.head ? "MATRIZ" : "FILIAL",
+        situacao_cadastral: d.status?.text, data_situacao: d.statusDate, motivo_situacao: d.reason?.text || "",
+        natureza_juridica: d.company?.nature?.text, porte: d.company?.size?.text, abertura: d.founded,
+        capital_social: d.company?.equity != null ? Number(d.company.equity).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "",
+        logradouro: a.street, numero: a.number, complemento: a.details, bairro: a.district, municipio: a.city, uf: a.state, cep: a.zip,
+        email: Array.isArray(d.emails) && d.emails[0] ? d.emails[0].address : "", telefone: Array.isArray(d.phones) && d.phones[0] ? `(${d.phones[0].area}) ${d.phones[0].number}` : "",
+        cnae_principal: d.mainActivity ? `${d.mainActivity.id} - ${d.mainActivity.text}` : "",
+        cnaes_secundarios: Array.isArray(d.sideActivities) ? d.sideActivities.map((x: any) => `${x.id} - ${x.text}`) : [],
+        qsa: Array.isArray(d.members) ? d.members.map((m: any) => ({ nome: m.person?.name, qual: m.role?.text })) : [],
+      };
+      if (out.logradouro) return out; best = best || out;
+    }
+  } catch { /* */ }
+  return best; // nenhuma fonte com logradouro → melhor disponível (o CEP completa o endereço)
+}
+
+export interface CepData { cep: string; logradouro: string; bairro: string; municipio: string; uf: string; fonte: string; apiUrl: string; }
+
+/**
+ * Consulta de CEP com CADEIA DE FALLBACK entre provedores: BrasilAPI v2 → ViaCEP →
+ * BrasilAPI v1 → OpenCEP. Retorna o 1º que responder com endereço, normalizado. `doFetch`
+ * permite usar o rate limiter (diligência) ou fetch direto (endpoint público).
+ */
+export async function lookupCep(cepRaw: string, doFetch: (url: string, init: RequestInit) => Promise<Response> = (u, i) => fetch(u, i)): Promise<CepData | null> {
+  const cep = onlyDigits(cepRaw);
+  if (cep.length !== 8) return null;
+  const init = { headers: HTTP_HEADERS, signal: AbortSignal.timeout(8000) } as RequestInit;
+  const sources: { url: string; fonte: string; map: (c: any) => Partial<CepData> | null }[] = [
+    { url: `https://brasilapi.com.br/api/cep/v2/${cep}`, fonte: "BrasilAPI (CEP)", map: (c) => (c.street || c.city) ? { logradouro: c.street, bairro: c.neighborhood, municipio: c.city, uf: c.state, cep: c.cep } : null },
+    { url: `https://viacep.com.br/ws/${cep}/json/`, fonte: "ViaCEP", map: (c) => (!c.erro && (c.logradouro || c.localidade)) ? { logradouro: c.logradouro, bairro: c.bairro, municipio: c.localidade, uf: c.uf, cep: c.cep } : null },
+    { url: `https://brasilapi.com.br/api/cep/v1/${cep}`, fonte: "BrasilAPI (CEP v1)", map: (c) => (c.street || c.city) ? { logradouro: c.street, bairro: c.neighborhood, municipio: c.city, uf: c.state, cep: c.cep } : null },
+    { url: `https://opencep.com/v1/${cep}`, fonte: "OpenCEP", map: (c) => (c.logradouro || c.localidade) ? { logradouro: c.logradouro, bairro: c.bairro, municipio: c.localidade, uf: c.uf, cep: c.cep } : null },
+  ];
+  for (const s of sources) {
+    try {
+      const r = await doFetch(s.url, init);
+      if (!r.ok) continue;
+      const m = s.map(await r.json());
+      if (m) return { cep: m.cep || cep, logradouro: m.logradouro || "", bairro: m.bairro || "", municipio: m.municipio || "", uf: m.uf || "", fonte: s.fonte, apiUrl: s.url };
+    } catch { /* tenta o próximo provedor */ }
+  }
   return null;
 }
 
 /**
- * Enriquece o endereço vindo da Receita com a API de CEP (BrasilAPI) quando faltar o
- * logradouro/bairro — comum em MEIs/Empresários Individuais, cujo cadastro traz só CEP
- * e bairro. Complementar e tolerante a falha (não derruba a consulta).
+ * Padroniza o endereço pela API de CEP (cadeia de fallback): logradouro/bairro/município/UF
+ * passam a vir do CEP (mais consistente/completo que a Receita, sobretudo em MEIs). Número e
+ * complemento permanecem da Receita. Tolerante a falha (não derruba a consulta).
  */
 async function enrichCep(o: any): Promise<void> {
   try {
-    const cep = onlyDigits(o?.cep);
-    if (cep.length !== 8) return;
-    if (o.logradouro && o.bairro) return; // endereço já completo
-    const r = await limitedFetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(10000) });
-    if (!r.ok) return;
-    const c: any = await r.json();
-    if (!o.logradouro && c.street) o.logradouro = c.street;
-    if (!o.bairro && c.neighborhood) o.bairro = c.neighborhood;
-    if (!o.municipio && c.city) o.municipio = c.city;
-    if (!o.uf && c.state) o.uf = c.state;
-    o.cepFonte = "BrasilAPI (CEP)";
-    o.cepApiUrl = `https://brasilapi.com.br/api/cep/v2/${cep}`;
-    o.cepFetchedAt = new Date().toISOString();
+    const c = await lookupCep(o?.cep, limitedFetch);
+    if (!c) return;
+    if (c.logradouro) o.logradouro = c.logradouro;
+    if (c.bairro) o.bairro = c.bairro;
+    if (c.municipio) o.municipio = c.municipio;
+    if (c.uf) o.uf = c.uf;
+    o.cepFonte = c.fonte; o.cepApiUrl = c.apiUrl; o.cepFetchedAt = new Date().toISOString();
   } catch { /* CEP é complementar */ }
 }
 
@@ -217,9 +262,130 @@ export async function consultaPT(recurso: string, label: string, razaoSocial: st
   }
 }
 
+// ── listas extras: Lista Suja (trabalho escravo), OFAC SDN, PEP ──────────────────
+const norm = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+/** Baixa e cacheia um arquivo de fonte (SDN, Lista Suja) em DATA_DIR/sources, com TTL; usa cache vencido em caso de falha. */
+async function cachedSourceFile(DATA_DIR: string, name: string, url: string, ttlMs: number, decode: "utf8" | "latin1"): Promise<string | null> {
+  const dir = path.join(DATA_DIR, "sources"); fs.mkdirSync(dir, { recursive: true });
+  const fp = path.join(dir, name);
+  const enc = decode === "latin1" ? "latin1" : "utf-8";
+  try { if (Date.now() - fs.statSync(fp).mtimeMs < ttlMs) return fs.readFileSync(fp, enc as BufferEncoding); } catch { /* sem cache */ }
+  try {
+    const r = await limitedFetch(url, { headers: { "User-Agent": "casahacker-auditoria/1.0", Accept: "*/*" }, signal: AbortSignal.timeout(60000) }, 1);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    fs.writeFileSync(fp, buf);
+    return buf.toString(enc as BufferEncoding);
+  } catch { try { return fs.readFileSync(fp, enc as BufferEncoding); } catch { return null; } }
+}
+
+const LISTA_SUJA_URL = process.env.LISTA_SUJA_URL || "https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho/areas-de-atuacao/cadastro_de_empregadores.csv";
+/** Cadastro de Empregadores (trabalho análogo ao de escravo) — match por CNPJ/CPF EXATO (definitivo → CONSTA). */
+async function consultaListaSuja(DATA_DIR: string, cnpj: string, cpfsExtras: string[] = []): Promise<any> {
+  const base = { fonte: "Cadastro de Empregadores — trabalho análogo ao de escravo (MTE)", recurso: "lista-suja", url: "https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho", apiUrl: LISTA_SUJA_URL, fetchedAt: new Date().toISOString() };
+  const csv = await cachedSourceFile(DATA_DIR, "lista-suja.csv", LISTA_SUJA_URL, 7 * 86400000, "latin1");
+  if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar o cadastro do MTE" };
+  const alvo = new Set([onlyDigits(cnpj), ...cpfsExtras.map(onlyDigits)].filter(Boolean));
+  const lines = csv.split(/\r?\n/); const hits: any[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(";"); if (c.length < 5) continue;
+    const doc = onlyDigits(c[4]);
+    if (doc && alvo.has(doc)) hits.push({ tipo: `Trabalho análogo ao de escravo — ${String(c[3] || "").trim()}`, orgao: `MTE · ${c[2] || "?"} · ${c[6] || "?"} trabalhador(es) · ação fiscal ${c[1] || "?"}`, dataInicio: c[1] || "", processo: String(c[9] || c[0] || "").trim() });
+  }
+  return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits, registros: lines.length - 1 };
+}
+
+const OFAC_SDN_URL = process.env.OFAC_SDN_URL || "https://www.treasury.gov/ofac/downloads/sdn.csv";
+function parseCsvLine(line: string): string[] { const out: string[] = []; let cur = "", q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; } else { if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch; } } out.push(cur); return out; }
+/** OFAC SDN (sanções dos EUA) — match por NOME (razão social + sócios). Conservador → ATENÇÃO (revisar, não auto-inelegível). */
+async function consultaOFAC(DATA_DIR: string, nomes: string[]): Promise<any> {
+  const base = { fonte: "OFAC SDN — Sanções dos EUA (Tesouro)", recurso: "ofac-sdn", url: "https://sanctionssearch.ofac.treas.gov/", apiUrl: OFAC_SDN_URL, fetchedAt: new Date().toISOString() };
+  const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
+  if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const csv = await cachedSourceFile(DATA_DIR, "sdn.csv", OFAC_SDN_URL, 3 * 86400000, "utf8");
+  if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a SDN List" };
+  const hits: any[] = []; const lines = csv.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line || line[0] === '"' && line.indexOf('","') === -1) { /* */ }
+    const c = parseCsvLine(line); const sdn = norm(c[1]); if (sdn.length < 4) continue;
+    for (const alvo of alvos) if (sdn.includes(alvo)) { hits.push({ tipo: `Possível correspondência OFAC SDN: "${String(c[1] || "").trim()}"`, orgao: `OFAC · ${String(c[2] || "").trim()} · ${String(c[3] || "").trim()} · CONFIRMAR identidade`, processo: String(c[0] || "").trim() }); break; }
+  }
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade antes de qualquer ação." } : {}) };
+}
+
+/** PEP (Pessoas Expostas Politicamente) — checa os sócios (QSA) por nome no Portal da Transparência → ATENÇÃO (informativo). */
+async function consultaPEP(qsaNomes: string[]): Promise<any> {
+  const base = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString() };
+  if (!process.env.PORTAL_TRANSPARENCIA_KEY) return { ...base, status: "PENDENTE", hits: [], erro: "Chave da API não configurada" };
+  const nomes = Array.from(new Set(qsaNomes.map((n) => String(n || "").trim()).filter((n) => norm(n).split(" ").length >= 2))).slice(0, 12);
+  if (!nomes.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const hits: any[] = []; const hoje = new Date();
+  try {
+    for (const nome of nomes) {
+      const r = await limitedFetch(`${PT_BASE}peps?nome=${encodeURIComponent(nome)}&pagina=1`, { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const lista = await r.json();
+      for (const p of Array.isArray(lista) ? lista : []) {
+        if (norm(p.nome) !== norm(nome)) continue;
+        const carenciaOk = !p.dt_fim_carencia || new Date(p.dt_fim_carencia) >= hoje;
+        if (carenciaOk) hits.push({ tipo: `PEP: ${String(p.nome).trim()} — ${String(p.descricao_funcao || "").trim()}`, orgao: `${String(p.nome_orgao || "").trim()} · exercício ${p.dt_inicio_exercicio || "?"}–${p.dt_fim_exercicio || "?"}`, dataFim: p.dt_fim_carencia || "" });
+      }
+    }
+  } catch (e: any) { return hits.length ? { ...base, status: "ATENCAO", hits, parcial: true } : { ...base, status: "ERRO", erro: e.message, hits: [] }; }
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits };
+}
+
 // ── supplier base ─────────────────────────────────────────────────────────────
 
-function collectSuppliers(DATA_DIR: string): any[] {
+/**
+ * Diligência completa de um CNPJ (Receita+CEP + listas de restrição CGU) com cache de
+ * 30 dias e persistência em DATA_DIR/diligencia/{cnpj}.json. Em escopo de módulo p/ ser
+ * reusada pelo cockpit de fornecedores (kycRoutes) além das próprias rotas de diligência.
+ */
+export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { checkedBy?: string; ip?: string; userAgent?: string; force?: boolean } = {}): Promise<any> {
+  const DIL_DIR = path.join(DATA_DIR, "diligencia");
+  fs.mkdirSync(DIL_DIR, { recursive: true });
+  const recPath = path.join(DIL_DIR, `${cnpj}.json`);
+  const readRec = (): any => { try { return JSON.parse(fs.readFileSync(recPath, "utf-8")); } catch { return null; } };
+  const isValid = (rec: any) => rec && rec.validUntil && new Date(rec.validUntil).getTime() > Date.now();
+  const cached = readRec();
+  if (cached && isValid(cached) && !opts.force) return { ...cached, fromCache: true };
+  const receita = await fetchReceita(cnpj);
+  const razao = receita?.razao_social || cached?.razaoSocial || "";
+  const apis: string[] = [];
+  if (receita) apis.push(receita.fonte);
+  let sancoes: any[] = [];
+  if (razao) {
+    const qsaNomes: string[] = (receita?.qsa || []).map((s: any) => s?.nome).filter(Boolean);
+    sancoes = await Promise.all([
+      consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
+      consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
+      consultaPT("cepim", "CEPIM — Entidades sem fins lucrativos impedidas", razao, cnpj),
+      consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
+      consultaListaSuja(DATA_DIR, cnpj),
+      consultaOFAC(DATA_DIR, [razao, ...qsaNomes]),
+      consultaPEP(qsaNomes),
+    ]);
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN (EUA, Tesouro)");
+  }
+  const anySancao = sancoes.some((s) => s.status === "CONSTA");
+  const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
+  const erro = !receita || sancoes.some((s) => s.status === "ERRO" || s.status === "PENDENTE");
+  const verdict = anySancao || receitaInativa ? "ALERTA" : (erro && !razao ? "PENDENTE" : "NADA_CONSTA");
+  const now = new Date();
+  const rec = {
+    cnpj, razaoSocial: razao || "—", nomeFantasia: receita?.nome_fantasia || "",
+    checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
+    checkedBy: opts.checkedBy || "—", ip: opts.ip || "—",
+    receita, sancoes, verdict,
+    metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString() },
+  };
+  fs.writeFileSync(recPath, JSON.stringify(rec, null, 2));
+  return { ...rec, fromCache: false };
+}
+
+export function collectSuppliers(DATA_DIR: string): any[] {
   const map = new Map<string, any>();
   const add = (taxId: string, nome: string, origem: string) => {
     const d = onlyDigits(taxId);
@@ -413,38 +579,7 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   // ── execução da diligência (interativa e automática) ────────────────────────
   const hasValidRec = (cnpj: string) => { const r = readRec(cnpj); return !!(r && isValid(r)); };
 
-  async function runDiligence(cnpj: string, opts: { checkedBy?: string; ip?: string; userAgent?: string; force?: boolean } = {}): Promise<any> {
-    const cached = readRec(cnpj);
-    if (cached && isValid(cached) && !opts.force) return { ...cached, fromCache: true };
-    const receita = await fetchReceita(cnpj);
-    const razao = receita?.razao_social || cached?.razaoSocial || "";
-    const apis: string[] = [];
-    if (receita) apis.push(receita.fonte);
-    let sancoes: any[] = [];
-    if (razao) {
-      sancoes = await Promise.all([
-        consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
-        consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
-        consultaPT("cepim", "CEPIM — Entidades sem fins lucrativos impedidas", razao, cnpj),
-        consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
-      ]);
-      apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência)");
-    }
-    const anySancao = sancoes.some((s) => s.status === "CONSTA");
-    const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
-    const erro = !receita || sancoes.some((s) => s.status === "ERRO" || s.status === "PENDENTE");
-    const verdict = anySancao || receitaInativa ? "ALERTA" : (erro && !razao ? "PENDENTE" : "NADA_CONSTA");
-    const now = new Date();
-    const rec = {
-      cnpj, razaoSocial: razao || "—", nomeFantasia: receita?.nome_fantasia || "",
-      checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
-      checkedBy: opts.checkedBy || "—", ip: opts.ip || "—",
-      receita, sancoes, verdict,
-      metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString() },
-    };
-    fs.writeFileSync(recPath(cnpj), JSON.stringify(rec, null, 2));
-    return { ...rec, fromCache: false };
-  }
+  // runDiligence vive em escopo de módulo (export) p/ reuso pelo cockpit — chamado abaixo com (DATA_DIR, cnpj, opts).
 
   // ── fila automática (novos + vencidos), processada em série no ritmo do limiter ─
   const queue: string[] = [];
@@ -467,7 +602,7 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
       while (queue.length) {
         const cnpj = queue.shift() as string;
         queued.delete(cnpj); processing = cnpj;
-        try { await runDiligence(cnpj, { checkedBy: "automático (sistema)", ip: "sistema", force: false }); counters.done++; }
+        try { await runDiligence(DATA_DIR, cnpj, { checkedBy: "automático (sistema)", ip: "sistema", force: false }); counters.done++; }
         catch (e: any) { counters.failed++; counters.lastError = e?.message || String(e); console.warn("[Diligência] auto falhou", cnpj, e?.message || e); }
         finally { processing = null; }
       }
@@ -490,6 +625,8 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
     setTimeout(() => sweep(), 8_000);       // primeira varredura logo após subir
     setInterval(() => sweep(), SWEEP_MS);   // novos + vencidos periodicamente
   }
+  // (atualização cadastral em massa via DILIGENCIA_FORCE_REFRESH=1 vive agora no cockpit —
+  //  kycRoutes — porque também re-semeia o perfil consolidado, não só o registro de diligência.)
 
   // dispara a diligência de todos os ainda não consultados (ou vencidos) — manual
   app.post("/api/diligencia/run-all", requireAuth, (_req, res) => {
@@ -560,7 +697,7 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
     const cnpj = cnpjParam(req, res); if (!cnpj) return;
     const force = String(req.query.force || "") === "1";
     try {
-      const rec = await runDiligence(cnpj, { checkedBy: req.user?.email || "—", ip: reqIp(req), userAgent: String(req.headers["user-agent"] || ""), force });
+      const rec = await runDiligence(DATA_DIR, cnpj, { checkedBy: req.user?.email || "—", ip: reqIp(req), userAgent: String(req.headers["user-agent"] || ""), force });
       res.json({ ...rec, valida: true });
     } catch (e: any) { res.status(500).json({ error: e?.message || "Falha na diligência" }); }
   });

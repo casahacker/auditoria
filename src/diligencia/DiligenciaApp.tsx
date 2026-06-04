@@ -181,7 +181,7 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
         ))}
       </ToolSidebar>
 
-      <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
+      <main id="main-content" className="ml-[256px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader
           light={DIL_HEADERS[section][0]} accent={DIL_HEADERS[section][1]}
           right={
@@ -189,7 +189,7 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
               <label className="flex items-center gap-2 bg-card border border-line rounded px-3 py-1.5 focus-within:border-primary">
                 <Search size={14} className="text-text-secondary" aria-hidden />
                 <input value={cnpjInput} onChange={e => setCnpjInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && runCheck(cnpjInput)}
-                  aria-label="CNPJ a consultar" placeholder="CNPJ a consultar" className="bg-transparent text-[13px] outline-none w-[150px] sm:w-[170px]" />
+                  aria-label="CNPJ a consultar" placeholder="CNPJ a consultar" className="bg-transparent text-[14px] outline-none w-[150px] sm:w-[170px]" />
               </label>
               <Btn onClick={() => runCheck(cnpjInput)} disabled={busy}>Consultar</Btn>
             </div>
@@ -227,12 +227,12 @@ function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (te
         <input ref={fileRef} type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" aria-label="Arquivo de CNPJs"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) loadFile(f); e.currentTarget.value = ''; }} />
         <label className="block">
-          <span className="text-[11px] uppercase tracking-widest text-text-secondary">CNPJs</span>
+          <span className="text-[12px] text-text-secondary">CNPJs</span>
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} placeholder={'00.026.572/0001-40\n01724345000150\n…'}
             className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[12px] font-mono text-text focus:border-primary focus:outline-none resize-y" />
         </label>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-text-secondary">{count} CNPJ(s) válido(s) detectado(s)</span>
+          <span className="text-[12px] text-text-secondary">{count} CNPJ(s) válido(s) detectado(s)</span>
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
             <Btn onClick={submit} disabled={busy || count === 0}>{busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Upload size={14} aria-hidden />} Importar e consultar</Btn>
@@ -245,11 +245,11 @@ function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (te
 
 function ChipStatus({ s }: { s: any }) {
   const valida = s?.valida;
-  if (!s) return <span className="text-[10px] text-text-secondary">não consultado</span>;
+  if (!s) return <span className="text-[12px] text-text-secondary">não consultado</span>;
   return (
     <span className="inline-flex items-center gap-1.5">
       <VerdictChip v={s.verdict} />
-      <span className={cn('text-[10px]', valida ? 'text-text-secondary' : 'text-warning')}>{valida ? `válida até ${new Date(s.validUntil).toLocaleDateString('pt-BR')}` : 'vencida'}</span>
+      <span className={cn('text-[12px]', valida ? 'text-text-secondary' : 'text-warning')}>{valida ? `válida até ${new Date(s.validUntil).toLocaleDateString('pt-BR')}` : 'vencida'}</span>
     </span>
   );
 }
@@ -266,12 +266,12 @@ function AjudaDilig() {
     { t: 'Fontes complementares', d: 'Lista Suja do Trabalho Escravo (MTE), IBAMA (embargos) e TCU/CNJ têm o download automatizado bloqueado pelos órgãos — verifique-as manualmente quando o risco exigir (ex.: IBAMA para serviços ambientais).' },
   ];
   return (
-    <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary leading-relaxed">A <b className="text-text">Diligência de Fornecedores</b> verifica um fornecedor por CNPJ em fontes oficiais e gera um relatório auditável e exportável. Faça a diligência <b className="text-text">antes de contratar</b> e <b className="text-text">antes de pagar</b> fornecedores relevantes.</p>
+    <div className="max-w-3xl space-y-5">
+      <p className="text-[14px] text-text-secondary leading-relaxed">A <b className="text-text">Diligência de Fornecedores</b> verifica um fornecedor por CNPJ em fontes oficiais e gera um relatório auditável e exportável. Faça a diligência <b className="text-text">antes de contratar</b> e <b className="text-text">antes de pagar</b> fornecedores relevantes.</p>
       <div className="space-y-3">
         {blocks.map((b, i) => (
           <Card key={i} className="p-4">
-            <div className="text-[13px] font-bold text-primary mb-1">{b.t}</div>
+            <div className="text-[14px] font-semibold text-primary mb-1">{b.t}</div>
             <div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div>
           </Card>
         ))}
@@ -299,9 +299,9 @@ function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, run
     return true;
   });
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
+    <div className="space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <p className="text-[13px] text-text-secondary max-w-2xl">
+        <p className="text-[14px] text-text-secondary max-w-2xl">
           Fornecedores extraídos de todas as prestações de contas já realizadas (Auditoria + FEAC). As diligências de
           fornecedores <b className="text-text">novos</b> e <b className="text-text">vencidos</b> são geradas
           automaticamente em segundo plano (no limite de {queue?.ratePerMin || 100} consultas/min). Você também pode
@@ -330,7 +330,7 @@ function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, run
       )}
 
       {suppliersLoading ? (
-        <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando base…</div>
+        <div className="flex items-center gap-2 text-text-secondary text-[14px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando base…</div>
       ) : !suppliers.length ? (
         <EmptyState icon={Building2} title="Nenhum fornecedor com CNPJ na base ainda"
           description="A base é montada a partir das prestações de contas. Digite um CNPJ no campo acima para consultar um fornecedor novo." />
@@ -347,7 +347,7 @@ function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, run
             ]} />
             {origens.length > 1 && <Select value={origem} onChange={setOrigem} options={[{ value: 'all', label: 'Todas as origens' }, ...origens.map((o) => ({ value: o, label: o }))]} />}
             {(q || vf !== 'all' || origem !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setVf('all'); setOrigem('all'); }}>Limpar</Btn>}
-            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {suppliers.length}</span>
+            <span className="text-[12px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {suppliers.length}</span>
           </div>
 
           {!filtered.length ? (
@@ -373,9 +373,9 @@ function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, run
                       <td className="px-4 py-2.5"><ChipStatus s={s.diligencia} /></td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         {processingCnpj === d ? (
-                          <span className="inline-flex items-center gap-1 text-primary text-[11px]"><Loader2 size={12} className="animate-spin" aria-hidden /> consultando…</span>
+                          <span className="inline-flex items-center gap-1 text-primary text-[12px]"><Loader2 size={12} className="animate-spin" aria-hidden /> consultando…</span>
                         ) : pendingSet.has(d) ? (
-                          <span className="text-text-secondary text-[11px]">na fila…</span>
+                          <span className="text-text-secondary text-[12px]">na fila…</span>
                         ) : (<>
                           {s.diligencia?.valida && <button onClick={() => openSaved(s.cnpj)} className="text-primary hover:underline mr-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Ver</button>}
                           <button onClick={() => runCheck(s.cnpj, !!s.diligencia?.valida)} className="text-primary hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{s.diligencia ? 'Reconsultar' : 'Consultar'}</button>
@@ -407,7 +407,7 @@ function HistoricoView({ history, openSaved }: any) {
     return true;
   });
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
+    <div className="space-y-4">
       {!history.length ? (
         <EmptyState icon={History} title="Nenhuma diligência realizada ainda" description="Consulte um fornecedor na Base ou digite um CNPJ no campo do topo." />
       ) : (
@@ -426,7 +426,7 @@ function HistoricoView({ history, openSaved }: any) {
               { value: 'vencida', label: 'Vencidas' },
             ]} />
             {(q || vf !== 'all' || val !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setVf('all'); setVal('all'); }}>Limpar</Btn>}
-            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {history.length}</span>
+            <span className="text-[12px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {history.length}</span>
           </div>
           {!filtered.length ? (
             <EmptyState icon={Search} title="Nenhuma diligência com esses filtros" description="Ajuste a busca ou os filtros acima." />
@@ -463,20 +463,20 @@ const KVr = ({ k, v, cls }: { k: string; v: any; cls?: string }) => (
   <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{k}</span><span className={cn('font-medium break-words', cls)}>{v || '—'}</span></div>
 );
 
-function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
+export function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
   if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Consultando Receita Federal e listas de restrição…</div>;
-  if (!current) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor ou informe um CNPJ.</div>;
+  if (!current) return <div className="text-[14px] text-text-secondary">Selecione um fornecedor ou informe um CNPJ.</div>;
   const r = current;
   const rf = r.receita || {};
   const ender = [rf.logradouro, rf.numero, rf.complemento, rf.bairro].filter(Boolean).join(', ');
   const openReport = () => window.open(`/api/diligencia/${r.cnpj}/report.html`, '_blank');
   const downloadTxt = async () => { try { await dl(apiFetch, `/api/diligencia/${r.cnpj}/txt`, `diligencia_${r.cnpj}.txt`); } catch (e: any) { addToast('error', e.message); } };
   return (
-    <div className="space-y-5 animate-in fade-in duration-300 max-w-4xl">
+    <div className="space-y-5 max-w-4xl">
       <Card className="p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="text-[16px] font-bold">{r.razaoSocial || '—'}</div>
+            <div className="text-[16px] font-semibold">{r.razaoSocial || '—'}</div>
             <div className="text-[12px] text-text-secondary font-mono">{maskCnpj(r.cnpj)}{rf.nome_fantasia ? ` · ${rf.nome_fantasia}` : ''}</div>
           </div>
           <VerdictChip v={r.verdict} />
@@ -490,7 +490,7 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
 
       {/* Dados da consulta (auditável) */}
       <Card className="p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3">Dados da consulta (auditável)</div>
+        <div className="text-[12px] font-semibold text-text-secondary mb-3">Dados da consulta (auditável)</div>
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
           <KVr k="Data/hora" v={new Date(r.checkedAt).toLocaleString('pt-BR')} />
           <KVr k="Validade" v={`${new Date(r.validUntil).toLocaleDateString('pt-BR')}${r.valida ? '' : ' (vencida)'}`} cls={r.valida ? '' : 'text-warning'} />
@@ -498,11 +498,11 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
           <KVr k="IP de origem" v={r.ip} />
         </div>
         <div className="mt-3 pt-3 border-t border-line space-y-1">
-          <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Fontes consultadas</div>
-          {rf.fonte && <div className="text-[11px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.fonte}:</span> <span>{rf.fetchedAt ? new Date(rf.fetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.apiUrl && <a href={rf.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.apiUrl}</a>}</div>}
-          {rf.cepFonte && <div className="text-[11px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.cepFonte}:</span> <span>{rf.cepFetchedAt ? new Date(rf.cepFetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.cepApiUrl && <a href={rf.cepApiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.cepApiUrl}</a>}</div>}
+          <div className="text-[12px] text-text-secondary mb-1">Fontes consultadas</div>
+          {rf.fonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.fonte}:</span> <span>{rf.fetchedAt ? new Date(rf.fetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.apiUrl && <a href={rf.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.apiUrl}</a>}</div>}
+          {rf.cepFonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.cepFonte}:</span> <span>{rf.cepFetchedAt ? new Date(rf.cepFetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.cepApiUrl && <a href={rf.cepApiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.cepApiUrl}</a>}</div>}
           {(r.sancoes || []).map((s: any, i: number) => (
-            <div key={i} className="text-[11px] flex flex-wrap gap-x-2">
+            <div key={i} className="text-[12px] flex flex-wrap gap-x-2">
               <span className="text-text-secondary">{s.fonte}:</span>
               <span className={s.status === 'CONSTA' ? 'text-error font-semibold' : s.status === 'NADA_CONSTA' ? 'text-success' : 'text-warning'}>{ST_LABEL(s)}</span>
               <span className="text-text-secondary">{s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('pt-BR') : ''}</span>
@@ -514,7 +514,7 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
 
       {/* Receita Federal — completo */}
       <Card className="p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><Building2 size={13} aria-hidden /> Receita Federal — cadastro</div>
+        <div className="text-[12px] font-semibold text-text-secondary mb-3 flex items-center gap-1.5"><Building2 size={13} aria-hidden /> Receita Federal — cadastro</div>
         {r.receita ? (
           <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
             <KVr k="Situação" v={`${rf.situacao_cadastral || '—'}${rf.data_situacao ? ` (desde ${rf.data_situacao})` : ''}`} cls={/ATIVA/i.test(rf.situacao_cadastral || '') ? 'text-success' : 'text-error'} />
@@ -537,23 +537,23 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
 
       {/* Listas de restrição */}
       <Card className="p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><ShieldAlert size={13} aria-hidden /> Listas de restrição — Portal da Transparência (CGU)</div>
+        <div className="text-[12px] font-semibold text-text-secondary mb-3 flex items-center gap-1.5"><ShieldAlert size={13} aria-hidden /> Listas de restrição — Portal da Transparência (CGU)</div>
         <div className="space-y-3">
           {(r.sancoes || []).map((s: any, i: number) => (
             <div key={i} className="border-b border-line pb-3 last:border-0 last:pb-0">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12px] font-semibold">{s.fonte}</span>
-                <span className={cn('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border',
+                <span className={cn('text-[12px] font-semibold px-2 py-0.5 rounded border',
                   s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{ST_LABEL(s)}</span>
               </div>
               {(s.hits || []).map((h: any, j: number) => (
-                <div key={j} className="mt-1.5 text-[11px] bg-error/5 border border-error/20 rounded px-2 py-1.5">
+                <div key={j} className="mt-1.5 text-[12px] bg-error/5 border border-error/20 rounded px-2 py-1.5">
                   <div className="font-semibold text-error">{h.tipo}</div>
                   <div className="text-text-secondary">{h.orgao} · vigência {h.dataInicio || '?'}–{h.dataFim || '?'} · processo {h.processo || '—'}</div>
                   {h.fundamentacao && <div className="text-text-secondary mt-0.5">{h.fundamentacao}</div>}
                 </div>
               ))}
-              {s.url && <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline inline-flex items-center gap-1 mt-1"><ExternalLink size={10} aria-hidden /> consulta pública</a>}
+              {s.url && <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-primary hover:underline inline-flex items-center gap-1 mt-1"><ExternalLink size={10} aria-hidden /> consulta pública</a>}
             </div>
           ))}
         </div>

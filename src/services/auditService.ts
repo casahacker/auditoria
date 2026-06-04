@@ -36,7 +36,7 @@ export async function processAudit(
     extractPdfText(pdfPayB64),
   ]);
 
-  onProgress(3, "Stack Audit™ está cruzando 4 camadas de dados para cada lançamento financeiro...");
+  onProgress(3, "Auditoria está cruzando 4 camadas de dados para cada lançamento financeiro...");
 
   const response = await fetch("/api/audit-run", {
     method: "POST",

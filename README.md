@@ -1,4 +1,4 @@
-# Stack Audit™
+# Auditoria
 
 [![Node.js](https://img.shields.io/badge/node-22+-339933.svg)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/react-19-61DAFB.svg)](https://react.dev/)
@@ -8,16 +8,17 @@
 
 **Suíte de auditoria e prestação de contas para organizações de impacto social.**
 
-O **Stack Audit™** é uma plataforma da **Associação Casa Hacker** com **quatro ferramentas** sob um único launcher, compartilhando autenticação, design system (IBM Carbon) e base de fornecedores:
+O **Auditoria** é uma plataforma da **Associação Casa Hacker** com **três ferramentas** sob um único launcher, compartilhando autenticação, design system (IBM Carbon) e base de fornecedores:
 
 | # | Ferramenta | Para que serve |
 |---|---|---|
 | **A** | **Auditoria de Prestação de Contas** | Concilia notas fiscais, comprovantes e orçamento por rubrica com IA (DeepSeek + Azure Document Intelligence) e emite o parecer final (RAPC). |
 | **B** | **Processador FEAC / SGPP** | Concilia lançamentos × documentos, **trata** os PDFs (mescla, carimbo de margem, conversão **PDF/A-2b**), gera a **Declaração de Rateio** e o Relatório de Prestação de Contas para a Fundação FEAC. |
-| **C** | **Diligência de Fornecedores** | Consulta um CNPJ na **Receita Federal** e nas **listas de restrição** do Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Acordos de Leniência), com relatório auditável e validade de 30 dias. |
-| **D** | **Conformidade KYS / KYG** | Ficha de conformidade preenchida pelo próprio fornecedor (**KYS**) ou organização/liderança (**KYG**) numa **página pública**, com verificação por APIs em tempo real e **assinatura eletrônica via Documenso**. Validade por ano fiscal. |
+| **C** | **Cockpit de Fornecedores** | Concentra, por fornecedor, a **Diligência** (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) **e** a **Conformidade KYS / KYG** (cadastro verificado + **assinatura via Documenso**). A diferença entre fornecedores é apenas ter ou não KYS/KYG assinado. |
 
-> Produção: `https://stack-audit.casahacker.org` · login Google OAuth restrito ao domínio `@casahacker.org`.
+> O **Cockpit de Fornecedores** unifica as antigas ferramentas *Diligência* e *Conformidade KYS/KYG* numa só (o KYS/KYG é exigido apenas para contratações específicas). O preenchimento do KYS/KYG é feito pelo próprio fornecedor numa **página pública** (`/kys`, `/kyg`).
+
+> Produção: `https://auditoria.casahacker.org` · login Google OAuth restrito ao domínio `@casahacker.org`.
 
 ---
 
@@ -65,10 +66,9 @@ Cada página tem um caminho próprio no navegador (deep-link + voltar/avançar):
 | `/auditoria/<seção>` | Auditoria (`nova`, `processando`, `resultado`, `historico`, `pesquisa`, `documentacao`) |
 | `/feac` · `/feac/ajuda` · `/feac/nova` | FEAC — histórico, como usar, nova prestação |
 | `/feac/<id>/<preliminar\|tratamento\|relatorio>` | FEAC — uma prestação numa etapa específica |
-| `/diligencia` · `/diligencia/historico` · `/diligencia/ajuda` | Diligência — base, histórico, como usar |
-| `/diligencia/<cnpj>` | Diligência — resultado de um fornecedor |
-| `/conformidade` · `/conformidade/convites` · `/conformidade/ajuda` | KYS/KYG — painel, convites, como usar (autenticado) |
-| `/conformidade/<id>` | KYS/KYG — detalhe de uma conformidade (autenticado) |
+| `/fornecedores` · `/fornecedores/kyc` · `/fornecedores/historico` · `/fornecedores/ajuda` | Cockpit — base unificada, gestão KYS/KYG, histórico, como usar |
+| `/fornecedores/<cnpj\|cpf>` | Cockpit — ficha do fornecedor (diligência + KYS/KYG juntos) |
+| `/diligencia` · `/conformidade` | Redirecionam (soft) para o Cockpit de Fornecedores |
 | `/kys` · `/kyg` · `/kys/<token>` · `/kyg/<token>` | **Página pública** do wizard KYS/KYG (sem login) |
 | `/share/<token>` | Link público (somente leitura) de uma auditoria |
 
@@ -99,7 +99,7 @@ Barra fixa de acessibilidade (tema claro/escuro, **alto contraste WCAG AA**, tam
 ## Estrutura do projeto
 
 ```text
-stack-audit/
+auditoria/
 ├── src/
 │   ├── App.tsx                  # Launcher + Auditoria (Tool A) + roteamento de tools
 │   ├── ui/kit.tsx               # Kit de UI compartilhado (Carbon): Btn, Chip, Card,
@@ -107,10 +107,12 @@ stack-audit/
 │   ├── feac/                    # Tool B — Processador FEAC/SGPP
 │   │   ├── FeacApp.tsx
 │   │   └── feacTypes.ts
-│   ├── diligencia/              # Tool C — Diligência de Fornecedores
+│   ├── fornecedores/           # Tool C — Cockpit (unifica diligência + KYS/KYG)
+│   │   └── FornecedoresApp.tsx  #   base unificada + ficha do fornecedor (reusa as views abaixo)
+│   ├── diligencia/             # detalhe de diligência (ResultadoView é exportado p/ o cockpit)
 │   │   └── DiligenciaApp.tsx
-│   ├── kyc/                     # Tool D — Conformidade KYS/KYG
-│   │   ├── KycApp.tsx           #   painel interno (autenticado)
+│   ├── kyc/                     # KYS/KYG: wizard público + views (BaseView/ConvitesView/DetailView) reusadas
+│   │   ├── KycApp.tsx
 │   │   ├── KycWizard.tsx        #   wizard PÚBLICO (renderizado por main.tsx em /kys /kyg)
 │   │   └── kycTypes.ts          #   tipos + perguntas/declarações (KYS/KYG)
 │   ├── services/auditService.ts
@@ -147,7 +149,7 @@ DEEPSEEK_API_KEY=sk-...                 # IA da auditoria/FEAC
 GOOGLE_CLIENT_ID=...                    # Login Google
 GOOGLE_CLIENT_SECRET=...
 SESSION_SECRET=...                      # openssl rand -hex 32
-APP_URL=https://stack-audit.example.org # base do callback OAuth (sem barra final)
+APP_URL=https://auditoria.example.org # base do callback OAuth (sem barra final)
 
 # Opcionais
 AZURE_DI_ENDPOINT=                      # extração via Azure DI
@@ -180,11 +182,11 @@ npm run build            # build de produção (Vite)
 ```bash
 # build (TMPDIR em /data porque /var é pequeno; formato docker p/ compatibilidade)
 sudo TMPDIR=/data/podman-tmp/tmp BUILDAH_FORMAT=docker podman-compose build
-sudo systemctl stop stack-audit && sudo podman rm -f stack-audit && sudo systemctl start stack-audit
-# saúde: https://stack-audit.casahacker.org/api/health
+sudo systemctl stop auditoria && sudo podman rm -f auditoria && sudo systemctl start auditoria
+# saúde: https://auditoria.casahacker.org/api/health
 ```
 
-Porta interna `127.0.0.1:18088 → 3000`, volume `/data/stack-audit/data → /app/data`, rede `10.89.11.0/24`, memória 1G (o tratamento PDF/A do FEAC é mais pesado que a auditoria).
+Porta interna `127.0.0.1:18088 → 3000`, volume `/data/auditoria/data → /app/data`, rede `10.89.11.0/24`, memória 1G (o tratamento PDF/A do FEAC é mais pesado que a auditoria).
 
 ---
 

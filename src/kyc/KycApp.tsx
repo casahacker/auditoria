@@ -99,7 +99,7 @@ export default function KycApp({ user, apiFetch, addToast, onHome, navigate }: K
         {navItems.map((it) => <SidebarItem key={it.id} icon={it.icon} active={section === it.id} onClick={() => goSection(it.id)}>{it.label}</SidebarItem>)}
       </ToolSidebar>
 
-      <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
+      <main id="main-content" className="ml-[256px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader light={HEADERS[section][0]} accent={HEADERS[section][1]} />
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
           {section === 'base' && <BaseView records={records} loading={loading} openDetail={openDetail} />}
@@ -112,7 +112,7 @@ export default function KycApp({ user, apiFetch, addToast, onHome, navigate }: K
   );
 }
 
-function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loading: boolean; openDetail: (id: string) => void }) {
+export function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loading: boolean; openDetail: (id: string) => void }) {
   const [q, setQ] = useState('');
   const [tf, setTf] = useState('all');
   const [sf, setSf] = useState('all');
@@ -130,15 +130,15 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
   });
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary max-w-3xl">
+    <div className="space-y-5">
+      <p className="text-[14px] text-text-secondary max-w-3xl">
         Fichas de conformidade <b className="text-text">KYS</b> (fornecedores) e <b className="text-text">KYG</b> (organizações/lideranças) preenchidas na página pública,
         verificadas por APIs oficiais e assinadas via Documenso. A validade é por <b className="text-text">ano fiscal</b> — registros vencidos precisam ser renovados.
         Links públicos: <span className="font-mono">/kys</span> e <span className="font-mono">/kyg</span> (ou gere convites rastreáveis na aba Convites).
       </p>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
+        <div className="flex items-center gap-2 text-text-secondary text-[14px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
       ) : !records.length ? (
         <EmptyState icon={BadgeCheck} title="Nenhuma conformidade ainda" description="Compartilhe o link público (/kys ou /kyg) ou gere um convite na aba Convites." />
       ) : (
@@ -153,7 +153,7 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
             {years.length > 1 && <Select value={yf} onChange={setYf} options={[{ value: 'all', label: 'Todos os anos' }, ...years.map((y) => ({ value: String(y), label: `Ano fiscal ${y}` }))]} />}
             <Select value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'sim', label: 'Elegível' }, { value: 'nao', label: 'Inelegível' }]} />
             {(q || tf !== 'all' || sf !== 'all' || yf !== 'all' || ef !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setTf('all'); setSf('all'); setYf('all'); setEf('all'); }}>Limpar</Btn>}
-            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {records.length}</span>
+            <span className="text-[12px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {records.length}</span>
           </div>
           {!filtered.length ? (
             <EmptyState icon={Search} title="Nenhum registro com esses filtros" description="Ajuste a busca ou os filtros acima." />
@@ -174,7 +174,7 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openDetail(r.id)}>
                       <td className="px-4 py-2.5 max-w-[260px] truncate">{r.nome}</td>
-                      <td className="px-4 py-2.5"><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{r.type}</span></td>
+                      <td className="px-4 py-2.5"><span className="text-[12px] font-semibold uppercase text-primary">{r.type}</span></td>
                       <td className="px-4 py-2.5 font-mono whitespace-nowrap">{r.documentoFmt}</td>
                       <td className="px-4 py-2.5">{r.verdict ? <Chip tone={VERDICT[r.verdict]?.tone} icon={VERDICT[r.verdict]?.icon} size="sm">{VERDICT[r.verdict]?.label}</Chip> : '—'}</td>
                       <td className="px-4 py-2.5">{r.elegivel === true ? <Chip tone="success" size="sm">Elegível</Chip> : r.elegivel === false ? <Chip tone="error" size="sm">Inelegível</Chip> : <span className="text-text-secondary">—</span>}</td>
@@ -197,10 +197,10 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
   );
 }
 
-function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast'] }) {
+export function ConvitesView({ apiFetch, addToast, initialCnpj }: { apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; initialCnpj?: string }) {
   const [invites, setInvites] = useState<(KycInvite & { url?: string })[]>([]);
   const [type, setType] = useState<KycType>('kys');
-  const [cnpj, setCnpj] = useState('');
+  const [cnpj, setCnpj] = useState(initialCnpj || '');
   const [creating, setCreating] = useState(false);
   const load = async () => { try { const r = await apiFetch('/api/kyc/invites'); if (r.ok) setInvites(await r.json()); } catch { /* */ } };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -219,14 +219,14 @@ function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch'
   const copy = async (url: string) => { try { await navigator.clipboard.writeText(url); addToast('info', 'Link copiado.'); } catch { /* */ } };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300 max-w-4xl">
+    <div className="space-y-5 max-w-4xl">
       <Card className="p-5 space-y-4">
-        <div className="text-[13px] font-bold text-text">Gerar convite de preenchimento</div>
+        <div className="text-[14px] font-semibold text-text">Gerar convite de preenchimento</div>
         <p className="text-[12px] text-text-secondary">O convite gera um link único e rastreável, pré-preenchido com o tipo, o CNPJ (opcional) e você como solicitante (recebe cópia do assinado). Você também pode simplesmente divulgar os links públicos genéricos <span className="font-mono">/kys</span> e <span className="font-mono">/kyg</span>.</p>
         <div className="flex flex-wrap items-end gap-3">
           <Select label="Tipo" value={type} onChange={(v) => setType(v as KycType)} options={[{ value: 'kys', label: 'KYS — Fornecedor' }, { value: 'kyg', label: 'KYG — Organização/Liderança' }]} />
           <label className="block">
-            <span className="text-[10px] uppercase tracking-widest text-text-secondary">CNPJ (opcional)</span>
+            <span className="text-[12px] text-text-secondary">CNPJ (opcional)</span>
             <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" className="mt-1 block bg-card border border-line rounded px-3 py-1.5 text-[12px] font-mono text-text focus:border-primary focus:outline-none" />
           </label>
           <Btn onClick={create} disabled={creating}>{creating ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Gerar link</Btn>
@@ -248,7 +248,7 @@ function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch'
                 const url = i.url || `${base}/${i.type}/${i.token}`;
                 return (
                   <tr key={i.token} className="border-t border-line hover:bg-primary/5">
-                    <td className="px-4 py-2.5"><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{i.type}</span></td>
+                    <td className="px-4 py-2.5"><span className="text-[12px] font-semibold uppercase text-primary">{i.type}</span></td>
                     <td className="px-4 py-2.5 font-mono">{i.cnpj ? maskDoc(i.cnpj) : '—'}</td>
                     <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(i.createdAt).toLocaleDateString('pt-BR')}</td>
                     <td className="px-4 py-2.5">{i.usedByRecordId ? <Chip tone="success" size="sm">Utilizado</Chip> : <Chip tone="info" size="sm">Pendente</Chip>}</td>
@@ -269,11 +269,11 @@ function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch'
 
 const TRAIL_TONE: Record<string, string> = { ok: 'text-success', alerta: 'text-error', erro: 'text-error', pendente: 'text-warning' };
 
-function DetailView({ current, busy, apiFetch, addToast, reload }: { current: any; busy: boolean; apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; reload: () => void }) {
+export function DetailView({ current, busy, apiFetch, addToast, reload }: { current: any; busy: boolean; apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; reload: () => void }) {
   const [showData, setShowData] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando…</div>;
-  if (!current) return <div className="text-[13px] text-text-secondary">Selecione um registro na lista.</div>;
+  if (!current) return <div className="text-[14px] text-text-secondary">Selecione um registro na lista.</div>;
   const r = current;
   const isKys = r.type === 'kys';
   const data = isKys ? r.kys : r.kyg;
@@ -287,12 +287,12 @@ function DetailView({ current, busy, apiFetch, addToast, reload }: { current: an
   const downloadSigned = async () => { try { await dl(apiFetch, `/api/kyc/${r.id}/signed.pdf`, `${r.type}_${doc}_${r.fiscalYear}.pdf`); } catch (e: any) { addToast('error', e.message); } };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300 max-w-4xl">
+    <div className="space-y-5 max-w-4xl">
       <Card className="p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2"><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span></div>
-            <div className="text-[16px] font-bold mt-0.5">{nome || '—'}</div>
+            <div className="flex items-center gap-2"><span className="text-[12px] font-semibold text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span></div>
+            <div className="text-[16px] font-semibold mt-0.5">{nome || '—'}</div>
             <div className="text-[12px] text-text-secondary font-mono">{maskDoc(doc)}</div>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -321,9 +321,9 @@ function DetailView({ current, busy, apiFetch, addToast, reload }: { current: an
         <Card className={cn('p-5 border-2', r.elegibilidade.elegivel ? 'border-success/40' : 'border-error/40')}>
           <div className="flex items-center gap-2 mb-1.5">
             {r.elegibilidade.elegivel ? <ShieldCheck size={16} className="text-success" /> : <ShieldAlert size={16} className="text-error" />}
-            <span className="text-[14px] font-bold">{r.elegibilidade.elegivel ? 'Elegível' : 'Inelegível'}</span>
+            <span className="text-[14px] font-semibold">{r.elegibilidade.elegivel ? 'Elegível' : 'Inelegível'}</span>
           </div>
-          <p className="text-[11px] text-text-secondary mb-2">Critério: não constar em listas de restrição + respostas adequadas (risco = "Não") + obrigações de impostos/previdência cumpridas.</p>
+          <p className="text-[12px] text-text-secondary mb-2">Critério: não constar em listas de restrição + respostas adequadas (risco = "Não") + obrigações de impostos/previdência cumpridas.</p>
           {!r.elegibilidade.elegivel && (
             <ul className="text-[12px] text-error list-disc pl-5 space-y-0.5">
               {r.elegibilidade.motivos.map((m: string, i: number) => <li key={i}>{m}</li>)}
@@ -333,13 +333,13 @@ function DetailView({ current, busy, apiFetch, addToast, reload }: { current: an
       )}
 
       <Card className="p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3">Trilha de conformidade (verificada por APIs)</div>
+        <div className="text-[12px] font-semibold text-text-secondary mb-3">Trilha de conformidade (verificada por APIs)</div>
         <div className="space-y-2">
           {(r.verificationTrail || []).map((t: any, i: number) => (
             <div key={i} className="flex items-start justify-between gap-3 border-b border-line pb-2 last:border-0 last:pb-0">
               <div>
                 <div className="text-[12px] font-semibold text-text">{t.tipo}</div>
-                <div className="text-[11px] text-text-secondary">{t.fonte} · {t.checkedAt ? new Date(t.checkedAt).toLocaleString('pt-BR') : ''}{t.apiUrl ? ' · ' : ''}{t.apiUrl && <a href={t.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">consulta</a>}</div>
+                <div className="text-[12px] text-text-secondary">{t.fonte} · {t.checkedAt ? new Date(t.checkedAt).toLocaleString('pt-BR') : ''}{t.apiUrl ? ' · ' : ''}{t.apiUrl && <a href={t.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">consulta</a>}</div>
               </div>
               <span className={cn('text-[12px] font-semibold shrink-0', TRAIL_TONE[t.status] || 'text-text-secondary')}>{t.resultado}</span>
             </div>
@@ -404,7 +404,7 @@ function DataModal({ r, data, onClose }: { r: any; data: any; onClose: () => voi
 }
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div><div className="text-[11px] font-bold uppercase tracking-widest text-primary mb-1.5">{title}</div><div className="space-y-1">{children}</div></div>;
+  return <div><div className="text-[12px] font-semibold text-primary mb-1.5">{title}</div><div className="space-y-1">{children}</div></div>;
 }
 
 function AjudaKyc() {
@@ -418,9 +418,9 @@ function AjudaKyc() {
     { t: 'Painel e filtros', d: 'Esta tela lista todas as conformidades com filtros por fornecedor/CNPJ, tipo (KYS/KYG), status (assinado, aguardando, vencido, rascunho) e ano fiscal. Abra um registro para ver a trilha de conformidade, as respostas e baixar o PDF assinado.' },
   ];
   return (
-    <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary leading-relaxed">A ferramenta de <b className="text-text">Conformidade KYS/KYG</b> coleta e verifica os dados cadastrais de fornecedores e organizações e formaliza a conformidade com assinatura eletrônica.</p>
-      <div className="space-y-3">{blocks.map((b, i) => <Card key={i} className="p-4"><div className="text-[13px] font-bold text-primary mb-1">{b.t}</div><div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div></Card>)}</div>
+    <div className="max-w-3xl space-y-5">
+      <p className="text-[14px] text-text-secondary leading-relaxed">A ferramenta de <b className="text-text">Conformidade KYS/KYG</b> coleta e verifica os dados cadastrais de fornecedores e organizações e formaliza a conformidade com assinatura eletrônica.</p>
+      <div className="space-y-3">{blocks.map((b, i) => <Card key={i} className="p-4"><div className="text-[14px] font-semibold text-primary mb-1">{b.t}</div><div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div></Card>)}</div>
     </div>
   );
 }

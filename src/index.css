@@ -14,12 +14,33 @@
   --color-surface: #ffffff;
   --color-surface-hover: #f4f4f4;
   --color-success: #198038;
-  --color-warning: #f1c21b;
+  /* Amarelo Carbon (#f1c21b) reprova em contraste como TEXTO sobre fundo claro
+     (~1.6:1). Usamos um âmbar escuro (≥4.5:1, WCAG AA) p/ texto/ícones/bordas no
+     tema claro; o dark mode reabre o amarelo vivo abaixo. */
+  --color-warning: #8d6a00;
   --color-error: #da1e28;
 
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── Carbon: linguagem ANGULAR — cantos retos. Zera toda a escala de raio;
+     `rounded-full` (avatares, dots, spinners — círculos) NÃO usa estes tokens e
+     permanece redondo. ──────────────────────────────────────────────────────── */
+  --radius-xs: 0px; --radius-sm: 0px; --radius-md: 0px; --radius-lg: 0px;
+  --radius-xl: 0px; --radius-2xl: 0px; --radius-3xl: 0px; --radius-4xl: 0px;
+
+  /* ── Carbon motion: curva "standard productive" + duração padrão (fast-02 = 110ms).
+     Vira o padrão de TODA transição (transition-colors, transition, etc.). ─────── */
+  --default-transition-duration: 110ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-entrance: cubic-bezier(0, 0, 0.38, 0.9);
+  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9);
 }
+
+/* A utility base `rounded` (e direcionais) é hardcoded .25rem no Tailwind v4 e NÃO passa
+   pelos tokens --radius-* acima. Forçamos reto (Carbon). `rounded-full` segue redondo. */
+.rounded, .rounded-r, .rounded-l, .rounded-t, .rounded-b { border-radius: 0; }
 
 @layer base {
   body {
@@ -58,10 +79,15 @@
   --color-text-secondary: #a8a8a8;
   --color-surface: #262626;
   --color-surface-hover: #393939;
+  /* No escuro o amarelo vivo tem ótimo contraste (≈9:1) e lê melhor que o âmbar do claro */
+  --color-warning: #f1c21b;
 }
 
-/* ── High contrast (WCAG AA) — overrides dark mode ──────────────────────────── */
-.high-contrast {
+/* ── High contrast (WCAG AA) — overrides dark mode ────────────────────────────
+   `.ch-a11y-high-contrast` é a classe que a barra de acessibilidade vendorizada
+   aplica em <html>; reaproveita os MESMOS tokens (não o #000 genérico da barra). */
+.high-contrast,
+.ch-a11y-high-contrast {
   --color-bg: #000000 !important;
   --color-card: #000000 !important;
   --color-sidebar: #000000 !important;
@@ -77,12 +103,16 @@
   --color-surface: #000000 !important;
   --color-surface-hover: #1a1a1a !important;
 }
-.high-contrast * {
+.high-contrast *,
+.ch-a11y-high-contrast * {
   outline-color: #ffff00 !important;
 }
 .high-contrast a:focus,
 .high-contrast button:focus,
-.high-contrast [tabindex]:focus {
+.high-contrast [tabindex]:focus,
+.ch-a11y-high-contrast a:focus,
+.ch-a11y-high-contrast button:focus,
+.ch-a11y-high-contrast [tabindex]:focus {
   outline: 3px solid #ffff00 !important;
   outline-offset: 2px !important;
 }
@@ -109,4 +139,18 @@
 }
 .toast-slide-in {
   animation: toast-slide-in 0.25s ease-out forwards;
+}
+
+/* ── Movimento reduzido (WCAG 2.3.3) ─────────────────────────────────────────────
+   Respeita quem pediu menos animação no sistema operacional: spinners, pulsos,
+   skeleton e slide-in ficam estáticos; transições viram instantâneas. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

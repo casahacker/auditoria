@@ -5,8 +5,8 @@ A ferramenta **Conformidade KYS / KYG** coleta e verifica os dados cadastrais de
 - **KYS** (*Know Your Supplier*) — Formulário de Conformidade para **fornecedores e prestadores de serviço** (pessoa jurídica). 7 blocos: identificação da empresa, do representante legal, PEP/conflito de interesses, relacionamento político, histórico de corrupção, direitos humanos (escravidão/injúria racial/gênero/trabalho infantil), sanções, histórico contratual e impostos.
 - **KYG** (*Know Your Grantee*) — Declaração de Conformidade para **OSCs sem fins lucrativos** e **lideranças pessoas físicas** que recebem **doação com encargos**. Identificação do proponente/projeto + 8 declarações sob as penas da lei.
 
-> Acesso público (preenchimento): `https://stack-audit.casahacker.org/kys` e `/kyg`.
-> Painel interno (autenticado): `https://stack-audit.casahacker.org/conformidade`.
+> Acesso público (preenchimento): `https://auditoria.casahacker.org/kys` e `/kyg`.
+> Painel interno (autenticado): `https://auditoria.casahacker.org/conformidade`.
 
 ---
 
@@ -61,7 +61,7 @@ A assinatura usa **template + `formValues`** (o Documenso desta instalação usa
    Os campos AcroForm são nomeados exatamente como o `formValues` que o backend envia.
 2. No **Documenso** (documenso.casahacker.org), em **Templates → New Template**, suba cada PDF. Adicione **1 recipient** ("Signatário") e coloque **1 campo SIGNATURE** (e, se quiser, NAME/DATE) na área *"ASSINADO ELETRONICAMENTE"* da última página. Salve/abilite.
 3. Em **Settings → API Tokens**, crie um token.
-4. No `.env` do Stack Audit, preencha e recrie o container:
+4. No `.env` do Auditoria, preencha e recrie o container:
    ```ini
    DOCUMENSO_API_TOKEN=api_...
    DOCUMENSO_KYS_TEMPLATE_ID=<id do template KYS>
