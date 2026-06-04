@@ -22,7 +22,25 @@
 
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── Carbon: linguagem ANGULAR — cantos retos. Zera toda a escala de raio;
+     `rounded-full` (avatares, dots, spinners — círculos) NÃO usa estes tokens e
+     permanece redondo. ──────────────────────────────────────────────────────── */
+  --radius-xs: 0px; --radius-sm: 0px; --radius-md: 0px; --radius-lg: 0px;
+  --radius-xl: 0px; --radius-2xl: 0px; --radius-3xl: 0px; --radius-4xl: 0px;
+
+  /* ── Carbon motion: curva "standard productive" + duração padrão (fast-02 = 110ms).
+     Vira o padrão de TODA transição (transition-colors, transition, etc.). ─────── */
+  --default-transition-duration: 110ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-entrance: cubic-bezier(0, 0, 0.38, 0.9);
+  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9);
 }
+
+/* A utility base `rounded` (e direcionais) é hardcoded .25rem no Tailwind v4 e NÃO passa
+   pelos tokens --radius-* acima. Forçamos reto (Carbon). `rounded-full` segue redondo. */
+.rounded, .rounded-r, .rounded-l, .rounded-t, .rounded-b { border-radius: 0; }
 
 @layer base {
   body {

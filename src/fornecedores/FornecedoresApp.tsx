@@ -46,12 +46,12 @@ const DIL: Record<string, { tone: ChipTone; icon: React.ElementType; label: stri
   PENDENTE: { tone: 'warning', icon: AlertTriangle, label: 'Pendente' },
 };
 const dilChip = (d: any) => {
-  if (!d) return <span className="text-[10px] text-text-secondary">não consultada</span>;
+  if (!d) return <span className="text-[12px] text-text-secondary">não consultada</span>;
   const m = DIL[d.verdict];
-  return <span className="inline-flex items-center gap-1.5"><Chip tone={m?.tone} icon={m?.icon} size="sm">{m?.label || d.verdict}</Chip>{!d.valida && <span className="text-[10px] text-warning">vencida</span>}</span>;
+  return <span className="inline-flex items-center gap-1.5"><Chip tone={m?.tone} icon={m?.icon} size="sm">{m?.label || d.verdict}</Chip>{!d.valida && <span className="text-[12px] text-warning">vencida</span>}</span>;
 };
 const kycChip = (k: any) => {
-  if (!k) return <span className="text-[10px] text-text-secondary">—</span>;
+  if (!k) return <span className="text-[12px] text-text-secondary">—</span>;
   const vencido = k.status === 'assinado' && !k.valida;
   const tone: ChipTone = vencido ? 'warning' : k.status === 'assinado' ? 'success' : k.status === 'aguardando_assinatura' ? 'warning' : 'neutral';
   return <Chip tone={tone} size="sm">{vencido ? 'Vencido' : KYC_STATUS_LABEL[k.status as KycStatus]}{k.type ? ` · ${String(k.type).toUpperCase()}` : ''}</Chip>;
@@ -171,7 +171,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
             <label className="flex items-center gap-2 bg-card border border-line rounded px-3 py-1.5 focus-within:border-primary">
               <Search size={14} className="text-text-secondary" aria-hidden />
               <input value={cnpjInput} onChange={(e) => setCnpjInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && consultarTopo(cnpjInput)}
-                aria-label="CNPJ a consultar" placeholder="CNPJ a consultar" className="bg-transparent text-[13px] outline-none w-[150px] sm:w-[170px]" />
+                aria-label="CNPJ a consultar" placeholder="CNPJ a consultar" className="bg-transparent text-[14px] outline-none w-[150px] sm:w-[170px]" />
             </label>
             <Btn onClick={() => consultarTopo(cnpjInput)} disabled={dBusy}>Consultar</Btn>
           </div>
@@ -204,7 +204,7 @@ function Stat({ icon: Icon, label, value, tone, active, onClick }: { icon: React
       className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         active ? 'border-primary ring-1 ring-primary' : 'border-line hover:border-primary/50')}>
       <Icon size={18} className={ring[tone]} aria-hidden />
-      <div><div className="text-[18px] font-bold leading-none">{value}</div><div className="text-[10px] uppercase tracking-wider text-text-secondary mt-1">{label}</div></div>
+      <div><div className="text-[20px] font-bold leading-none">{value}</div><div className="text-[12px] text-text-secondary mt-1">{label}</div></div>
     </button>
   );
 }
@@ -259,9 +259,9 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
 
   const active = !!queue && (queue.running || queue.pending > 0);
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
+    <div className="space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <p className="text-[13px] text-text-secondary max-w-2xl">
+        <p className="text-[14px] text-text-secondary max-w-2xl">
           Todos os fornecedores num só lugar: <b className="text-text">Diligência</b> (Receita + listas de restrição) e
           <b className="text-text"> KYS/KYG</b> (cadastro verificado + assinatura). O KYS/KYG é exigido apenas para contratações específicas.
           Diligências de novos/vencidos rodam automaticamente.
@@ -302,7 +302,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
       )}
 
       {loading ? (
-        <div role="status" className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
+        <div role="status" className="flex items-center gap-2 text-text-secondary text-[14px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
       ) : !rows.length ? (
         <EmptyState icon={Building2} title="Nenhum fornecedor ainda" description="A base vem das prestações de contas (Auditoria + FEAC), da importação de CNPJs e dos KYS/KYG. Consulte um CNPJ no campo acima." />
       ) : (
@@ -315,11 +315,11 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
             <Select ariaLabel="Filtrar por elegibilidade" value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'acima_2sm', label: 'Elegível 2 SM+' }, { value: 'ate_2sm', label: 'Elegível até 2 SM' }, { value: 'inelegivel', label: 'Inelegível' }, { value: 'pendente', label: 'Pendente' }]} />
             {origens.length > 1 && <Select ariaLabel="Filtrar por origem" value={origem} onChange={setOrigem} options={[{ value: 'all', label: 'Todas as origens' }, ...origens.map((o) => ({ value: o, label: o }))]} />}
             {hasFilter && <Btn variant="ghost" size="sm" onClick={clear}><X size={13} aria-hidden /> Limpar</Btn>}
-            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{sorted.length} de {rows.length}</span>
+            <span className="text-[12px] text-text-secondary ml-auto whitespace-nowrap">{sorted.length} de {rows.length}</span>
           </div>
           {!sorted.length ? <EmptyState icon={Search} title="Nenhum fornecedor com esses filtros" description="Ajuste a busca ou os filtros." /> : (
             <Card className="overflow-hidden">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-[14px]">
                 <caption className="sr-only">Fornecedores com situação de diligência, KYS/KYG e faixa de elegibilidade. Use o botão no fim de cada linha para abrir a ficha.</caption>
                 <thead className={tableHeadCls}><tr>
                   <SortTh label="Fornecedor" k="nome" sort={sort} setSort={setSort} />
@@ -390,7 +390,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
   useEffect(() => { if (profile) headingRef.current?.focus(); }, [profile?.doc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (busy && !profile) return <div role="status" className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando perfil…</div>;
-  if (!profile) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor na base.</div>;
+  if (!profile) return <div className="text-[14px] text-text-secondary">Selecione um fornecedor na base.</div>;
   const c = profile.cadastro || {}; const dil = profile.diligencia; const kyc = profile.kyc; const manual = profile.manual || {}; const fontes = profile.fontes || {};
   const nome = c.razaoSocial || '—';
   const startEdit = () => { setForm({ ...c }); setEdit(true); };
@@ -407,33 +407,33 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
     if (f.t === 'uf') return <select value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} className={inputCls + ' cursor-pointer'}><option value="">—</option>{UFS.map((u) => <option key={u} value={u}>{u}</option>)}</select>;
     if (f.t === 'banco') return <input list="cad-banks" value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} placeholder="Código - Banco" className={inputCls} />;
     if (f.t === 'cep') return <div className="relative"><input value={form[f.k] || ''} onChange={(e) => onCepEdit(e.target.value)} placeholder="00000-000" className={inputCls} />{cepBusy && <Loader2 size={13} className="animate-spin text-primary absolute right-2 top-[55%] -translate-y-1/2" aria-hidden />}</div>;
-    if (f.t === 'tel') { const inv = form[f.k] && !isValidPhone(form[f.k]); return <><input value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} placeholder="(11) 90000-0000" className={cn(inputCls, inv && 'border-error')} />{inv && <span className="text-[10px] text-error">Telefone inválido (com DDD)</span>}</>; }
-    if (f.t === 'email') { const inv = form[f.k] && !isValidEmail(form[f.k]); return <><input type="email" value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} className={cn(inputCls, inv && 'border-error')} />{inv && <span className="text-[10px] text-error">E-mail inválido</span>}</>; }
+    if (f.t === 'tel') { const inv = form[f.k] && !isValidPhone(form[f.k]); return <><input value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} placeholder="(11) 90000-0000" className={cn(inputCls, inv && 'border-error')} />{inv && <span className="text-[12px] text-error">Telefone inválido (com DDD)</span>}</>; }
+    if (f.t === 'email') { const inv = form[f.k] && !isValidEmail(form[f.k]); return <><input type="email" value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} className={cn(inputCls, inv && 'border-error')} />{inv && <span className="text-[12px] text-error">E-mail inválido</span>}</>; }
     return <input value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} className={inputCls} />;
   };
 
   return (
-    <div className="space-y-5 max-w-4xl animate-in fade-in duration-300">
+    <div className="space-y-5 max-w-4xl">
       <div className="flex items-center justify-between gap-2">
-        <button onClick={onBack} className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-primary uppercase tracking-wider rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronLeft size={13} aria-hidden /> Fornecedores</button>
+        <button onClick={onBack} className="inline-flex items-center gap-1 text-[12px] text-text-secondary hover:text-primary rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronLeft size={13} aria-hidden /> Fornecedores</button>
         <Btn variant="secondary" size="sm" onClick={() => window.open(`/api/fornecedores/${doc}/report.html`, '_blank')}><Printer size={13} aria-hidden /> Imprimir / PDF</Btn>
       </div>
 
       {/* header: identidade + status num relance */}
       <Card className="p-5">
         <h2 ref={headingRef} tabIndex={-1} className="text-[20px] font-bold leading-tight outline-none">{nome}</h2>
-        <div className="font-mono text-[13px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
+        <div className="font-mono text-[14px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
         <div className="grid sm:grid-cols-3 gap-3 mt-4">
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}{kyc && <span className="block text-[10px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}</div>
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Elegibilidade</div>{faixaChip(profile.faixa, true)}</div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}{kyc && <span className="block text-[12px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}</div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">Elegibilidade</div>{faixaChip(profile.faixa, true)}</div>
         </div>
       </Card>
 
       {/* dados cadastrais consolidados (editável) */}
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <div className="text-[13px] font-bold flex items-center gap-1.5"><Building2 size={15} className="text-primary" aria-hidden /> Dados cadastrais</div>
+          <div className="text-[14px] font-bold flex items-center gap-1.5"><Building2 size={15} className="text-primary" aria-hidden /> Dados cadastrais</div>
           <div className="flex items-center gap-2">
             <Btn variant="secondary" size="sm" onClick={onRefresh} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} Atualizar das APIs</Btn>
             {edit ? (<>
@@ -446,23 +446,23 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
           <datalist id="cad-banks">{banks.map((b) => <option key={b.code} value={`${b.code} - ${b.name}`} />)}</datalist>
           {CAD_GROUPS.map((g) => (
             <div key={g.title}>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">{g.title}</div>
+              <div className="text-[12px] font-bold text-text-secondary mb-2">{g.title}</div>
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
                 {g.fields.map((f) => (
                   <div key={f.k} className={f.full ? 'sm:col-span-2' : ''}>
                     {edit ? (
                       <label className="block">
-                        <span className="text-[10px] uppercase tracking-wider text-text-secondary">{f.label}{manual[f.k] && <span className="text-primary"> · manual</span>}</span>
+                        <span className="text-[12px] text-text-secondary">{f.label}{manual[f.k] && <span className="text-primary"> · manual</span>}</span>
                         {editControl(f)}
                       </label>
                     ) : f.multi ? (
                       <div>
-                        <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1">{f.label}{manual[f.k] && <span className="ml-1.5 text-[9px] text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</div>
+                        <div className="text-[12px] text-text-secondary mb-1">{f.label}{manual[f.k] && <span className="ml-1.5 text-[12px] text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</div>
                         {c[f.k] ? <ul className="space-y-0.5">{String(c[f.k]).split('\n').filter(Boolean).map((x: string, i: number) => <li key={i} className="text-[12px] text-text flex gap-1.5"><span className="text-text-secondary shrink-0">•</span><span className="break-words">{x}</span></li>)}</ul> : <span className="text-[12px] text-text-secondary">—</span>}
                       </div>
                     ) : (
                       <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{f.label}</span>
-                        <span className="font-medium break-words">{c[f.k] || '—'}{manual[f.k] && <span className="ml-1.5 text-[9px] uppercase tracking-wider text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</span></div>
+                        <span className="font-medium break-words">{c[f.k] || '—'}{manual[f.k] && <span className="ml-1.5 text-[12px] text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</span></div>
                     )}
                   </div>
                 ))}
@@ -470,17 +470,17 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
             </div>
           ))}
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">Observações</div>
+            <div className="text-[12px] font-bold text-text-secondary mb-2">Observações</div>
             {edit ? <textarea value={form.observacoes || ''} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={3} className="w-full bg-bg border border-line rounded px-3 py-2 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
               : <div className="text-[12px] text-text">{c.observacoes || '—'}</div>}
           </div>
           {profile.qsa?.length > 0 && (
-            <div><div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">Quadro societário (Receita)</div>
+            <div><div className="text-[12px] font-bold text-text-secondary mb-2">Quadro societário (Receita)</div>
               <div className="text-[12px] text-text-secondary">{profile.qsa.map((s: any) => `${s.nome}${s.qual ? ` (${s.qual})` : ''}`).join('; ')}</div></div>
           )}
         </div>
         {(fontes.receita || fontes.cep) && (
-          <div className="mt-4 pt-3 border-t border-line text-[10px] text-text-secondary leading-relaxed">
+          <div className="mt-4 pt-3 border-t border-line text-[12px] text-text-secondary leading-relaxed">
             Fontes: {fontes.receita && <span>{fontes.receita.fonte}{fontes.receita.fetchedAt ? ` (${new Date(fontes.receita.fetchedAt).toLocaleDateString('pt-BR')})` : ''}</span>}{fontes.cep && <span> · {fontes.cep.fonte}</span>}. Campos marcados como <b>manual</b> não são sobrescritos ao atualizar das APIs.
           </div>
         )}
@@ -489,7 +489,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
       {/* restrições / diligência */}
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <div className="text-[13px] font-bold flex items-center gap-1.5"><ShieldCheck size={15} className="text-primary" aria-hidden /> Diligência — listas de restrição</div>
+          <div className="text-[14px] font-bold flex items-center gap-1.5"><ShieldCheck size={15} className="text-primary" aria-hidden /> Diligência — listas de restrição</div>
           <div className="flex items-center gap-2">
             {dil && <Btn variant="ghost" size="sm" onClick={() => window.open(`/api/diligencia/${doc}/report.html`, '_blank')}>Relatório (PDF)</Btn>}
             {doc.length === 14 && <Btn variant="secondary" size="sm" onClick={onReconsultar} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} Reconsultar</Btn>}
@@ -497,12 +497,12 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         </div>
         {dil ? (
           <div className="space-y-2.5">
-            <div>{dilChip(dil)}{dil.checkedAt && <span className="text-[10px] text-text-secondary ml-2">consultada em {new Date(dil.checkedAt).toLocaleString('pt-BR')}</span>}</div>
+            <div>{dilChip(dil)}{dil.checkedAt && <span className="text-[12px] text-text-secondary ml-2">consultada em {new Date(dil.checkedAt).toLocaleString('pt-BR')}</span>}</div>
             {(dil.sancoes || []).map((s: any, i: number) => (
               <div key={i} className="border-b border-line pb-2 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-semibold">{s.fonte}</span>
-                  <span className={cn('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border', s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{sancaoLabel(s)}</span></div>
-                {(s.hits || []).map((h: any, j: number) => <div key={j} className="mt-1 text-[11px] bg-error/5 border border-error/20 rounded px-2 py-1.5"><div className="font-semibold text-error">{h.tipo}</div><div className="text-text-secondary">{h.orgao} · vigência {h.dataInicio || '?'}–{h.dataFim || '?'} · processo {h.processo || '—'}</div></div>)}
+                  <span className={cn('text-[12px] font-bold px-2 py-0.5 rounded border', s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{sancaoLabel(s)}</span></div>
+                {(s.hits || []).map((h: any, j: number) => <div key={j} className="mt-1 text-[12px] bg-error/5 border border-error/20 rounded px-2 py-1.5"><div className="font-semibold text-error">{h.tipo}</div><div className="text-text-secondary">{h.orgao} · vigência {h.dataInicio || '?'}–{h.dataFim || '?'} · processo {h.processo || '—'}</div></div>)}
               </div>
             ))}
           </div>
@@ -513,7 +513,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
 
       {/* KYS / KYG */}
       <div>
-        <div className="text-[13px] font-bold flex items-center gap-1.5 mb-3"><BadgeCheck size={15} className="text-primary" aria-hidden /> Conformidade KYS / KYG</div>
+        <div className="text-[14px] font-bold flex items-center gap-1.5 mb-3"><BadgeCheck size={15} className="text-primary" aria-hidden /> Conformidade KYS / KYG</div>
         {kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} />
           : <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade (exigida para contratações específicas)." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} aria-hidden /> Gerar convite KYS/KYG</Btn>} />}
       </div>
@@ -525,12 +525,12 @@ function HistoricoView({ history, openFornecedor }: any) {
   const [q, setQ] = useState(''); const qd = onlyDigits(q);
   const filtered = history.filter((h: any) => { if (!q) return true; const hay = `${h.razaoSocial || ''} ${maskDoc(h.cnpj)}`.toLowerCase(); return hay.includes(q.toLowerCase()) || (qd && onlyDigits(h.cnpj).includes(qd)); });
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
+    <div className="space-y-4">
       {!history.length ? <EmptyState icon={History} title="Nenhuma diligência realizada" description="Consulte um fornecedor na base ou no campo do topo." /> : (
         <>
           <SearchInput value={q} onChange={setQ} placeholder="Buscar por nome ou CNPJ" className="w-full sm:w-[260px]" />
           <Card className="overflow-hidden">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[14px]">
               <caption className="sr-only">Histórico de diligências realizadas. Use o botão no fim de cada linha para abrir a ficha do fornecedor.</caption>
               <thead className={tableHeadCls}><tr>
                 <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th><th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
@@ -572,7 +572,7 @@ function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (te
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} placeholder={'00.026.572/0001-40\n01724345000150\n…'}
           className="w-full bg-bg border border-line rounded px-3 py-2 text-[12px] font-mono text-text focus:border-primary focus:outline-none resize-y" />
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-text-secondary">{count} CNPJ(s) válido(s)</span>
+          <span className="text-[12px] text-text-secondary">{count} CNPJ(s) válido(s)</span>
           <div className="flex gap-2"><Btn variant="ghost" onClick={onClose}>Cancelar</Btn><Btn onClick={submit} disabled={busy || count === 0}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Importar</Btn></div>
         </div>
       </div>
@@ -590,9 +590,9 @@ function AjudaFornecedores() {
     { t: 'Ficha do fornecedor', d: 'Abra qualquer fornecedor para ver, numa só tela, o status no topo, os dados cadastrais consolidados e editáveis (Receita + CEP), a diligência (listas de restrição) e o KYS/KYG (respostas, trilha de conformidade e PDF assinado), com as ações Atualizar das APIs, Reconsultar, Imprimir / PDF e gerar convite.' },
   ];
   return (
-    <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary leading-relaxed">O <b className="text-text">Cockpit de Fornecedores</b> concentra a diligência e a conformidade (KYS/KYG) de todos os fornecedores num único lugar.</p>
-      <div className="space-y-3">{blocks.map((b, i) => <Card key={i} className="p-4"><div className="text-[13px] font-bold text-primary mb-1">{b.t}</div><div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div></Card>)}</div>
+    <div className="max-w-3xl space-y-5">
+      <p className="text-[14px] text-text-secondary leading-relaxed">O <b className="text-text">Cockpit de Fornecedores</b> concentra a diligência e a conformidade (KYS/KYG) de todos os fornecedores num único lugar.</p>
+      <div className="space-y-3">{blocks.map((b, i) => <Card key={i} className="p-4"><div className="text-[14px] font-bold text-primary mb-1">{b.t}</div><div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div></Card>)}</div>
     </div>
   );
 }

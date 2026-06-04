@@ -47,17 +47,17 @@ function Field({ label, value, onChange, placeholder, required, type = 'text', h
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{label}{required && <span className="text-error"> *</span>}</span>
+      <span className="text-[12px] font-semibold text-text-secondary">{label}{required && <span className="text-error"> *</span>}</span>
       <div className="relative mt-1">
         <input
           type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} autoComplete={autoComplete}
-          className="w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pr-9"
+          className="w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pr-9"
         />
         {status === 'loading' && <Loader2 size={15} className="animate-spin text-primary absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
         {status === 'ok' && <CheckCircle2 size={15} className="text-success absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
         {status === 'error' && <AlertTriangle size={15} className="text-error absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
       </div>
-      {hint && <span className="block mt-1 text-[11px] text-text-secondary">{hint}</span>}
+      {hint && <span className="block mt-1 text-[12px] text-text-secondary">{hint}</span>}
     </label>
   );
 }
@@ -68,9 +68,9 @@ const isValidPhone = (s: string) => { const d = onlyDigits(s); return d.length =
 function SelectField({ label, value, onChange, options, required }: { label: string; value: string; onChange: (v: string) => void; options: string[]; required?: boolean }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{label}{required && <span className="text-error"> *</span>}</span>
+      <span className="text-[12px] font-semibold text-text-secondary">{label}{required && <span className="text-error"> *</span>}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer">
+        className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer">
         <option value="">Selecione…</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -108,21 +108,21 @@ function YesNoField({ n, q, value, obs, onResp, onObs }: { n: number; q: { key: 
   return (
     <div className={`rounded-lg border bg-card p-4 transition-colors ${value ? 'border-line' : 'border-line hover:border-primary/30'}`}>
       <div className="flex gap-2.5">
-        <span className="shrink-0 w-5 h-5 rounded-full bg-surface-hover text-text-secondary text-[10px] font-bold flex items-center justify-center mt-0.5">{n}</span>
-        <p className="text-[12.5px] text-text leading-relaxed">{q.text}</p>
+        <span className="shrink-0 w-5 h-5 rounded-full bg-surface-hover text-text-secondary text-[12px] font-bold flex items-center justify-center mt-0.5">{n}</span>
+        <p className="text-[12px] text-text leading-relaxed">{q.text}</p>
       </div>
       <div className="mt-3 pl-7">
         <div className="inline-flex rounded-md border border-line overflow-hidden">
           {(['sim', 'nao'] as YesNo[]).map((opt) => (
             <button key={opt} type="button" onClick={() => onResp(opt)} aria-pressed={value === opt}
-              className={`inline-flex items-center gap-1.5 px-5 py-1.5 text-[12px] font-bold uppercase tracking-wider transition-colors ${opt === 'sim' ? 'border-r border-line' : ''} ${value === opt ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+              className={`inline-flex items-center gap-1.5 px-5 py-1.5 text-[12px] font-bold transition-colors ${opt === 'sim' ? 'border-r border-line' : ''} ${value === opt ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
               {value === opt && <Check size={13} aria-hidden />}{opt === 'sim' ? 'Sim' : 'Não'}
             </button>
           ))}
         </div>
         {showObs && (
           <div className="mt-3">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">Observações (obrigatório)</label>
+            <label className="text-[12px] font-bold text-text-secondary">Observações (obrigatório)</label>
             <textarea value={obs} onChange={(e) => onObs(e.target.value)} rows={2} placeholder="Informe os detalhes solicitados na pergunta."
               className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
           </div>
@@ -241,16 +241,16 @@ export default function KycWizard() {
       <header className="bg-sidebar border-b border-line px-5 sm:px-10 py-4 flex items-center gap-4">
         <img src={CASA_HACKER_LOGO} alt="Casa Hacker" className="h-8 w-auto object-contain invert opacity-90" />
         <div>
-          <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">{type === 'kys' ? 'Formulário de Conformidade — Fornecedores (KYS)' : 'Declaração de Conformidade (KYG)'}</div>
-          <div className="text-[10px] text-text-secondary">Associação Casa Hacker · preenchimento seguro e verificado</div>
+          <div className="text-primary font-extrabold text-[12px]">{type === 'kys' ? 'Formulário de Conformidade — Fornecedores (KYS)' : 'Declaração de Conformidade (KYG)'}</div>
+          <div className="text-[12px] text-text-secondary">Associação Casa Hacker · preenchimento seguro e verificado</div>
         </div>
       </header>
 
       {/* progresso */}
       <div className="px-5 sm:px-10 pt-5">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between text-[10px] text-text-secondary mb-1.5">
-            <span className="uppercase tracking-widest font-bold text-primary">{steps[step]}</span>
+          <div className="flex items-center justify-between text-[12px] text-text-secondary mb-1.5">
+            <span className="font-bold text-primary">{steps[step]}</span>
             <span>Etapa {step + 1} de {steps.length}</span>
           </div>
           <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
@@ -268,13 +268,13 @@ export default function KycWizard() {
             <div className="space-y-5">
               <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-lg p-4">
                 <ShieldCheck size={20} className="text-primary shrink-0 mt-0.5" aria-hidden />
-                <div className="text-[13px] text-text-secondary leading-relaxed">
+                <div className="text-[14px] text-text-secondary leading-relaxed">
                   Este formulário coleta dados cadastrais e de conformidade {type === 'kys' ? 'da sua empresa' : 'da sua organização/liderança'} e deve ser preenchido e assinado <b className="text-text">pelo representante legal ou pessoa autorizada</b>. Vários campos são <b className="text-text">verificados automaticamente</b> em fontes oficiais (Receita Federal, listas de restrição). A validade é por <b className="text-text">ano fiscal</b> — deve ser renovado anualmente.
                 </div>
               </div>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input type="checkbox" checked={atestacao} onChange={(e) => setAtestacao(e.target.checked)} className="mt-1 w-4 h-4 accent-[color:var(--color-primary)]" />
-                <span className="text-[13px] text-text">Declaro que sou o <b>representante legal</b> {type === 'kys' ? 'da empresa' : 'da organização/projeto'} ou pessoa devidamente autorizada a prestar estas informações e assinar este documento.</span>
+                <span className="text-[14px] text-text">Declaro que sou o <b>representante legal</b> {type === 'kys' ? 'da empresa' : 'da organização/projeto'} ou pessoa devidamente autorizada a prestar estas informações e assinar este documento.</span>
               </label>
             </div>
           )}
@@ -287,7 +287,7 @@ export default function KycWizard() {
                 <Field label="CNPJ" value={kys.cnpj} required status={cnpjStatus === 'idle' ? undefined : cnpjStatus}
                   onChange={(v) => { setKys({ ...kys, cnpj: v }); setCnpjStatus('idle'); }} placeholder="00.000.000/0000-00"
                   hint={kys.cnpj && !isValidCnpj(kys.cnpj) ? <span className="text-error">CNPJ inválido</span> : cnpjSituacao ? <span className={/ATIVA/i.test(cnpjSituacao) ? 'text-success' : 'text-error'}>Receita: {cnpjSituacao}</span> : 'Ao informar, buscamos os dados na Receita Federal.'} />
-                <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kys.cnpj)} disabled={!isValidCnpj(kys.cnpj) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-bold uppercase tracking-wider bg-primary text-white hover:bg-primary-hover disabled:opacity-40">Buscar na Receita</button></div>
+                <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kys.cnpj)} disabled={!isValidCnpj(kys.cnpj) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">Buscar na Receita</button></div>
               </div>
               <Field label="Razão social" value={kys.razaoSocial} required onChange={(v) => setKys({ ...kys, razaoSocial: v })} />
               <Field label="Nome fantasia" value={kys.nomeFantasia} onChange={(v) => setKys({ ...kys, nomeFantasia: v })} />
@@ -344,7 +344,7 @@ export default function KycWizard() {
             <div className="space-y-4">
               <SectionTitle>Observações gerais</SectionTitle>
               <textarea value={kys.observacoes} onChange={(e) => setKys({ ...kys, observacoes: e.target.value })} rows={5} placeholder="Espaço livre para observações adicionais (opcional)."
-                className="w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none resize-y" />
+                className="w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none resize-y" />
               <RequesterBlock requester={requester} setRequester={setRequester} />
             </div>
           )}
@@ -356,7 +356,7 @@ export default function KycWizard() {
               <div className="flex gap-2">
                 {(['pj', 'pf'] as const).map((tp) => (
                   <button key={tp} type="button" onClick={() => setKyg({ ...kyg, tipoPessoa: tp })}
-                    className={`px-4 py-1.5 rounded text-[12px] font-bold uppercase tracking-wider border ${kyg.tipoPessoa === tp ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary'}`}>
+                    className={`px-4 py-1.5 rounded text-[12px] font-bold border ${kyg.tipoPessoa === tp ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary'}`}>
                     {tp === 'pj' ? 'Organização (CNPJ)' : 'Pessoa física (CPF)'}
                   </button>
                 ))}
@@ -364,7 +364,7 @@ export default function KycWizard() {
               <div className="grid sm:grid-cols-2 gap-3">
                 <Field label={kyg.tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} value={kyg.documento} required onChange={(v) => { setKyg({ ...kyg, documento: v }); setCnpjStatus('idle'); }}
                   status={kyg.documento ? ((kyg.tipoPessoa === 'pj' ? isValidCnpj(kyg.documento) : isValidCpf(kyg.documento)) ? 'ok' : 'error') : undefined} />
-                {kyg.tipoPessoa === 'pj' && <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kyg.documento)} disabled={!isValidCnpj(kyg.documento) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-bold uppercase tracking-wider bg-primary text-white hover:bg-primary-hover disabled:opacity-40">{cnpjStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : 'Buscar na Receita'}</button></div>}
+                {kyg.tipoPessoa === 'pj' && <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kyg.documento)} disabled={!isValidCnpj(kyg.documento) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">{cnpjStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : 'Buscar na Receita'}</button></div>}
               </div>
               <Field label={kyg.tipoPessoa === 'pj' ? 'Razão social' : 'Nome completo'} value={kyg.nome} required onChange={(v) => setKyg({ ...kyg, nome: v })} />
               <Field label="Nome do projeto" value={kyg.projeto} required onChange={(v) => setKyg({ ...kyg, projeto: v })} />
@@ -387,7 +387,7 @@ export default function KycWizard() {
               {KYG_DECLARACOES.map((d, i) => (
                 <label key={i} className="flex items-start gap-3 cursor-pointer border border-line rounded-lg p-3.5 bg-card hover:border-primary/40">
                   <input type="checkbox" checked={kyg.declaracoes[i]} onChange={(e) => { const arr = [...kyg.declaracoes]; arr[i] = e.target.checked; setKyg({ ...kyg, declaracoes: arr }); }} className="mt-1 w-4 h-4 accent-[color:var(--color-primary)] shrink-0" />
-                  <span className="text-[12.5px] text-text leading-relaxed">{d}</span>
+                  <span className="text-[12px] text-text leading-relaxed">{d}</span>
                 </label>
               ))}
             </div>
@@ -398,7 +398,7 @@ export default function KycWizard() {
             <div className="space-y-4">
               <SectionTitle>Observações gerais</SectionTitle>
               <textarea value={kyg.observacoes} onChange={(e) => setKyg({ ...kyg, observacoes: e.target.value })} rows={5} placeholder="Espaço livre para observações adicionais (opcional)."
-                className="w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none resize-y" />
+                className="w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none resize-y" />
               <RequesterBlock requester={requester} setRequester={setRequester} />
             </div>
           )}
@@ -411,7 +411,7 @@ export default function KycWizard() {
 
               {type === 'kys' && (
                 <div className="bg-card border border-line rounded-lg overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-line bg-surface-hover text-[11px] font-bold uppercase tracking-wider text-text-secondary">Declarações da empresa</div>
+                  <div className="px-4 py-2.5 border-b border-line bg-surface-hover text-[12px] font-bold text-text-secondary">Declarações da empresa</div>
                   <ul className="p-4 space-y-2.5 max-h-60 overflow-y-auto custom-scrollbar">
                     {KYS_DECLARACOES.map((d, i) => (
                       <li key={i} className="flex gap-2.5 text-[12px] text-text-secondary leading-relaxed">
@@ -424,13 +424,13 @@ export default function KycWizard() {
               )}
 
               <div className="rounded-lg border border-line bg-surface-hover/40 p-4">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-text-secondary mb-1.5 flex items-center gap-1.5"><FileSignature size={13} className="text-primary" aria-hidden /> Assinatura eletrônica</div>
-                <p className="text-[11.5px] text-text-secondary leading-relaxed">{ASSINATURA_ACEITE}</p>
+                <div className="text-[12px] font-bold text-text-secondary mb-1.5 flex items-center gap-1.5"><FileSignature size={13} className="text-primary" aria-hidden /> Assinatura eletrônica</div>
+                <p className="text-[12px] text-text-secondary leading-relaxed">{ASSINATURA_ACEITE}</p>
               </div>
 
               <label className={`flex items-start gap-3 cursor-pointer rounded-lg border p-4 transition-colors ${aceiteAssinatura ? 'border-primary bg-primary/5' : 'border-line hover:border-primary/50'}`}>
                 <input type="checkbox" checked={aceiteAssinatura} onChange={(e) => setAceiteAssinatura(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[color:var(--color-primary)]" />
-                <span className="text-[13px] text-text">Li e concordo com as declarações e com o processo de <b>assinatura eletrônica</b>, e confirmo que as informações prestadas são <b>verdadeiras</b>.</span>
+                <span className="text-[14px] text-text">Li e concordo com as declarações e com o processo de <b>assinatura eletrônica</b>, e confirmo que as informações prestadas são <b>verdadeiras</b>.</span>
               </label>
             </div>
           )}
@@ -438,17 +438,17 @@ export default function KycWizard() {
           {/* navegação */}
           <div className="flex items-center justify-between pt-2">
             <button type="button" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-bold uppercase tracking-wider text-text-secondary hover:text-primary disabled:opacity-30">
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-bold text-text-secondary hover:text-primary disabled:opacity-30">
               <ChevronLeft size={15} /> Voltar
             </button>
             {step < lastStep ? (
               <button type="button" onClick={() => canNext() && setStep((s) => s + 1)} disabled={!canNext()}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded text-[12px] font-bold uppercase tracking-wider bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
                 Continuar <ChevronRight size={15} />
               </button>
             ) : (
               <button type="button" onClick={submit} disabled={!aceiteAssinatura || submitting}
-                className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded text-[12px] font-bold uppercase tracking-wider bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
                 {submitting ? <><Loader2 size={15} className="animate-spin" /> Preparando…</> : <><FileSignature size={15} /> Verificar e assinar</>}
               </button>
             )}
@@ -462,16 +462,16 @@ export default function KycWizard() {
 }
 
 function SectionTitle({ icon: Icon, children }: { icon?: React.ElementType; children: React.ReactNode }) {
-  return <h2 className="text-[14px] font-bold text-text flex items-center gap-2 border-b border-line pb-2">{Icon && <Icon size={16} className="text-primary" aria-hidden />}{children}</h2>;
+  return <h2 className="text-[14px] font-semibold text-text flex items-center gap-2 border-b border-line pb-2">{Icon && <Icon size={16} className="text-primary" aria-hidden />}{children}</h2>;
 }
 
 function BankRow({ banks, value, onChange }: { banks: { value: string; label: string }[]; value: { banco: string; agencia: string; conta: string; chavePix: string }; onChange: (v: any) => void }) {
   return (
     <div className="grid sm:grid-cols-2 gap-3">
       <label className="block">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">Banco / Instituição de pagamento</span>
+        <span className="text-[12px] font-semibold text-text-secondary">Banco / Instituição de pagamento</span>
         <input list="kyc-banks" value={value.banco} onChange={(e) => onChange({ ...value, banco: e.target.value })} placeholder="Digite ou selecione"
-          className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none" />
+          className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none" />
         <datalist id="kyc-banks">{banks.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}</datalist>
       </label>
       <Field label="Agência" value={value.agencia} onChange={(v) => onChange({ ...value, agencia: v })} />
@@ -503,7 +503,7 @@ function ReviewSummary({ type, kys, kyg, requester }: { type: KycType; kys: KysD
         {row('Proponente', kyg.nome)}{row(kyg.tipoPessoa === 'pj' ? 'CNPJ' : 'CPF', kyg.tipoPessoa === 'pj' ? maskCnpj(kyg.documento) : maskCpf(kyg.documento))}{row('Projeto', kyg.projeto)}{row('E-mail p/ assinatura', kyg.email)}
       </>}
       {(requester.nome || requester.email) && row('Solicitante Casa Hacker', [requester.nome, requester.email].filter(Boolean).join(' · '))}
-      <div className="text-[11px] text-text-secondary pt-2 border-t border-line mt-2">Ao continuar, rodamos a verificação de conformidade (Receita + listas de restrição) e preparamos o documento para assinatura eletrônica.</div>
+      <div className="text-[12px] text-text-secondary pt-2 border-t border-line mt-2">Ao continuar, rodamos a verificação de conformidade (Receita + listas de restrição) e preparamos o documento para assinatura eletrônica.</div>
     </div>
   );
 }
@@ -531,13 +531,13 @@ function SignModal({ sign, onClose, onDone }: { sign: { id: string; token: strin
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-card border border-line rounded-lg shadow-2xl w-full max-w-4xl h-[88vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-line">
-          <h2 className="text-[14px] font-bold text-text flex items-center gap-2"><FileSignature size={16} className="text-primary" /> Assinatura eletrônica</h2>
-          <button onClick={onClose} className="text-text-secondary hover:text-primary text-[12px] uppercase tracking-wider">Fechar</button>
+          <h2 className="text-[14px] font-semibold text-text flex items-center gap-2"><FileSignature size={16} className="text-primary" /> Assinatura eletrônica</h2>
+          <button onClick={onClose} className="text-text-secondary hover:text-primary text-[12px]">Fechar</button>
         </div>
         <iframe title="Assinatura Documenso" src={`${sign.host}/embed/sign/${sign.token}`} className="flex-1 w-full border-0" allow="camera; microphone" />
         <div className="px-5 py-3 border-t border-line flex items-center justify-between gap-3">
-          <span className="text-[11px] text-text-secondary">Assine no quadro acima. Se concluiu e a tela não avançar, clique ao lado.</span>
-          <button onClick={finish} disabled={confirming} className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-bold uppercase tracking-wider bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
+          <span className="text-[12px] text-text-secondary">Assine no quadro acima. Se concluiu e a tela não avançar, clique ao lado.</span>
+          <button onClick={finish} disabled={confirming} className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
             {confirming ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Concluí a assinatura
           </button>
         </div>
@@ -550,13 +550,13 @@ function SuccessScreen({ needsSetup, type }: { needsSetup: boolean; type: KycTyp
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center px-6 text-center">
       <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mb-5"><CheckCircle2 size={32} className="text-success" /></div>
-      <h1 className="text-[22px] font-light">{needsSetup ? <>Dados <b className="font-bold text-primary">recebidos</b></> : <>Conformidade <b className="font-bold text-primary">concluída</b></>}</h1>
-      <p className="text-[13px] text-text-secondary mt-3 max-w-md leading-relaxed">
+      <h1 className="text-[20px] font-light">{needsSetup ? <>Dados <b className="font-bold text-primary">recebidos</b></> : <>Conformidade <b className="font-bold text-primary">concluída</b></>}</h1>
+      <p className="text-[14px] text-text-secondary mt-3 max-w-md leading-relaxed">
         {needsSetup
           ? `Recebemos o seu ${type.toUpperCase()}. A etapa de assinatura eletrônica será habilitada em breve e você receberá o documento por e-mail.`
           : `Obrigado! Seu ${type.toUpperCase()} foi preenchido e assinado eletronicamente. Uma cópia será enviada por e-mail. A validade é por ano fiscal — renove no próximo ano.`}
       </p>
-      <p className="text-[10px] text-text-secondary mt-8 uppercase tracking-widest">Associação Casa Hacker · CNPJ 36.038.079/0001-97</p>
+      <p className="text-[12px] text-text-secondary mt-8">Associação Casa Hacker · CNPJ 36.038.079/0001-97</p>
     </div>
   );
 }

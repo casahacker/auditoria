@@ -64,9 +64,9 @@ function StatusChip({ status, size = 'md' }: { status: FeacMatchStatus; size?: '
 function Metric({ label, value, sub, tone }: { label: string; value: string | number; sub?: string; tone?: string }) {
   return (
     <Card className="p-4">
-      <div className="text-[10px] uppercase tracking-widest text-text-secondary">{label}</div>
-      <div className={cn('text-2xl font-bold mt-1', tone)}>{value}</div>
-      {sub && <div className="text-[11px] text-text-secondary mt-0.5">{sub}</div>}
+      <div className="text-[12px] text-text-secondary">{label}</div>
+      <div className={cn('text-[28px] font-bold mt-1', tone)}>{value}</div>
+      {sub && <div className="text-[12px] text-text-secondary mt-0.5">{sub}</div>}
     </Card>
   );
 }
@@ -78,8 +78,8 @@ function FileField({ label, hint, multiple, accept, files, onChange }: {
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-text-secondary">{label}</span>
-        {files.length > 0 && <span className="text-[10px] text-success font-bold">{files.length} arquivo{files.length !== 1 ? 's' : ''}</span>}
+        <span className="text-[12px] font-bold text-text-secondary">{label}</span>
+        {files.length > 0 && <span className="text-[12px] text-success font-bold">{files.length} arquivo{files.length !== 1 ? 's' : ''}</span>}
       </div>
       <button
         onClick={() => ref.current?.click()}
@@ -95,13 +95,13 @@ function FileField({ label, hint, multiple, accept, files, onChange }: {
       {files.length > 0 ? (
         <ul className="mt-2 space-y-1 max-h-24 overflow-y-auto">
           {files.map((f, i) => (
-            <li key={i} className="flex items-center justify-between text-[11px] text-text">
+            <li key={i} className="flex items-center justify-between text-[12px] text-text">
               <span className="truncate">{f.name}</span>
               <IconBtn label={`Remover ${f.name}`} className="ml-2 p-0.5 hover:text-error" onClick={() => onChange(files.filter((_, j) => j !== i))}><X size={12} /></IconBtn>
             </li>
           ))}
         </ul>
-      ) : <p className="text-[10px] text-text-secondary mt-2">{hint}</p>}
+      ) : <p className="text-[12px] text-text-secondary mt-2">{hint}</p>}
     </Card>
   );
 }
@@ -111,13 +111,13 @@ function Field({ label, value, onChange, placeholder, textarea }: {
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-bold uppercase tracking-widest text-text-secondary">{label}</span>
+      <span className="text-[12px] font-bold text-text-secondary">{label}</span>
       {textarea ? (
         <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={2}
-          className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none resize-y" />
+          className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none resize-y" />
       ) : (
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-          className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none" />
+          className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none" />
       )}
     </label>
   );
@@ -324,7 +324,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome, navigate, in
         }
       >
         <SidebarItem icon={History} active={section === 'historico'} onClick={() => goSection('historico')}
-          badge={history.length > 0 ? <span className="text-[10px] bg-line/70 text-text px-1.5 py-0.5 rounded-full">{history.length}</span> : undefined}>
+          badge={history.length > 0 ? <span className="text-[12px] bg-line/70 text-text px-1.5 py-0.5 rounded-full">{history.length}</span> : undefined}>
           Histórico
         </SidebarItem>
         <SidebarItem icon={BookOpen} active={section === 'ajuda'} onClick={() => goSection('ajuda')}>Como usar</SidebarItem>
@@ -335,7 +335,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome, navigate, in
           return (
             <SidebarItem key={s.id} disabled={!s.enabled} active={active} onClick={() => s.enabled && goSection(s.id)}
               indicator={
-                <span className={cn('shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border',
+                <span className={cn('shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[12px] font-bold border',
                   done ? 'bg-primary border-primary text-white' : active ? 'border-primary text-primary' : 'border-line text-text-secondary')}>
                   {done ? <CheckCircle2 size={12} /> : i + 1}
                 </span>
@@ -349,7 +349,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome, navigate, in
       <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader
           light={FEAC_HEADERS[section][0]} accent={FEAC_HEADERS[section][1]}
-          right={record ? <div className="text-[11px] text-text-secondary truncate">{record.accountability?.projeto || '—'} · Contrato {record.accountability?.contractNumber || '—'}</div> : undefined}
+          right={record ? <div className="text-[12px] text-text-secondary truncate">{record.accountability?.projeto || '—'} · Contrato {record.accountability?.contractNumber || '—'}</div> : undefined}
         />
 
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
@@ -393,8 +393,8 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
     { icon: FileSpreadsheet, t: 'Fluxo de caixa (.xlsx)', req: 'Obrigatório', d: 'A planilha do centro de custo, contendo a aba "Dados". É a fonte dos lançamentos: o sistema lê essa aba, filtra pelo período informado e cria uma linha para cada despesa. Mantenha o cabeçalho original.' },
   ];
   return (
-    <div className="max-w-3xl space-y-6 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary leading-relaxed">
+    <div className="max-w-3xl space-y-6">
+      <p className="text-[14px] text-text-secondary leading-relaxed">
         O <b className="text-text">Processador FEAC / SGPP</b> transforma um conjunto de notas fiscais, comprovantes, extrato e a
         planilha de fluxo de caixa em uma <b className="text-text">prestação de contas completa</b>: concilia cada lançamento com
         seus documentos, trata os PDFs (mescla, carimbo e PDF/A-2b), gera a Declaração de Rateio e o relatório final para a Fundação FEAC.
@@ -405,15 +405,15 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[['1', 'Entrada de documentos'], ['2', 'Relatório preliminar'], ['3', 'Tratamento'], ['4', 'Prestação de contas']].map(([n, l]) => (
           <div key={n} className="bg-surface-hover border border-line rounded p-3 text-center">
-            <div className="text-primary font-extrabold text-[15px]">{n}</div>
-            <div className="text-[11px] text-text-secondary leading-tight mt-0.5">{l}</div>
+            <div className="text-primary font-extrabold text-[14px]">{n}</div>
+            <div className="text-[12px] text-text-secondary leading-tight mt-0.5">{l}</div>
           </div>
         ))}
       </div>
 
       {/* ETAPA 1 — detalhada */}
       <Card className="p-5">
-        <div className="flex items-center gap-2 mb-1"><span className="text-primary font-extrabold text-[13px]">1 · Entrada de documentos</span></div>
+        <div className="flex items-center gap-2 mb-1"><span className="text-primary font-extrabold text-[14px]">1 · Entrada de documentos</span></div>
         <p className="text-[12px] text-text-secondary leading-relaxed mb-4">
           Clique em <b className="text-text">Nova prestação</b> e preencha os quatro campos abaixo. Cada campo aceita
           <b className="text-text"> vários arquivos</b> (exceto a planilha) — eles são mesclados automaticamente.
@@ -427,28 +427,28 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
                   <span className="text-[12px] font-bold text-text">{f.t}</span>
                   <Chip tone={f.req === 'Opcional' ? 'neutral' : 'info'} size="sm">{f.req}</Chip>
                 </div>
-                <p className="text-[11.5px] text-text-secondary leading-relaxed mt-0.5">{f.d}</p>
+                <p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">{f.d}</p>
               </div>
             </div>
           ))}
         </div>
 
         <div className="mt-4 pt-4 border-t border-line">
-          <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-2">Identificação (conforme SGPP)</div>
-          <ul className="space-y-1.5 text-[11.5px] text-text-secondary">
+          <div className="text-[12px] font-bold text-text-secondary mb-2">Identificação (conforme SGPP)</div>
+          <ul className="space-y-1.5 text-[12px] text-text-secondary">
             <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Nome do Projeto</b> — exatamente como cadastrado no SGPP. Entra no carimbo e no relatório.</span></li>
             <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Número do Contrato FEAC</b> — o nº do contrato no SGPP (ex.: <span className="font-mono">2025NDOES_1</span>). Entra no carimbo e no relatório.</span></li>
             <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Período (início / fim)</b> — ex.: <span className="font-mono">01/04/2026</span> a <span className="font-mono">30/04/2026</span>. <b className="text-text">Filtra</b> os lançamentos da planilha para o mês da prestação.</span></li>
           </ul>
           <div className="mt-3 flex gap-2.5 rounded border border-dashed border-text-secondary/50 bg-bg p-3">
             <Stamp size={16} className="text-text-secondary shrink-0 mt-0.5" aria-hidden />
-            <p className="text-[11.5px] text-text-secondary leading-relaxed">
+            <p className="text-[12px] text-text-secondary leading-relaxed">
               A caixa <b className="text-text">"Carimbo aplicado…"</b> mostra, em tempo real, o texto que será carimbado na margem
               de cada PDF — substituindo <span className="font-mono">{'{projeto}'}</span> e <span className="font-mono">{'{contrato}'}</span> pelos
               dados acima. <b className="text-text">Confira antes de processar.</b>
             </p>
           </div>
-          <p className="text-[11.5px] text-text-secondary mt-3">
+          <p className="text-[12px] text-text-secondary mt-3">
             Ao clicar em <b className="text-text">Processar e conciliar</b>, o sistema lê a planilha, extrai o texto dos PDFs
             (com OCR quando necessário) e concilia automaticamente. Em seguida você vai para o <b className="text-text">Relatório preliminar</b>.
           </p>
@@ -483,7 +483,7 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
 
       {/* dúvidas */}
       <div>
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-2">Dúvidas frequentes</div>
+        <div className="text-[12px] font-bold text-text-secondary mb-2">Dúvidas frequentes</div>
         <div className="space-y-2">
           <FaqItem q="Posso enviar as NFs e comprovantes separados?">Sim — selecione vários no mesmo campo; o sistema mescla e concilia cada documento.</FaqItem>
           <FaqItem q="Reabri a prestação e quero mudar um rateio.">Abra-a no Histórico → volte ao Relatório preliminar → ajuste → Tratar documentos de novo. A Observação e os PDFs são regerados.</FaqItem>
@@ -499,8 +499,8 @@ function HelpStep({ n, title, children }: { n: string; title: string; children: 
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-1">
-        <span className="shrink-0 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-bold">{n}</span>
-        <span className="text-[13px] font-bold text-text">{title}</span>
+        <span className="shrink-0 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold">{n}</span>
+        <span className="text-[14px] font-bold text-text">{title}</span>
       </div>
       <p className="text-[12px] text-text-secondary leading-relaxed">{children}</p>
     </Card>
@@ -522,13 +522,13 @@ function FaqItem({ q, children }: { q: string; children: React.ReactNode }) {
 function HistoricoView({ history, historyLoading, openRecord, deleteRecord, newPrestacao }: any) {
   const STAGE_LABEL: Record<string, string> = { criado: 'Rascunho', extraido: 'Processado', auditado: 'Conciliado', tratado: 'Tratado', concluido: 'Concluído' };
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
+    <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-[13px] text-text-secondary max-w-2xl">Prestações de contas salvas. Cada uma fica <b>persistida no servidor</b> e pode ser reaberta, editada ou tratada a qualquer momento.</p>
+        <p className="text-[14px] text-text-secondary max-w-2xl">Prestações de contas salvas. Cada uma fica <b>persistida no servidor</b> e pode ser reaberta, editada ou tratada a qualquer momento.</p>
         <Btn onClick={newPrestacao} className="shrink-0"><PlusCircle size={14} aria-hidden /> Nova</Btn>
       </div>
       {historyLoading ? (
-        <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
+        <div className="flex items-center gap-2 text-text-secondary text-[14px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
       ) : !history.length ? (
         <EmptyState icon={NotebookPen} title="Nenhuma prestação de contas ainda"
           description="Clique em “Nova prestação” para conciliar documentos e gerar a prestação para a FEAC."
@@ -538,15 +538,15 @@ function HistoricoView({ history, historyLoading, openRecord, deleteRecord, newP
           {history.map((h: FeacSummary) => (
             <Card key={h.id} className="p-4 flex flex-col gap-2 hover:border-primary transition-colors">
               <div className="flex items-start justify-between gap-2">
-                <div className="font-bold text-[13px] leading-snug">{h.projeto || 'Sem projeto'}</div>
+                <div className="font-bold text-[14px] leading-snug">{h.projeto || 'Sem projeto'}</div>
                 <IconBtn label={`Excluir prestação ${h.projeto || ''}`.trim()} className="p-0.5 hover:text-error" onClick={() => deleteRecord(h.id)}><Trash2 size={13} /></IconBtn>
               </div>
-              <div className="text-[11px] text-text-secondary">Contrato {h.contractNumber || '—'} · {h.competencia || '—'}</div>
-              <div className="flex items-center gap-2 text-[10px]">
-                <span className="px-2 py-0.5 rounded-full bg-sidebar-active text-primary font-bold uppercase tracking-wider">{STAGE_LABEL[h.stage] || h.stage}</span>
+              <div className="text-[12px] text-text-secondary">Contrato {h.contractNumber || '—'} · {h.competencia || '—'}</div>
+              <div className="flex items-center gap-2 text-[12px]">
+                <span className="px-2 py-0.5 rounded-full bg-sidebar-active text-primary font-bold">{STAGE_LABEL[h.stage] || h.stage}</span>
                 <span className="text-text-secondary">{h.okCount}/{h.lancamentosCount} conciliados</span>
               </div>
-              <div className="text-[11px] text-text-secondary">{formatCurrency(h.totalSaidas || 0)} · {new Date(h.updatedAt).toLocaleDateString('pt-BR')}</div>
+              <div className="text-[12px] text-text-secondary">{formatCurrency(h.totalSaidas || 0)} · {new Date(h.updatedAt).toLocaleDateString('pt-BR')}</div>
               <Btn variant="secondary" size="sm" className="mt-1 w-full" onClick={() => openRecord(h.id)}><ChevronRight size={13} aria-hidden /> Abrir</Btn>
             </Card>
           ))}
@@ -559,8 +559,8 @@ function HistoricoView({ history, historyLoading, openRecord, deleteRecord, newP
 function UploadView(p: any) {
   const stampPreview = `AS DESPESAS CUSTEADAS NESTE DOCUMENTO FORAM PAGAS COM RECURSOS DO TERMO DE PARCERIA COM A FEAC PARA O PROJETO ${p.meta.projeto || '[NOME DO PROJETO]'} – CONTRATO ${p.meta.contractNumber || '[Nº DO CONTRATO]'} – ASSOCIAÇÃO CASA HACKER`.toUpperCase();
   return (
-    <div className="max-w-4xl space-y-6 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary">
+    <div className="max-w-4xl space-y-6">
+      <p className="text-[14px] text-text-secondary">
         Envie a planilha de fluxo de caixa do centro de custo, as notas fiscais, os comprovantes de pagamento e o extrato.
         Você pode selecionar vários arquivos por campo — eles serão mesclados automaticamente.
       </p>
@@ -571,7 +571,7 @@ function UploadView(p: any) {
         <FileField label="Fluxo de caixa (planilha)" hint="Arquivo .xlsx do centro de custo" accept=".xlsx,.xls" files={p.fluxo} onChange={p.setFluxo} />
       </div>
       <Card className="p-5 space-y-4">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary">Identificação (conforme SGPP)</div>
+        <div className="text-[12px] font-bold text-text-secondary">Identificação (conforme SGPP)</div>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Nome do Projeto (conforme SGPP) *" value={p.meta.projeto} onChange={(v: string) => p.setMeta({ ...p.meta, projeto: v })} placeholder="Ex.: Hub de Cidadania Ativa Integração" />
           <Field label="Número do Contrato FEAC (conforme SGPP) *" value={p.meta.contractNumber} onChange={(v: string) => p.setMeta({ ...p.meta, contractNumber: v })} placeholder="Ex.: 2025NDOES_1" />
@@ -579,9 +579,9 @@ function UploadView(p: any) {
           <Field label="Período — fim" value={p.meta.periodoFim} onChange={(v: string) => p.setMeta({ ...p.meta, periodoFim: v })} placeholder="30/04/2026" />
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Carimbo aplicado na margem esquerda de cada documento</div>
+          <div className="text-[12px] text-text-secondary mb-1">Carimbo aplicado na margem esquerda de cada documento</div>
           <div className="rounded bg-bg px-3 py-2 border-l-2 border-dashed border-text-secondary/60">
-            <p className="text-[11px] font-bold uppercase leading-snug text-text">{stampPreview}</p>
+            <p className="text-[12px] font-bold leading-snug text-text">{stampPreview}</p>
           </div>
         </div>
       </Card>
@@ -589,7 +589,7 @@ function UploadView(p: any) {
       {p.busy ? (
         <Card className="flex items-center gap-3 p-5">
           <Loader2 className="animate-spin text-primary" size={20} aria-hidden />
-          <span className="text-[13px] text-text">{p.progress || 'Processando…'}</span>
+          <span className="text-[14px] text-text">{p.progress || 'Processando…'}</span>
         </Card>
       ) : (
         <Btn size="lg" onClick={p.start} disabled={!p.canStart}>
@@ -605,7 +605,7 @@ function PreliminarView(p: any) {
   const { record, stats } = p;
   const orphans = record.orphans || [];
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Metric label="Lançamentos" value={stats.total} />
         <Metric label="Conciliados" value={stats.ok} tone="text-success" sub={`${stats.total ? Math.round(stats.ok / stats.total * 100) : 0}%`} />
@@ -638,7 +638,7 @@ function PreliminarView(p: any) {
             {record.lancamentos.map((l: FeacLancamento) => (
               <tr key={l.id} onClick={() => p.setSelected(l)} className="border-t border-line hover:bg-primary/5 cursor-pointer">
                 <td className="px-3 py-2.5 whitespace-nowrap">{l.dataPagamento || '—'}</td>
-                <td className="px-3 py-2.5 max-w-[260px] truncate">{l.razaoSocial || l.fornecedor || '—'}<div className="text-[10px] text-text-secondary">{l.descricao}</div></td>
+                <td className="px-3 py-2.5 max-w-[260px] truncate">{l.razaoSocial || l.fornecedor || '—'}<div className="text-[12px] text-text-secondary">{l.descricao}</div></td>
                 <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap">{formatCurrency(Math.abs(l.saida))}</td>
                 <td className="px-3 py-2.5 text-center text-text-secondary">{l.nf ? `p${l.nf.pages.join(',')}` : '—'}</td>
                 <td className="px-3 py-2.5 text-center text-text-secondary">{l.comprovante ? `p${l.comprovante.pages.join(',')}` : '—'}</td>
@@ -646,7 +646,7 @@ function PreliminarView(p: any) {
                 <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => p.patchLanc(l.id, { rateio: l.rateio === 'SIM' ? 'NAO' : 'SIM' })}
                     aria-pressed={l.rateio === 'SIM'} aria-label={`Rateio ${l.rateio === 'SIM' ? 'ativado' : 'desativado'} para ${l.razaoSocial || l.fornecedor || 'lançamento'}`}
-                    className={cn('px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-colors',
+                    className={cn('px-2 py-0.5 rounded text-[12px] font-bold border transition-colors',
                       l.rateio === 'SIM' ? 'bg-primary/10 text-primary border-primary/40' : 'border-line text-text-secondary hover:text-text')}>
                     {l.rateio === 'SIM' ? 'Sim' : 'Não'}
                   </button>
@@ -655,12 +655,12 @@ function PreliminarView(p: any) {
             ))}
           </tbody>
         </table>
-        {!record.lancamentos.length && <div className="p-8 text-center text-text-secondary text-[13px]">Nenhum lançamento de despesa encontrado no período.</div>}
+        {!record.lancamentos.length && <div className="p-8 text-center text-text-secondary text-[14px]">Nenhum lançamento de despesa encontrado no período.</div>}
       </Card>
 
       {orphans.length > 0 && (
         <div className="bg-warning/5 border border-warning/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-warning font-bold text-[12px] uppercase tracking-widest mb-2"><AlertTriangle size={14} aria-hidden /> Documentos sem lançamento ({orphans.length})</div>
+          <div className="flex items-center gap-2 text-warning font-bold text-[12px] mb-2"><AlertTriangle size={14} aria-hidden /> Documentos sem lançamento ({orphans.length})</div>
           <ul className="text-[12px] text-text-secondary space-y-1">
             {orphans.map((o: any, i: number) => (
               <li key={i}>{o.kind === 'nf' ? 'NF' : 'Comprovante'} · {o.extractedName || 's/ nome'} · {formatCurrency(o.extractedValue || 0)} · pág. {o.pages?.join(',')}</li>
@@ -676,14 +676,14 @@ function PreliminarView(p: any) {
 function TratamentoView({ record, busy, progress }: any) {
   const errors = record?.treatment?.errors || [];
   return (
-    <div className="max-w-2xl animate-in fade-in duration-300">
+    <div className="max-w-2xl">
       {busy ? (
         <Card className="flex items-center gap-3 p-6">
           <Loader2 className="animate-spin text-primary" size={22} aria-hidden />
           <div>
-            <div className="text-[13px] font-bold text-text">Tratando documentos…</div>
+            <div className="text-[14px] font-bold text-text">Tratando documentos…</div>
             <div className="text-[12px] text-text-secondary">{progress}</div>
-            <div className="text-[11px] text-text-secondary mt-1">Mesclagem · carimbo de margem · compressão · conversão PDF/A-2b · declaração de rateio · atualização do fluxo de caixa.</div>
+            <div className="text-[12px] text-text-secondary mt-1">Mesclagem · carimbo de margem · compressão · conversão PDF/A-2b · declaração de rateio · atualização do fluxo de caixa.</div>
           </div>
         </Card>
       ) : record?.treatment ? (
@@ -693,7 +693,7 @@ function TratamentoView({ record, busy, progress }: any) {
           {errors.length > 0 && <div className="text-[12px] text-warning">{errors.length} item(ns) com aviso — verifique no relatório.</div>}
         </Card>
       ) : (
-        <div className="text-[13px] text-text-secondary">Inicie o tratamento a partir do relatório preliminar.</div>
+        <div className="text-[14px] text-text-secondary">Inicie o tratamento a partir do relatório preliminar.</div>
       )}
     </div>
   );
@@ -732,7 +732,7 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
     document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 1000);
   };
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6">
       <Card className="p-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Info2 label="Projeto" value={a.projeto || '—'} />
         <Info2 label="Nº do Contrato" value={a.contractNumber || '—'} />
@@ -752,7 +752,7 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
       </div>
 
       <Card className="overflow-x-auto">
-        <table className="w-full text-[11px] whitespace-nowrap">
+        <table className="w-full text-[12px] whitespace-nowrap">
           <thead className={tableHeadCls}>
             <tr>
               <th scope="col" className="px-2.5 py-2.5 font-semibold">ID</th>
@@ -815,7 +815,7 @@ function NoteText({ text }: { text: string }) {
 }
 
 function Info2({ label, value }: { label: string; value: string }) {
-  return <div><div className="text-[10px] uppercase tracking-widest text-text-secondary">{label}</div><div className="text-[13px] font-semibold text-text mt-0.5 break-words">{value}</div></div>;
+  return <div><div className="text-[12px] text-text-secondary">{label}</div><div className="text-[14px] font-semibold text-text mt-0.5 break-words">{value}</div></div>;
 }
 
 // ── Lançamento modal ────────────────────────────────────────────────────────
@@ -829,7 +829,7 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
   const cn_ = cnpj[d];
   return (
     <Modal title={lanc.razaoSocial || lanc.fornecedor || 'Lançamento'} onClose={onClose} size="md">
-      <div className="p-6 space-y-4 text-[13px]">
+      <div className="p-6 space-y-4 text-[14px]">
           <div className="grid grid-cols-2 gap-3">
             <KV label="Data de pagamento" v={lanc.dataPagamento} />
             <KV label="Valor" v={formatCurrency(Math.abs(lanc.saida))} />
@@ -842,7 +842,7 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
             <KV label="Categoria" v={lanc.categoria || '—'} />
             <KV label="Ref. financeira" v={lanc.finRef || '—'} />
           </div>
-          <div className="flex items-center gap-2"><span className="text-[11px] uppercase tracking-widest text-text-secondary">Situação:</span> <StatusChip status={lanc.matchStatus} /></div>
+          <div className="flex items-center gap-2"><span className="text-[12px] text-text-secondary">Situação:</span> <StatusChip status={lanc.matchStatus} /></div>
 
           <div className="grid grid-cols-2 gap-3">
             <DocCard title="Nota fiscal" ref_={lanc.nf} onDownload={() => dlDoc('nf')} />
@@ -852,8 +852,8 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
           {d.length === 14 && (
             <div className="bg-bg border border-line rounded p-3">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-widest text-text-secondary flex items-center gap-1"><Building2 size={12} /> Receita Federal</span>
-                <button onClick={() => onLookupCnpj(lanc.taxId)} className="text-[11px] text-primary hover:underline flex items-center gap-1"><Search size={12} /> Consultar CNPJ</button>
+                <span className="text-[12px] text-text-secondary flex items-center gap-1"><Building2 size={12} /> Receita Federal</span>
+                <button onClick={() => onLookupCnpj(lanc.taxId)} className="text-[12px] text-primary hover:underline flex items-center gap-1"><Search size={12} /> Consultar CNPJ</button>
               </div>
               {cn_ === 'loading' && <div className="text-[12px] text-text-secondary mt-2 flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Consultando…</div>}
               {cn_ === 'error' && <div className="text-[12px] text-error mt-2">Não foi possível consultar.</div>}
@@ -868,7 +868,7 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
 
           {lanc.notaExplicativa && (
             <div className="border-t border-line pt-3">
-              <div className="text-[11px] uppercase tracking-widest text-text-secondary mb-2 flex items-center gap-1"><ScrollText size={12} /> Observação — notas explicativas</div>
+              <div className="text-[12px] text-text-secondary mb-2 flex items-center gap-1"><ScrollText size={12} /> Observação — notas explicativas</div>
               <div className="bg-bg border border-line rounded p-3"><NoteText text={lanc.notaExplicativa} /></div>
             </div>
           )}
@@ -876,9 +876,9 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
           {editable && (
             <div className="border-t border-line pt-4 space-y-3">
               <div className="flex items-center gap-3">
-                <span className="text-[11px] uppercase tracking-widest text-text-secondary">Rateio</span>
+                <span className="text-[12px] text-text-secondary">Rateio</span>
                 <button onClick={() => onPatch(lanc.id, { rateio: lanc.rateio === 'SIM' ? 'NAO' : 'SIM' })}
-                  className={cn('px-3 py-1 rounded text-[11px] font-bold uppercase tracking-wider border', lanc.rateio === 'SIM' ? 'bg-primary/10 text-primary border-primary/40' : 'border-line text-text-secondary')}>
+                  className={cn('px-3 py-1 rounded text-[12px] font-bold border', lanc.rateio === 'SIM' ? 'bg-primary/10 text-primary border-primary/40' : 'border-line text-text-secondary')}>
                   {lanc.rateio === 'SIM' ? 'Sim' : 'Não'}
                 </button>
               </div>
@@ -889,9 +889,9 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
                 </div>
               )}
               <label className="block">
-                <span className="text-[11px] uppercase tracking-widest text-text-secondary">Anotação do auditor</span>
+                <span className="text-[12px] text-text-secondary">Anotação do auditor</span>
                 <textarea defaultValue={lanc.auditorNote || ''} onBlur={(e) => onPatch(lanc.id, { auditorNote: e.target.value })} rows={2}
-                  className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[13px] focus:border-primary focus:outline-none resize-y" />
+                  className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[14px] focus:border-primary focus:outline-none resize-y" />
               </label>
             </div>
           )}
@@ -901,14 +901,14 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
 }
 
 function KV({ label, v }: { label: string; v: string }) {
-  return <div><div className="text-[10px] uppercase tracking-widest text-text-secondary">{label}</div><div className="text-[13px] text-text mt-0.5">{v}</div></div>;
+  return <div><div className="text-[12px] text-text-secondary">{label}</div><div className="text-[14px] text-text mt-0.5">{v}</div></div>;
 }
 function NumField({ label, value, onChange }: { label: string; value?: number; onChange: (v: number) => void }) {
   return (
     <label className="block">
-      <span className="text-[10px] uppercase tracking-widest text-text-secondary">{label}</span>
+      <span className="text-[12px] text-text-secondary">{label}</span>
       <input type="number" step="0.01" defaultValue={value ?? ''} onBlur={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[13px] focus:border-primary focus:outline-none" />
+        className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[14px] focus:border-primary focus:outline-none" />
     </label>
   );
 }
@@ -916,14 +916,14 @@ function DocCard({ title, ref_, onDownload }: { title: string; ref_: any; onDown
   return (
     <div className={cn('border rounded p-3', ref_ ? 'border-success/30 bg-success/5' : 'border-line bg-bg')}>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-widest text-text-secondary">{title}</span>
+        <span className="text-[12px] text-text-secondary">{title}</span>
         {ref_ ? <CheckCircle2 size={14} className="text-success" /> : <AlertCircle size={14} className="text-text-secondary" />}
       </div>
       {ref_ ? (
         <div className="mt-1 text-[12px] text-text">
           <div>{formatCurrency(ref_.extractedValue || 0)} · pág. {ref_.pages?.join(',')}</div>
           {ref_.docNumber && <div className="text-text-secondary">nº {ref_.docNumber}</div>}
-          <button onClick={onDownload} className="mt-1 text-primary hover:underline flex items-center gap-1 text-[11px]"><FileDown size={12} /> Baixar página(s)</button>
+          <button onClick={onDownload} className="mt-1 text-primary hover:underline flex items-center gap-1 text-[12px]"><FileDown size={12} /> Baixar página(s)</button>
         </div>
       ) : <div className="mt-1 text-[12px] text-text-secondary">Não localizado</div>}
     </div>
