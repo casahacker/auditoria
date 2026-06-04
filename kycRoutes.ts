@@ -166,29 +166,39 @@ async function dso(method: string, urlPath: string, body?: any): Promise<any> {
   return json;
 }
 
-/** Cria documento a partir do template com formValues, adiciona CC opcional e envia. */
-async function createSignature(rec: KycRecord, signer: { name: string; email: string }, formValues: Record<string, any>): Promise<{ documentId: number; token: string }> {
+/**
+ * Cria o documento a partir do template, envia e devolve o token do SIGNATÁRIO p/ o modal.
+ *
+ * Os templates de conformidade têm DOIS placeholders, mapeados por ÍNDICE no create-document:
+ *   [0] = CC      → solicitante Casa Hacker (recebe cópia)
+ *   [1] = SIGNER  → o fornecedor (quem assina)
+ * Por isso enviamos os DOIS recipients na ordem do template (antes só mandávamos um, que caía
+ * no slot CC e deixava o SIGNER como "Direct link recipient" do template — o signatário errado).
+ *
+ * NÃO enviamos `formValues`: a instância patchada do Documenso (sem S3) REJEITA esse campo
+ * (responde HTTP "Unauthorized"). Os campos do termo são preenchidos pelo próprio signatário
+ * no formulário nativo do Documenso (o template já traz todos os campos).
+ */
+async function createSignature(rec: KycRecord, signer: { name: string; email: string }): Promise<{ documentId: number; token: string }> {
   const templateId = TEMPLATE_ID[rec.type];
   const title = `${rec.type.toUpperCase()} — ${signer.name} (${rec.fiscalYear})`;
-  // create-document: recipients mapeados por ÍNDICE aos placeholders do template
-  // (shape {name,email}, sem precisar do id do recipient) + formValues nos campos
-  // AcroForm do PDF. (generate-document exigiria o id do recipient do template.)
+  const ccName = rec.requester?.nome || "Associação Casa Hacker";
+  const ccEmail = rec.requester?.email && isEmail(rec.requester.email) ? rec.requester.email : "juridico@casahacker.org";
   const gen = await dso("POST", `/templates/${templateId}/create-document`, {
     title,
     externalId: rec.id,
-    recipients: [{ name: signer.name, email: signer.email }],
+    recipients: [
+      { name: ccName, email: ccEmail },           // índice 0 → placeholder CC
+      { name: signer.name, email: signer.email },  // índice 1 → placeholder SIGNER
+    ],
     meta: { subject: `Conformidade ${rec.type.toUpperCase()} — Casa Hacker`, message: "Documento de conformidade para assinatura eletrônica." },
-    formValues,
   });
   const documentId: number = gen.documentId;
-  const token: string = gen.recipients?.[0]?.token;
-  if (!documentId || !token) throw new Error("Documenso não retornou documentId/token");
-  // CC: solicitante Casa Hacker recebe cópia do documento concluído
-  if (rec.requester?.email && isEmail(rec.requester.email)) {
-    try { await dso("POST", `/documents/${documentId}/recipients`, { name: rec.requester.nome || rec.requester.email, email: rec.requester.email, role: "CC" }); }
-    catch (e: any) { console.warn("[KYC] falha ao adicionar CC:", e.message); }
-  }
-  // envia (sai do estado rascunho → permite assinatura; e-mail ao CC/cópia final)
+  const recps: any[] = gen.recipients || [];
+  const signerRec = recps.find((r) => r.role === "SIGNER") || recps[recps.length - 1];
+  const token: string = signerRec?.token;
+  if (!documentId || !token) throw new Error("Documenso não retornou documentId/token do signatário");
+  // envia (sai do rascunho → habilita a assinatura; e-mail de cópia ao CC)
   try { await dso("POST", `/documents/${documentId}/send`, { sendEmail: true }); }
   catch (e: any) { console.warn("[KYC] falha no send (pode já ter sido enviado):", e.message); }
   return { documentId, token };
@@ -517,7 +527,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     // assinatura via Documenso (se configurado)
     if (documensoReady(type)) {
       try {
-        const { documentId, token } = await createSignature(rec, signer, buildFormValues(rec));
+        const { documentId, token } = await createSignature(rec, signer);
         rec.documensoDocumentId = documentId; rec.documensoToken = token;
       } catch (e: any) {
         console.error("[KYC] Documenso falhou:", e.message);
