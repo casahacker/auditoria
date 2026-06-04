@@ -454,7 +454,9 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const DIL_DIR = path.join(DATA_DIR, "diligencia");
     const readDil = (cnpj: string): any => { try { return JSON.parse(fs.readFileSync(path.join(DIL_DIR, `${cnpj}.json`), "utf-8")); } catch { return null; } };
     const dilValid = (r: any) => !!(r && r.validUntil && new Date(r.validUntil).getTime() > Date.now());
-    const dilOf = (cnpj: string) => { const r = readDil(cnpj); return r ? { verdict: r.verdict, valida: dilValid(r), checkedAt: r.checkedAt } : null; };
+    const dilSummary = (r: any) => r ? { verdict: r.verdict, valida: dilValid(r), checkedAt: r.checkedAt } : null;
+    // importados entram sem nome; a razão social vem do registro de diligência (Receita)
+    const dilNome = (r: any) => (r?.razaoSocial && r.razaoSocial !== "—" ? r.razaoSocial : "");
     // KYS/KYG mais recente por documento
     const kycByDoc = new Map<string, KycRecord>();
     for (const rec of listRecs()) {
@@ -464,11 +466,12 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     }
     const rows = new Map<string, any>();
     for (const s of collectSuppliers(DATA_DIR)) {
-      rows.set(s.cnpj, { doc: s.cnpj, docFmt: fmtCnpj(s.cnpj), nome: s.nome || "", origens: s.origens || [], diligencia: dilOf(s.cnpj), kyc: null });
+      const dr = readDil(s.cnpj);
+      rows.set(s.cnpj, { doc: s.cnpj, docFmt: fmtCnpj(s.cnpj), nome: s.nome || dilNome(dr), origens: s.origens || [], diligencia: dilSummary(dr), kyc: null });
     }
     for (const [d, rec] of kycByDoc) {
       let row = rows.get(d);
-      if (!row) { row = { doc: d, docFmt: fmtCnpj(d), nome: recNome(rec) || "", origens: ["KYS/KYG"], diligencia: dilOf(d), kyc: null }; rows.set(d, row); }
+      if (!row) { const dr = readDil(d); row = { doc: d, docFmt: fmtCnpj(d), nome: recNome(rec) || dilNome(dr), origens: ["KYS/KYG"], diligencia: dilSummary(dr), kyc: null }; rows.set(d, row); }
       else if (!row.origens.includes("KYS/KYG")) row.origens = [...row.origens, "KYS/KYG"];
       if (!row.nome) row.nome = recNome(rec);
       row.kyc = { id: rec.id, type: rec.type, status: rec.status, elegivel: rec.elegibilidade?.elegivel, fiscalYear: rec.fiscalYear, valida: rec.status === "assinado" && isFiscalValid(rec), signedAt: rec.signedAt };
