@@ -27,6 +27,7 @@ As listas do Portal da Transparência são consultadas por **razão social** (ob
 1. No menu lateral, **Base de fornecedores** lista todos os fornecedores (com CNPJ) extraídos das prestações de contas já realizadas (Auditoria + FEAC), com o status da última diligência.
 2. Para um fornecedor da base, clique em **Consultar** (ou **Ver** se já houver diligência válida).
 3. Para um **CNPJ novo**, digite no campo **"CNPJ a consultar"** no topo e clique em **Consultar**.
+4. Para **vários de uma vez**, use **"Importar CNPJs"** na Base: cole uma lista (um por linha) ou envie um `.csv`/`.txt`. Os CNPJs entram na base e na fila de diligência (e passam a ser renovados automaticamente).
 
 O sistema busca a Receita e as listas e mostra o resultado em segundos.
 

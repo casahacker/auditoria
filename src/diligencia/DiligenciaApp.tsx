@@ -9,11 +9,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2, Search, Loader2, ShieldCheck, ShieldAlert, AlertTriangle,
-  FileDown, RefreshCw, History, ExternalLink, ChevronRight, BookOpen,
+  FileDown, RefreshCw, History, ExternalLink, ChevronRight, BookOpen, Upload, FileUp,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
-import { Btn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls } from '../ui/kit';
+import { Btn, Chip, Card, Modal, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
 
 type Section = 'base' | 'resultado' | 'historico' | 'ajuda';
@@ -111,6 +111,19 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
     } catch { addToast('error', 'Falha ao iniciar as consultas.'); }
   };
 
+  const [importOpen, setImportOpen] = useState(false);
+  const doImport = async (text: string): Promise<boolean> => {
+    try {
+      const r = await apiFetch('/api/diligencia/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { addToast('error', j.error || 'Falha ao importar.'); return false; }
+      addToast('success', `Importados ${j.recebidos} CNPJ(s): ${j.adicionados} novo(s) na base, ${j.naFila} na fila${j.jaValidos ? `, ${j.jaValidos} já com diligência válida` : ''}.`);
+      loadSuppliers(); loadHistory();
+      try { const q = await apiFetch('/api/diligencia/queue'); if (q.ok) setQueue(await q.json()); } catch { /* */ }
+      return true;
+    } catch { addToast('error', 'Falha ao importar.'); return false; }
+  };
+
   // navega entre seções dando a cada uma sua URL exata (compartilhável)
   const goSection = (s: Section) => { setSection(s); if (s === 'historico') loadHistory(); navigate?.(dilPath(s)); };
 
@@ -184,13 +197,49 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
         />
 
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
-          {section === 'base' && <BaseView {...{ suppliers, suppliersLoading, runCheck, openSaved, queue, runAll }} />}
+          {section === 'base' && <BaseView {...{ suppliers, suppliersLoading, runCheck, openSaved, queue, runAll, onImport: () => setImportOpen(true) }} />}
           {section === 'historico' && <HistoricoView {...{ history, openSaved, loadHistory }} />}
           {section === 'ajuda' && <AjudaDilig />}
           {section === 'resultado' && <ResultadoView {...{ current, busy, apiFetch, addToast, runCheck }} />}
         </div>
       </main>
+      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onSubmit={doImport} />}
     </div>
+  );
+}
+
+function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (text: string) => Promise<boolean> }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const count = (text.match(/\d[\d.\-/]{11,}\d/g) || []).map(onlyDigits).filter((d) => d.length === 14).length;
+  const loadFile = (f: File) => { const fr = new FileReader(); fr.onload = () => setText(String(fr.result || '')); fr.readAsText(f); };
+  const submit = async () => { setBusy(true); const ok = await onSubmit(text); setBusy(false); if (ok) onClose(); };
+  return (
+    <Modal title="Importar CNPJs" onClose={onClose} size="md">
+      <div className="p-6 space-y-4">
+        <p className="text-[12px] text-text-secondary leading-relaxed">
+          Cole uma lista de CNPJs (um por linha, ou um CSV — o sistema extrai os de 14 dígitos) ou selecione um arquivo
+          <span className="font-mono"> .csv</span>/<span className="font-mono">.txt</span>. Os CNPJs entram na base de fornecedores e a diligência é gerada
+          automaticamente (novos e vencidos), no limite de chamadas por minuto.
+        </p>
+        <Btn variant="secondary" onClick={() => fileRef.current?.click()}><FileUp size={14} aria-hidden /> Selecionar arquivo (.csv / .txt)</Btn>
+        <input ref={fileRef} type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" aria-label="Arquivo de CNPJs"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) loadFile(f); e.currentTarget.value = ''; }} />
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-widest text-text-secondary">CNPJs</span>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} placeholder={'00.026.572/0001-40\n01724345000150\n…'}
+            className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[12px] font-mono text-text focus:border-primary focus:outline-none resize-y" />
+        </label>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] text-text-secondary">{count} CNPJ(s) válido(s) detectado(s)</span>
+          <div className="flex gap-2">
+            <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+            <Btn onClick={submit} disabled={busy || count === 0}>{busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Upload size={14} aria-hidden />} Importar e consultar</Btn>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -210,6 +259,7 @@ function AjudaDilig() {
     { t: 'O que é verificado', d: 'Situação cadastral na Receita Federal (Ativa/Baixada/Inapta/Suspensa, natureza jurídica, porte, capital, CNAE principal e secundários, endereço e quadro societário) e as listas de restrição do Portal da Transparência/CGU: CEIS (inidôneas e suspensas), CNEP (Lei Anticorrupção), CEPIM (entidades sem fins lucrativos impedidas) e Acordos de Leniência.' },
     { t: 'Como consultar', d: 'Em "Base de fornecedores", consulte qualquer fornecedor das prestações já realizadas (Auditoria + FEAC); ou digite um CNPJ novo no campo do topo (em qualquer tela) e clique em Consultar. O resultado sai em segundos e ganha uma URL própria (/diligencia/CNPJ) que pode ser compartilhada.' },
     { t: 'Geração automática', d: 'O sistema gera as diligências sozinho, em segundo plano: sempre que surgem fornecedores novos (de novas prestações) e sempre que uma diligência vence (30 dias), eles entram numa fila e são consultados respeitando um limite de chamadas por minuto às APIs oficiais. O botão "Consultar todos os não consultados" na Base força essa fila imediatamente; o andamento aparece numa faixa de progresso.' },
+    { t: 'Importar uma lista de CNPJs', d: 'Na Base, o botão "Importar CNPJs" abre uma janela onde você cola uma lista (um por linha) ou envia um arquivo .csv/.txt — o sistema extrai os CNPJs de 14 dígitos, adiciona à base de fornecedores e gera a diligência de cada um automaticamente (e os renova quando vencerem).' },
     { t: 'Lendo o resultado', d: 'O veredito é "Nada consta" (verde), "Alerta" (vermelho — há sanção em alguma lista OU o cadastro não está Ativo) ou "Pendente" (não foi possível concluir as verificações). Veja os dados completos da Receita, o status de cada lista e, quando "Consta", o tipo de sanção, órgão, vigência, processo e fundamentação.' },
     { t: 'Como filtramos por CNPJ', d: 'O filtro por CNPJ da API do Portal da Transparência é inoperante (devolve a lista inteira). Por isso consultamos cada lista pela razão social do fornecedor (obtida na Receita) e filtramos os resultados pelo CNPJ exato — varrendo todas as páginas da resposta, para não perder uma sanção que esteja além da primeira página. Na prática, a verificação combina nome + CNPJ.' },
     { t: 'Validade e auditoria', d: 'Cada diligência vale 30 dias e fica registrada com data-hora, IP e solicitante. Exporte o relatório em PDF (documento monocromático, pronto para arquivo) ou os dados em TXT e guarde junto à prestação de contas. Use "Reconsultar" para forçar uma nova consulta antes do vencimento.' },
@@ -230,7 +280,7 @@ function AjudaDilig() {
   );
 }
 
-function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, runAll }: any) {
+function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, runAll, onImport }: any) {
   const pendingSet = new Set<string>(((queue?.pendingCnpjs as string[]) || []).map(onlyDigits));
   const processingCnpj = onlyDigits(queue?.processing || '');
   const active = !!queue && (queue.running || queue.pending > 0);
@@ -244,9 +294,12 @@ function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, run
           automaticamente em segundo plano (no limite de {queue?.ratePerMin || 100} consultas/min). Você também pode
           forçar agora, ou consultar um CNPJ avulso no campo do topo. Cada diligência vale 30 dias.
         </p>
-        <Btn variant="secondary" onClick={runAll} disabled={unconsulted === 0} className="shrink-0">
-          <RefreshCw size={14} aria-hidden /> Consultar todos os não consultados{unconsulted ? ` (${unconsulted})` : ''}
-        </Btn>
+        <div className="flex items-center gap-2 shrink-0">
+          <Btn variant="secondary" onClick={onImport}><Upload size={14} aria-hidden /> Importar CNPJs</Btn>
+          <Btn variant="secondary" onClick={runAll} disabled={unconsulted === 0}>
+            <RefreshCw size={14} aria-hidden /> Consultar todos os não consultados{unconsulted ? ` (${unconsulted})` : ''}
+          </Btn>
+        </div>
       </div>
 
       {active && (

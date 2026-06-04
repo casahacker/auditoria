@@ -22,6 +22,8 @@ import fs from "fs";
 
 const PT_BASE = "https://api.portaldatransparencia.gov.br/api-de-dados/";
 const VALIDADE_DIAS = 30;
+// fornecedores importados manualmente (lista/CSV), em DATA_DIR (fora de diligencia/)
+const EXTRA_SUPPLIERS_FILE = "diligencia-extra-suppliers.json";
 // A API do Portal devolve 15 registros por página e ignora `tamanhoPagina`. Como o
 // filtro por CNPJ é inoperante (ver consultaPT), paginamos por NOME e filtramos pelo
 // CNPJ exato — varrendo todas as páginas para não perder uma sanção além da 1ª página.
@@ -204,6 +206,11 @@ function collectSuppliers(DATA_DIR: string): any[] {
   if (fs.existsSync(feac)) for (const id of fs.readdirSync(feac)) {
     try { const r = JSON.parse(fs.readFileSync(path.join(feac, id, "record.json"), "utf-8")); for (const l of r.lancamentos || []) add(l.taxId, l.razaoSocial || l.fornecedor, "FEAC"); } catch { /* */ }
   }
+  // fornecedores importados manualmente (lista/CSV) — arquivo opcional, fora de diligencia/
+  try {
+    const extra = JSON.parse(fs.readFileSync(path.join(DATA_DIR, EXTRA_SUPPLIERS_FILE), "utf-8"));
+    if (Array.isArray(extra)) for (const e of extra) add(e.cnpj, e.nome || "", "Importado");
+  } catch { /* arquivo opcional */ }
   return [...map.values()].map(s => ({ cnpj: s.cnpj, cnpjFormatado: formatCnpjMask(s.cnpj), nome: s.nome, origens: [...s.origens], ocorrencias: s.ocorrencias }))
     .sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
 }
@@ -467,6 +474,26 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
       ratePerMin: RATE_PER_MIN, auto: AUTO_ON,
       pendingCnpjs: [processing, ...queue].filter(Boolean).slice(0, 80),
     });
+  });
+
+  // importa uma lista de CNPJs (texto/CSV colado ou { cnpjs: [...] }): adiciona à base
+  // de fornecedores e enfileira os novos para diligência. Usa o express.json() global.
+  const EXTRA_PATH = path.join(DATA_DIR, EXTRA_SUPPLIERS_FILE);
+  const readExtra = (): any[] => { try { const a = JSON.parse(fs.readFileSync(EXTRA_PATH, "utf-8")); return Array.isArray(a) ? a : []; } catch { return []; } };
+  app.post("/api/diligencia/import", requireAuth, (req: any, res) => {
+    const body = req.body || {};
+    const raw: string = Array.isArray(body.cnpjs) ? body.cnpjs.map(String).join("\n") : String(body.text || "");
+    const uniq: string[] = Array.from(new Set<string>((raw.match(/\d[\d.\-/]{11,}\d/g) || []).map((x) => onlyDigits(x)).filter((d) => d.length === 14)));
+    if (!uniq.length) return res.status(400).json({ error: "Nenhum CNPJ válido (14 dígitos) encontrado." });
+    const extra = readExtra();
+    const have = new Set(extra.map((e: any) => onlyDigits(e.cnpj)));
+    let adicionados = 0;
+    for (const d of uniq) if (!have.has(d)) { extra.push({ cnpj: d, origem: "Importado", importedAt: new Date().toISOString() }); have.add(d); adicionados++; }
+    if (adicionados) fs.writeFileSync(EXTRA_PATH, JSON.stringify(extra, null, 2));
+    let naFila = 0;
+    for (const d of uniq) if (enqueue(d)) naFila++;
+    if (naFila) void worker();
+    res.json({ recebidos: uniq.length, adicionados, naFila, jaValidos: uniq.length - naFila, totalImportados: extra.length });
   });
 
   app.get("/api/diligencia/suppliers", requireAuth, (_req, res) => {
