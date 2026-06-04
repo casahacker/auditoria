@@ -92,15 +92,21 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
   };
   const refreshProfile = async (doc: string) => {
     const d = onlyDigits(doc); setDBusy(true);
-    try { const r = await apiFetch(`/api/fornecedores/${d}/refresh`, { method: 'POST' }); if (!r.ok) throw new Error(); setProfile(await r.json()); addToast('success', 'Dados atualizados das APIs.'); loadRows(); }
-    catch { addToast('error', 'Falha ao atualizar das APIs.'); } finally { setDBusy(false); }
+    try { const r = await apiFetch(`/api/fornecedores/${d}/refresh`, { method: 'POST' }); if (!r.ok) throw new Error(); setProfile(await r.json()); addToast('success', 'Cadastro atualizado (Receita + CEP).'); loadRows(); }
+    catch { addToast('error', 'Falha ao atualizar o cadastro.'); } finally { setDBusy(false); }
+  };
+  const reconsultarDiligencia = async (doc: string) => {
+    const d = onlyDigits(doc); if (d.length !== 14) { addToast('error', 'A diligência aplica-se a CNPJ.'); return; }
+    setDBusy(true);
+    try { const r = await apiFetch(`/api/fornecedores/${d}/diligencia`, { method: 'POST' }); if (!r.ok) throw new Error((await r.json().catch(() => ({} as any))).error || ''); const p = await r.json(); setProfile(p); addToast(p.diligencia?.verdict === 'ALERTA' ? 'error' : 'success', p.diligencia?.verdict === 'ALERTA' ? 'Diligência: ALERTA — restrições encontradas.' : 'Diligência concluída.'); loadRows(); }
+    catch (e: any) { addToast('error', e.message || 'Falha na diligência.'); } finally { setDBusy(false); }
   };
   const saveCadastro = async (doc: string, fields: any): Promise<boolean> => {
     try { const r = await apiFetch(`/api/fornecedores/${onlyDigits(doc)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) }); if (!r.ok) throw new Error(); setProfile(await r.json()); addToast('success', 'Cadastro salvo.'); loadRows(); return true; }
     catch { addToast('error', 'Falha ao salvar o cadastro.'); return false; }
   };
   const reloadProfile = async () => { if (!dDoc) return; try { const r = await apiFetch(`/api/fornecedores/${dDoc}`); if (r.ok) setProfile(await r.json()); } catch { /* */ } };
-  const consultarTopo = (cnpj: string) => { const d = onlyDigits(cnpj); if (d.length !== 14) { addToast('error', 'Informe um CNPJ válido (14 dígitos).'); return; } setSection('detalhe'); setDDoc(d); setProfile(null); navigate?.(toPath('detalhe', d)); refreshProfile(d); };
+  const consultarTopo = (cnpj: string) => { const d = onlyDigits(cnpj); if (d.length !== 14) { addToast('error', 'Informe um CNPJ válido (14 dígitos).'); return; } setSection('detalhe'); setDDoc(d); setProfile(null); navigate?.(toPath('detalhe', d)); reconsultarDiligencia(d); };
   const runAll = async () => { try { const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' }); const j = await r.json(); addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} na fila de diligência.` : 'Tudo em dia.'); } catch { addToast('error', 'Falha ao iniciar.'); } };
   const doImport = async (text: string): Promise<boolean> => {
     try { const r = await apiFetch('/api/diligencia/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
@@ -147,7 +153,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
           {section === 'historico' && <HistoricoView history={history} openFornecedor={openFornecedor} />}
           {section === 'ajuda' && <AjudaFornecedores />}
           {section === 'detalhe' && <FichaFornecedor doc={dDoc} profile={profile} busy={dBusy} apiFetch={apiFetch} addToast={addToast}
-            onRefresh={() => refreshProfile(dDoc)} onSave={(fields: any) => saveCadastro(dDoc, fields)} reloadKyc={reloadProfile}
+            onRefresh={() => refreshProfile(dDoc)} onReconsultar={() => reconsultarDiligencia(dDoc)} onSave={(fields: any) => saveCadastro(dDoc, fields)} reloadKyc={reloadProfile}
             onBack={() => goSection('base')} onInvite={() => setConvites({ open: true, cnpj: dDoc.length === 14 ? dDoc : undefined })} />}
         </div>
       </main>
@@ -324,7 +330,7 @@ const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: bo
 ];
 const sancaoLabel = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
 
-function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, onSave, reloadKyc, onBack, onInvite }: any) {
+function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, onReconsultar, onSave, reloadKyc, onBack, onInvite }: any) {
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
@@ -415,7 +421,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
           <div className="text-[13px] font-bold flex items-center gap-1.5"><ShieldCheck size={15} className="text-primary" aria-hidden /> Diligência — listas de restrição</div>
           <div className="flex items-center gap-2">
             {dil && <Btn variant="ghost" size="sm" onClick={() => window.open(`/api/diligencia/${doc}/report.html`, '_blank')}>Relatório (PDF)</Btn>}
-            {doc.length === 14 && <Btn variant="secondary" size="sm" onClick={onRefresh} disabled={busy}><RefreshCw size={13} aria-hidden /> Reconsultar</Btn>}
+            {doc.length === 14 && <Btn variant="secondary" size="sm" onClick={onReconsultar} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} Reconsultar</Btn>}
           </div>
         </div>
         {dil ? (
@@ -430,7 +436,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
             ))}
           </div>
         ) : busy ? <div className="flex items-center gap-2 text-text-secondary text-[12px]"><Loader2 size={14} className="animate-spin" aria-hidden /> Consultando…</div>
-          : doc.length === 14 ? <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Consulte a Receita Federal e as listas de restrição." action={<Btn onClick={onRefresh}><RefreshCw size={14} aria-hidden /> Consultar agora</Btn>} />
+          : doc.length === 14 ? <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Consulte a Receita Federal e as listas de restrição (pode levar alguns segundos)." action={<Btn onClick={onReconsultar}><RefreshCw size={14} aria-hidden /> Consultar agora</Btn>} />
           : <div className="text-[12px] text-text-secondary">A diligência (Receita + listas de restrição) aplica-se a CNPJ. Este registro é pessoa física (CPF).</div>}
       </Card>
 

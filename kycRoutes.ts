@@ -531,15 +531,42 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     res.json(profileResponse(doc));
   });
 
-  // puxa de TODAS as APIs (Receita+CEP + listas de restrição) e atualiza os campos não-manuais
-  app.post("/api/fornecedores/:doc/refresh", requireAuth, async (req: any, res) => {
-    const doc = docParam(req, res); if (!doc) return;
-    if (doc.length === 14) { try { await runDiligence(DATA_DIR, doc, { checkedBy: req.user?.email || "—", ip: reqIp(req), force: true }); } catch (e: any) { console.warn("[Fornecedor] refresh diligência:", e?.message); } }
+  // re-semeia os campos NÃO manuais a partir das APIs (mantém os editados manualmente)
+  const reseedCadastro = (doc: string, updatedBy?: string) => {
     const { fields: api, fontes } = apiFields(doc);
     const stored = readCad(doc) || { doc, tipo: doc.length === 14 ? "pj" : "pf", fields: {}, manual: {} };
     const fields: Record<string, string> = { ...stored.fields };
     for (const k of CADASTRO_FIELDS) if (!stored.manual?.[k]) fields[k] = api[k] || fields[k] || "";
-    writeCad(doc, { ...stored, doc, tipo: doc.length === 14 ? "pj" : "pf", fields, fontes, updatedAt: new Date().toISOString(), updatedBy: req.user?.email });
+    writeCad(doc, { ...stored, doc, tipo: doc.length === 14 ? "pj" : "pf", fields, fontes, updatedAt: new Date().toISOString(), updatedBy });
+  };
+
+  // "Atualizar das APIs" — refresh RÁPIDO do cadastro (Receita + CEP), SEM as listas de
+  // restrição (lentas por paginação). Atualiza apenas a parte 'receita' do registro de diligência.
+  app.post("/api/fornecedores/:doc/refresh", requireAuth, async (req: any, res) => {
+    const doc = docParam(req, res); if (!doc) return;
+    if (doc.length === 14) {
+      try {
+        const receita = await fetchReceita(doc);
+        if (receita) {
+          const dil = readDilRec(doc) || { cnpj: doc, sancoes: [], verdict: "PENDENTE", checkedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 30 * 86400000).toISOString(), checkedBy: req.user?.email || "—" };
+          dil.receita = receita; dil.razaoSocial = receita.razao_social || dil.razaoSocial || "—"; dil.nomeFantasia = receita.nome_fantasia || dil.nomeFantasia || "";
+          fs.mkdirSync(path.join(DATA_DIR, "diligencia"), { recursive: true });
+          fs.writeFileSync(path.join(DATA_DIR, "diligencia", `${doc}.json`), JSON.stringify(dil, null, 2));
+        }
+      } catch (e: any) { console.warn("[Fornecedor] refresh receita:", e?.message); }
+    }
+    reseedCadastro(doc, req.user?.email);
+    res.json(profileResponse(doc));
+  });
+
+  // "Reconsultar diligência" — diligência COMPLETA (Receita + CEP + listas de restrição CGU).
+  // Mais lenta (paginação); usar quando precisar revalidar as sanções.
+  app.post("/api/fornecedores/:doc/diligencia", requireAuth, async (req: any, res) => {
+    const doc = docParam(req, res); if (!doc) return;
+    if (doc.length !== 14) return res.status(400).json({ error: "A diligência de restrições aplica-se a CNPJ." });
+    try { await runDiligence(DATA_DIR, doc, { checkedBy: req.user?.email || "—", ip: reqIp(req), userAgent: String(req.headers["user-agent"] || ""), force: true }); }
+    catch (e: any) { return res.status(502).json({ error: e?.message || "Falha na diligência" }); }
+    reseedCadastro(doc, req.user?.email);
     res.json(profileResponse(doc));
   });
 
