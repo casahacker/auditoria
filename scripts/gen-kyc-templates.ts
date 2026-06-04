@@ -90,8 +90,10 @@ class Builder {
     const ruleY = height - M - this.logoH - 6;
     this.page.drawLine({ start: { x: M, y: ruleY }, end: { x: width - M, y: ruleY }, thickness: 0.6, color: LINE });
     this.page.drawRectangle({ x: M, y: ruleY - 0.5, width: 34, height: 1.6, color: GREEN }); // acento verde
-    // Rodapé: identificação institucional
+    // Rodapé: identificação institucional + marca de confidencialidade (centralizada)
     this.page.drawText("Associação Casa Hacker · CNPJ 36.038.079/0001-97 · casahacker.org", { x: M, y: M - 24, size: 7, font: this.font, color: SOFT });
+    const conf = "CONFIDENCIAL";
+    this.page.drawText(conf, { x: (width - this.semibold.widthOfTextAtSize(conf, 7)) / 2, y: M - 24, size: 7, font: this.semibold, color: GRAY });
     this.y = ruleY - 22;
   }
 
@@ -163,7 +165,6 @@ class Builder {
     this.page.drawRectangle({ x: M, y: this.y + 4, width: 90, height: 2, color: GREEN });
     this.page.drawText("ASSINATURA ELETRÔNICA", { x: M + 14, y: this.y - 14, size: 10, font: this.bold, color: INK });
     this.page.drawText("Assinado eletronicamente pelo representante legal / proponente.", { x: M + 14, y: this.y - 30, size: 8, font: this.font, color: GRAY });
-    this.page.drawText("[ no editor do Documenso, posicione aqui o campo SIGNATURE do recipient SIGNER ]", { x: M + 14, y: this.y - 44, size: 7.5, font: this.font, color: SOFT });
     this.y -= 72;
   }
   finalize() {
