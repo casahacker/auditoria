@@ -281,8 +281,9 @@ function computeEligibility(rec: KycRecord): KycEligibility {
 // Elegível a partir de 2 SM: nada consta + ativo + KYS/KYG aprovado (assinado, válido e elegível).
 // Pendente: diligência não concluída/ausente.
 export type Faixa = "inelegivel" | "ate_2sm" | "acima_2sm" | "pendente";
-function faixaOf(verdict: string | undefined, kycAprovado: boolean): Faixa {
+function faixaOf(verdict: string | undefined, kycAprovado: boolean, situacao?: string): Faixa {
   if (verdict === "ALERTA") return "inelegivel";
+  if (situacao && !/ATIVA/i.test(situacao)) return "inelegivel"; // baixada/suspensa/inapta na Receita → inelegível
   if (verdict !== "NADA_CONSTA") return "pendente";
   return kycAprovado ? "acima_2sm" : "ate_2sm";
 }
@@ -563,7 +564,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const DIL_DIR = path.join(DATA_DIR, "diligencia");
     const readDil = (cnpj: string): any => { try { return JSON.parse(fs.readFileSync(path.join(DIL_DIR, `${cnpj}.json`), "utf-8")); } catch { return null; } };
     const dilValid = (r: any) => !!(r && r.validUntil && new Date(r.validUntil).getTime() > Date.now());
-    const dilSummary = (r: any) => r ? { verdict: r.verdict, valida: dilValid(r), checkedAt: r.checkedAt } : null;
+    const dilSummary = (r: any) => r ? { verdict: r.verdict, valida: dilValid(r), checkedAt: r.checkedAt, situacao: r.receita?.situacao_cadastral || "" } : null;
     // importados entram sem nome; a razão social vem do registro de diligência (Receita)
     const dilNome = (r: any) => (r?.razaoSocial && r.razaoSocial !== "—" ? r.razaoSocial : "");
     // KYS/KYG mais recente por documento
@@ -587,7 +588,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     }
     for (const row of rows.values()) {
       const kycAprovado = !!(row.kyc && row.kyc.status === "assinado" && row.kyc.valida && row.kyc.elegivel === true);
-      row.faixa = faixaOf(row.diligencia?.verdict, kycAprovado);
+      row.faixa = faixaOf(row.diligencia?.verdict, kycAprovado, row.diligencia?.situacao);
     }
     res.json([...rows.values()].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")));
   });
@@ -632,7 +633,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const { cadastro, manual, fontes, qsa, dil, kyc } = consolidate(doc);
     const { documensoToken: _t, ...kycSafe } = (kyc || {}) as any;
     const kycValida = !!(kyc && kyc.status === "assinado" && isFiscalValid(kyc));
-    const faixa = faixaOf(dil?.verdict, !!(kycValida && kyc!.elegibilidade?.elegivel === true));
+    const faixa = faixaOf(dil?.verdict, !!(kycValida && kyc!.elegibilidade?.elegivel === true), cadastro.situacaoCadastral);
     return { doc, docFmt: fmtCnpj(doc), tipo: doc.length === 14 ? "pj" : "pf", cadastro, manual, fontes, qsa, faixa, diligencia: dil, kyc: kyc ? { ...kycSafe, valida: kycValida } : null };
   };
   const docParam = (req: any, res: any): string | null => {
