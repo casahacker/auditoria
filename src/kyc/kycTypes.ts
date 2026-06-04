@@ -73,6 +73,9 @@ export interface KycVerification {
   detalhe?: any;
 }
 
+/** Elegibilidade da Casa Hacker: sem restrições + respostas adequadas + previdência em dia. */
+export interface KycEligibility { elegivel: boolean; motivos: string[]; }
+
 // ── Registro persistido (DATA_DIR/kyc/{id}.json) ───────────────────────────────
 export interface KycRecord {
   id: string;
@@ -83,6 +86,7 @@ export interface KycRecord {
   requester?: KycRequester;
   verificationTrail: KycVerification[];
   verdict?: KycVerdict;
+  elegibilidade?: KycEligibility;
   documensoDocumentId?: number;
   documensoToken?: string;       // token do signatário (uso no embed; nunca exposto na lista)
   signedAt?: string;
@@ -98,7 +102,7 @@ export interface KycRecord {
 export interface KycSummary {
   id: string; type: KycType; status: KycStatus;
   nome: string; documento: string; documentoFmt: string;
-  requester?: KycRequester; verdict?: KycVerdict;
+  requester?: KycRequester; verdict?: KycVerdict; elegivel?: boolean;
   fiscalYear: number; validUntil: string; valida: boolean;
   createdAt: string; signedAt?: string;
 }

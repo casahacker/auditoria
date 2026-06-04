@@ -23,7 +23,7 @@ import fs from "fs";
 import crypto from "node:crypto";
 import { fetchReceita, consultaPT } from "./diligenciaRoutes";
 import type {
-  KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict,
+  KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
 } from "./src/kyc/kycTypes";
 
 export interface KycCtx {
@@ -110,6 +110,7 @@ async function runKycChecks(documento: string): Promise<{ trail: KycVerification
   } else {
     trail.push({ fonte: "Receita Federal", tipo: "Situação cadastral", resultado: "Não foi possível consultar", status: "pendente", checkedAt: nowIso() });
   }
+  if (receita?.cepFonte) trail.push({ fonte: receita.cepFonte, tipo: "Endereço (CEP)", apiUrl: receita.cepApiUrl, resultado: [receita.logradouro, receita.numero, receita.bairro, receita.municipio, receita.uf].filter(Boolean).join(", ") || "Consultado", status: "ok", checkedAt: receita.cepFetchedAt || nowIso() });
 
   const razao = receita?.razao_social || "";
   let sancoes: any[] = [];
@@ -235,6 +236,38 @@ function buildFormValues(rec: KycRecord): Record<string, any> {
   return {};
 }
 
+// ── elegibilidade: sem restrições + respostas adequadas + previdência cumprida ──
+// (manter em sincronia com as chaves de KYS_SECTIONS em src/kyc/kycTypes.ts)
+const KYS_ELIGIBLE: Record<string, "sim" | "nao" | "neutral"> = {
+  pep: "nao", familiar_governo: "nao", parentesco_casahacker: "nao", acao_judicial: "nao", conflito_interesse: "nao",
+  candidato_politico: "nao", partido_politico: "nao",
+  condenacao_corrupcao: "nao", investigacao_anticorrupcao: "nao", bloqueio_confisco: "nao",
+  escravidao: "nao", injuria_racial: "nao", crimes_genero: "nao", trabalho_infantil: "nao",
+  sancoes: "nao", historico_contratual: "neutral", impostos_previdencia: "sim",
+};
+const KYS_SHORT: Record<string, string> = {
+  pep: "Pessoa Exposta Politicamente", familiar_governo: "Familiar em ente de governo", parentesco_casahacker: "Parentesco com a Casa Hacker",
+  acao_judicial: "Ação judicial contra a Casa Hacker", conflito_interesse: "Conflito de interesse",
+  candidato_politico: "Candidatura a cargo político", partido_politico: "Vínculo com partido político",
+  condenacao_corrupcao: "Condenação por corrupção/lavagem", investigacao_anticorrupcao: "Investigação anticorrupção", bloqueio_confisco: "Bloqueio/confisco/perda de direito",
+  escravidao: "Trabalho escravo", injuria_racial: "Injúria racial", crimes_genero: "Crimes de gênero", trabalho_infantil: "Trabalho infantil",
+  sancoes: "Sanções/blocklists", impostos_previdencia: "Impostos/Previdência",
+};
+function computeEligibility(rec: KycRecord): KycEligibility {
+  const motivos: string[] = [];
+  if (rec.verdict === "ALERTA") motivos.push("Restrição encontrada (lista de sanções e/ou cadastro não-ativo na Receita).");
+  else if (rec.verdict === "PENDENTE") motivos.push("Verificação de conformidade incompleta — reprocessar.");
+  if (rec.type === "kys" && rec.kys) {
+    for (const [key, exp] of Object.entries(KYS_ELIGIBLE)) {
+      if (exp === "neutral") continue;
+      const a = rec.kys.respostas?.[key]?.resposta;
+      if (!a) { motivos.push(`Não respondido: ${KYS_SHORT[key] || key}.`); continue; }
+      if (a !== exp) motivos.push(key === "impostos_previdencia" ? "Não cumpriu as obrigações de impostos/previdência." : `Resposta de risco: ${KYS_SHORT[key] || key}.`);
+    }
+  }
+  return { elegivel: motivos.length === 0, motivos };
+}
+
 // ── extração de identidade do registro (p/ listagem e signatário) ───────────────
 function recDoc(rec: KycRecord): string { return onlyDigits(rec.type === "kys" ? rec.kys?.cnpj : rec.kyg?.documento); }
 function recNome(rec: KycRecord): string { return (rec.type === "kys" ? rec.kys?.razaoSocial : rec.kyg?.nome) || ""; }
@@ -247,7 +280,7 @@ function toSummary(rec: KycRecord): KycSummary {
   const doc = recDoc(rec);
   return {
     id: rec.id, type: rec.type, status: rec.status, nome: recNome(rec) || "—",
-    documento: doc, documentoFmt: fmtCnpj(doc), requester: rec.requester, verdict: rec.verdict,
+    documento: doc, documentoFmt: fmtCnpj(doc), requester: rec.requester, verdict: rec.verdict, elegivel: rec.elegibilidade?.elegivel,
     fiscalYear: rec.fiscalYear, validUntil: rec.validUntil, valida: rec.status === "assinado" && isFiscalValid(rec),
     createdAt: rec.createdAt, signedAt: rec.signedAt,
   };
@@ -369,6 +402,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
 
     // guarda os dados crus da régua p/ relatório interno
     (rec as any).receitaSnapshot = checks.receita; (rec as any).sancoesSnapshot = checks.sancoes;
+    rec.elegibilidade = computeEligibility(rec);
 
     // assinatura via Documenso (se configurado)
     if (documensoReady(type)) {

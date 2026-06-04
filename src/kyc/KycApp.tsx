@@ -117,6 +117,7 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
   const [tf, setTf] = useState('all');
   const [sf, setSf] = useState('all');
   const [yf, setYf] = useState('all');
+  const [ef, setEf] = useState('all');
   const qd = onlyDigits(q);
   const years = Array.from(new Set(records.map((r) => r.fiscalYear))).sort((a, b) => b - a);
   const filtered = records.filter((r) => {
@@ -124,6 +125,7 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
     if (tf !== 'all' && r.type !== tf) return false;
     if (sf !== 'all') { if (sf === 'vencido') { if (!(r.status === 'assinado' && !r.valida)) return false; } else if (r.status !== sf) return false; }
     if (yf !== 'all' && String(r.fiscalYear) !== yf) return false;
+    if (ef !== 'all') { const e = r.elegivel === true ? 'sim' : r.elegivel === false ? 'nao' : 'na'; if (e !== ef) return false; }
     return true;
   });
 
@@ -149,7 +151,8 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
               { value: 'aguardando_assinatura', label: 'Aguardando assinatura' }, { value: 'vencido', label: 'Vencido (renovar)' }, { value: 'rascunho', label: 'Rascunho' },
             ]} />
             {years.length > 1 && <Select value={yf} onChange={setYf} options={[{ value: 'all', label: 'Todos os anos' }, ...years.map((y) => ({ value: String(y), label: `Ano fiscal ${y}` }))]} />}
-            {(q || tf !== 'all' || sf !== 'all' || yf !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setTf('all'); setSf('all'); setYf('all'); }}>Limpar</Btn>}
+            <Select value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'sim', label: 'Elegível' }, { value: 'nao', label: 'Inelegível' }]} />
+            {(q || tf !== 'all' || sf !== 'all' || yf !== 'all' || ef !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setTf('all'); setSf('all'); setYf('all'); setEf('all'); }}>Limpar</Btn>}
             <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {records.length}</span>
           </div>
           {!filtered.length ? (
@@ -162,6 +165,7 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
                   <th scope="col" className="px-4 py-2.5 font-semibold">Tipo</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ / CPF</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Conformidade</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Elegível</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Status</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Ano fiscal</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
@@ -173,6 +177,7 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
                       <td className="px-4 py-2.5"><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{r.type}</span></td>
                       <td className="px-4 py-2.5 font-mono whitespace-nowrap">{r.documentoFmt}</td>
                       <td className="px-4 py-2.5">{r.verdict ? <Chip tone={VERDICT[r.verdict]?.tone} icon={VERDICT[r.verdict]?.icon} size="sm">{VERDICT[r.verdict]?.label}</Chip> : '—'}</td>
+                      <td className="px-4 py-2.5">{r.elegivel === true ? <Chip tone="success" size="sm">Elegível</Chip> : r.elegivel === false ? <Chip tone="error" size="sm">Inelegível</Chip> : <span className="text-text-secondary">—</span>}</td>
                       <td className="px-4 py-2.5">
                         <Chip tone={r.status === 'assinado' && !r.valida ? 'warning' : STATUS_TONE[r.status]} size="sm">
                           {r.status === 'assinado' && !r.valida ? 'Vencido' : KYC_STATUS_LABEL[r.status]}
@@ -312,6 +317,21 @@ function DetailView({ current, busy, apiFetch, addToast, reload }: { current: an
         </div>
       </Card>
 
+      {r.elegibilidade && (
+        <Card className={cn('p-5 border-2', r.elegibilidade.elegivel ? 'border-success/40' : 'border-error/40')}>
+          <div className="flex items-center gap-2 mb-1.5">
+            {r.elegibilidade.elegivel ? <ShieldCheck size={16} className="text-success" /> : <ShieldAlert size={16} className="text-error" />}
+            <span className="text-[14px] font-bold">{r.elegibilidade.elegivel ? 'Elegível' : 'Inelegível'}</span>
+          </div>
+          <p className="text-[11px] text-text-secondary mb-2">Critério: não constar em listas de restrição + respostas adequadas (risco = "Não") + obrigações de impostos/previdência cumpridas.</p>
+          {!r.elegibilidade.elegivel && (
+            <ul className="text-[12px] text-error list-disc pl-5 space-y-0.5">
+              {r.elegibilidade.motivos.map((m: string, i: number) => <li key={i}>{m}</li>)}
+            </ul>
+          )}
+        </Card>
+      )}
+
       <Card className="p-5">
         <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3">Trilha de conformidade (verificada por APIs)</div>
         <div className="space-y-2">
@@ -391,7 +411,8 @@ function AjudaKyc() {
   const blocks = [
     { t: 'O que é o KYS e o KYG', d: 'O KYS (Know Your Supplier) é a ficha de conformidade de fornecedores e prestadores de serviço (pessoa jurídica). O KYG (Know Your Grantee) é a declaração de conformidade de organizações sem fins lucrativos e lideranças pessoas físicas que recebem doação com encargos. Ambos coletam dados cadastrais verificados e exigem assinatura eletrônica do representante legal.' },
     { t: 'Como o fornecedor preenche', d: 'O preenchimento é feito numa página pública, em formato de wizard, sem necessidade de login. Compartilhe os links genéricos /kys e /kyg, ou gere um convite rastreável (aba Convites) com o CNPJ e você como solicitante já preenchidos. Apenas o representante legal ou pessoa autorizada deve preencher e assinar.' },
-    { t: 'Verificação em tempo real', d: 'Ao informar o CNPJ, os dados são buscados na Receita Federal (razão social, endereço, situação cadastral). O CEP preenche o endereço; a lista de bancos vem da BrasilAPI; CPF e CNPJ são validados pelos dígitos verificadores. No envio, roda a régua de conformidade (CEIS, CNEP, CEPIM e Acordos de Leniência do Portal da Transparência), registrando uma trilha auditável.' },
+    { t: 'Verificação em tempo real', d: 'Ao informar o CNPJ, os dados são buscados na Receita Federal (razão social, endereço, situação cadastral) e o endereço é complementado por uma API de CEP quando a Receita não traz o logradouro (comum em MEIs). O CEP também preenche o endereço; a lista de bancos vem da BrasilAPI; CPF e CNPJ são validados pelos dígitos verificadores. No envio, roda a régua de conformidade (CEIS, CNEP, CEPIM e Acordos de Leniência do Portal da Transparência), registrando uma trilha auditável.' },
+    { t: 'Elegibilidade', d: 'A ferramenta calcula automaticamente se o fornecedor/organização/liderança é ELEGÍVEL. Só é elegível quem: (1) NÃO consta em listas de restrição e tem cadastro ATIVO na Receita; (2) respondeu adequadamente às perguntas de risco (todas "Não"); e (3) cumpriu as obrigações de impostos/previdência. Quem não atende aparece como "Inelegível", com os motivos. Há filtro de elegibilidade na lista e o status fica visível no detalhe.' },
     { t: 'Assinatura via Documenso', d: 'Após a revisão, o documento é criado no Documenso (documenso.casahacker.org) e assinado num modal embutido — a pessoa não sai da página. O solicitante da Casa Hacker (se informado) recebe uma cópia do documento assinado. A assinatura tem validade jurídica (MP 2.200-2/2001 e Lei 14.063/2020).' },
     { t: 'Validade e renovação', d: 'Cada conformidade vale por ano fiscal (ano civil). Registros assinados em anos anteriores aparecem como "Vencido" e devem ser renovados com um novo preenchimento.' },
     { t: 'Painel e filtros', d: 'Esta tela lista todas as conformidades com filtros por fornecedor/CNPJ, tipo (KYS/KYG), status (assinado, aguardando, vencido, rascunho) e ano fiscal. Abra um registro para ver a trilha de conformidade, as respostas e baixar o PDF assinado.' },

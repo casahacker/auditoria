@@ -15,7 +15,7 @@ A ferramenta **Conformidade KYS / KYG** coleta e verifica os dados cadastrais de
 O preenchimento é feito **sem login**, num **wizard** passo a passo, **pelo representante legal ou pessoa autorizada** (há uma atestação obrigatória no início).
 
 1. **Compartilhe o link.** Use os links genéricos `/kys` e `/kyg`, ou gere um **convite rastreável** na aba *Convites* do painel (pré-preenche o tipo, o CNPJ e você como solicitante).
-2. **Identificação.** Ao informar o **CNPJ**, os dados são buscados na **Receita Federal** (razão social, nome fantasia, endereço, situação cadastral). O **CEP** preenche o endereço; a lista de **bancos** vem da BrasilAPI. **CPF** e **CNPJ** são validados pelos dígitos verificadores em tempo real.
+2. **Identificação.** Ao informar o **CNPJ**, os dados são buscados na **Receita Federal** (razão social, nome fantasia, endereço, situação cadastral). Quando a Receita não traz o logradouro (comum em MEIs/Empresários Individuais), o endereço é **complementado por uma API de CEP** (BrasilAPI). O **CEP** também preenche o endereço; a lista de **bancos** vem da BrasilAPI. **CPF** e **CNPJ** são validados pelos dígitos verificadores em tempo real.
 3. **Perguntas/declarações.** No KYS, cada pergunta Sim/Não abre um campo de **observação** quando exigido. No KYG, marque o aceite das 8 declarações.
 4. **Solicitante (opcional).** Informe o **nome e e-mail da pessoa da Casa Hacker** que pediu o preenchimento — ela receberá uma **cópia** do documento assinado.
 5. **Revisão e régua de conformidade.** Antes de assinar, roda-se a **régua de check** (CEIS, CNEP, CEPIM e Acordos de Leniência do Portal da Transparência), registrando uma **trilha auditável**.
@@ -32,6 +32,16 @@ A aba **Conformidades** lista tudo o que foi preenchido, com filtros por **forne
 - o **PDF assinado** (download direto do Documenso).
 
 A aba **Convites** gera e lista os links rastreáveis.
+
+## Elegibilidade
+
+A ferramenta classifica automaticamente cada conformidade como **Elegível** ou **Inelegível**. É **elegível** quem atende a TODOS os critérios:
+
+1. **Não consta** em listas de restrição (CEIS/CNEP/CEPIM/Leniência) e tem **cadastro ATIVO** na Receita (veredito "Nada consta").
+2. **Respostas adequadas** — todas as perguntas de risco respondidas como **"Não"** (PEP, conflito de interesse, condenações/investigações, escravidão, sanções, etc.).
+3. **Impostos/previdência cumpridos** — a pergunta de obrigações previdenciárias respondida como **"Sim"** (cumpriu).
+
+Inelegíveis aparecem com os **motivos** no detalhe; a lista tem **filtro por elegibilidade**. No KYG, as 8 declarações são obrigatórias para enviar, então a elegibilidade depende essencialmente de **não constar em restrições**.
 
 ## Validade e renovação
 

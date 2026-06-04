@@ -91,7 +91,7 @@ async function limitedFetch(url: string, init: RequestInit, retries = 2): Promis
 
 // ── external lookups ──────────────────────────────────────────────────────────
 
-export async function fetchReceita(cnpj: string): Promise<any> {
+async function fetchReceitaRaw(cnpj: string): Promise<any> {
   try {
     const r = await limitedFetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
     if (r.ok) {
@@ -128,6 +128,36 @@ export async function fetchReceita(cnpj: string): Promise<any> {
     }
   } catch { /* */ }
   return null;
+}
+
+/**
+ * Enriquece o endereço vindo da Receita com a API de CEP (BrasilAPI) quando faltar o
+ * logradouro/bairro — comum em MEIs/Empresários Individuais, cujo cadastro traz só CEP
+ * e bairro. Complementar e tolerante a falha (não derruba a consulta).
+ */
+async function enrichCep(o: any): Promise<void> {
+  try {
+    const cep = onlyDigits(o?.cep);
+    if (cep.length !== 8) return;
+    if (o.logradouro && o.bairro) return; // endereço já completo
+    const r = await limitedFetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return;
+    const c: any = await r.json();
+    if (!o.logradouro && c.street) o.logradouro = c.street;
+    if (!o.bairro && c.neighborhood) o.bairro = c.neighborhood;
+    if (!o.municipio && c.city) o.municipio = c.city;
+    if (!o.uf && c.state) o.uf = c.state;
+    o.cepFonte = "BrasilAPI (CEP)";
+    o.cepApiUrl = `https://brasilapi.com.br/api/cep/v2/${cep}`;
+    o.cepFetchedAt = new Date().toISOString();
+  } catch { /* CEP é complementar */ }
+}
+
+/** Receita Federal (BrasilAPI → ReceitaWS) + enriquecimento de endereço por CEP. */
+export async function fetchReceita(cnpj: string): Promise<any> {
+  const out = await fetchReceitaRaw(cnpj);
+  if (out) await enrichCep(out);
+  return out;
 }
 
 function recordMatchesCnpj(x: any, cnpjDigits: string): boolean {
@@ -230,6 +260,7 @@ export function buildReportHtml(rec: any): string {
 
   const consultas = [
     `<div class="row"><span class="k">${esc(rf.fonte || "Receita Federal")}</span><span class="v">${rf.fetchedAt ? dt(rf.fetchedAt) : "—"} · <a href="${esc(rf.apiUrl || "#")}">${esc(rf.apiUrl || "")}</a></span></div>`,
+    ...(rf.cepFonte ? [`<div class="row"><span class="k">${esc(rf.cepFonte)}</span><span class="v">${rf.cepFetchedAt ? dt(rf.cepFetchedAt) : "—"} · <a href="${esc(rf.cepApiUrl || "#")}">${esc(rf.cepApiUrl || "")}</a></span></div>`] : []),
     ...(rec.sancoes || []).map((s: any) =>
       `<div class="row"><span class="k">${esc(s.fonte)}</span><span class="v ${s.status === "CONSTA" ? "bad" : s.status === "NADA_CONSTA" ? "ok" : ""}">${esc(SLABEL[s.status] || s.status)}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""} · ${dt(s.fetchedAt)} · <a href="${esc(s.apiUrl || "#")}">consulta</a></span></div>`),
   ].join("");
@@ -332,6 +363,7 @@ export function buildReportTxt(rec: any): string {
   L.push(`  Solicitante....: ${rec.checkedBy || "-"}`);
   L.push(`  IP de origem...: ${rec.ip || "-"}`);
   L.push(`  Fonte cadastral: ${rf.fonte || "-"} | ${rf.apiUrl || "-"} | ${rf.fetchedAt ? dt(rf.fetchedAt) : "-"}`);
+  if (rf.cepFonte) L.push(`  Endereço (CEP).: ${rf.cepFonte} | ${rf.cepApiUrl || "-"} | ${rf.cepFetchedAt ? dt(rf.cepFetchedAt) : "-"}`);
   for (const s of rec.sancoes || []) L.push(`  ${s.fonte}: ${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? " (" + s.hits.length + ")" : ""} | ${s.apiUrl || ""} | ${dt(s.fetchedAt)}`);
   L.push("");
   L.push("RECEITA FEDERAL — CADASTRO");

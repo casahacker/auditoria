@@ -500,6 +500,7 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
         <div className="mt-3 pt-3 border-t border-line space-y-1">
           <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Fontes consultadas</div>
           {rf.fonte && <div className="text-[11px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.fonte}:</span> <span>{rf.fetchedAt ? new Date(rf.fetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.apiUrl && <a href={rf.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.apiUrl}</a>}</div>}
+          {rf.cepFonte && <div className="text-[11px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.cepFonte}:</span> <span>{rf.cepFetchedAt ? new Date(rf.cepFetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.cepApiUrl && <a href={rf.cepApiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.cepApiUrl}</a>}</div>}
           {(r.sancoes || []).map((s: any, i: number) => (
             <div key={i} className="text-[11px] flex flex-wrap gap-x-2">
               <span className="text-text-secondary">{s.fonte}:</span>
