@@ -587,10 +587,14 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   let processing: string | null = null;
   let running = false;
   const counters = { done: 0, failed: 0, enqueuedTotal: 0, lastError: "", lastSweep: "" };
+  const forceSet = new Set<string>(); // CNPJs a reconsultar IGNORANDO o cache (force=true)
 
-  function enqueue(cnpj: string): boolean {
+  // force=true: enfileira mesmo com registro válido (reconsulta forçada — ex.: novas listas adicionadas)
+  function enqueue(cnpj: string, force = false): boolean {
     const d = onlyDigits(cnpj);
-    if (d.length !== 14 || queued.has(d) || processing === d || hasValidRec(d)) return false;
+    if (d.length !== 14 || queued.has(d) || processing === d) return false;
+    if (!force && hasValidRec(d)) return false;
+    if (force) forceSet.add(d);
     queue.push(d); queued.add(d); counters.enqueuedTotal++;
     return true;
   }
@@ -602,7 +606,8 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
       while (queue.length) {
         const cnpj = queue.shift() as string;
         queued.delete(cnpj); processing = cnpj;
-        try { await runDiligence(DATA_DIR, cnpj, { checkedBy: "automático (sistema)", ip: "sistema", force: false }); counters.done++; }
+        const force = forceSet.delete(cnpj);
+        try { await runDiligence(DATA_DIR, cnpj, { checkedBy: force ? "reconsulta forçada (sistema)" : "automático (sistema)", ip: "sistema", force }); counters.done++; }
         catch (e: any) { counters.failed++; counters.lastError = e?.message || String(e); console.warn("[Diligência] auto falhou", cnpj, e?.message || e); }
         finally { processing = null; }
       }
@@ -632,6 +637,16 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   app.post("/api/diligencia/run-all", requireAuth, (_req, res) => {
     const queuedNow = sweep();
     res.json({ queued: queuedNow, pending: queue.length, processing, running });
+  });
+
+  // reconsulta FORÇADA de toda a base (ignora o cache de 30d) — p/ aplicar listas novas sem esperar vencer
+  app.post("/api/diligencia/run-all-force", requireAuth, (_req, res) => {
+    let added = 0;
+    try { for (const s of collectSuppliers(DATA_DIR)) if (enqueue(s.cnpj, true)) added++; }
+    catch (e: any) { console.warn("[Diligência] run-all-force falhou", e?.message || e); }
+    counters.lastSweep = new Date().toISOString();
+    if (queue.length) void worker();
+    res.json({ queued: added, forced: forceSet.size, pending: queue.length, processing, running });
   });
 
   // progresso da fila automática/manual
