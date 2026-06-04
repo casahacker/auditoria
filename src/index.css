@@ -83,8 +83,11 @@
   --color-warning: #f1c21b;
 }
 
-/* ── High contrast (WCAG AA) — overrides dark mode ──────────────────────────── */
-.high-contrast {
+/* ── High contrast (WCAG AA) — overrides dark mode ────────────────────────────
+   `.ch-a11y-high-contrast` é a classe que a barra de acessibilidade vendorizada
+   aplica em <html>; reaproveita os MESMOS tokens (não o #000 genérico da barra). */
+.high-contrast,
+.ch-a11y-high-contrast {
   --color-bg: #000000 !important;
   --color-card: #000000 !important;
   --color-sidebar: #000000 !important;
@@ -100,12 +103,16 @@
   --color-surface: #000000 !important;
   --color-surface-hover: #1a1a1a !important;
 }
-.high-contrast * {
+.high-contrast *,
+.ch-a11y-high-contrast * {
   outline-color: #ffff00 !important;
 }
 .high-contrast a:focus,
 .high-contrast button:focus,
-.high-contrast [tabindex]:focus {
+.high-contrast [tabindex]:focus,
+.ch-a11y-high-contrast a:focus,
+.ch-a11y-high-contrast button:focus,
+.ch-a11y-high-contrast [tabindex]:focus {
   outline: 3px solid #ffff00 !important;
   outline-offset: 2px !important;
 }

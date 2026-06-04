@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { AccessibilityBar } from './a11y/AccessibilityBar';
 import {
   PlusCircle,
   Loader2,
@@ -27,10 +28,6 @@ import {
   NotebookPen,
   CheckCircle2,
   Info,
-  Accessibility,
-  Sun,
-  Moon,
-  Contrast,
   Printer,
   Share2,
   Flag,
@@ -408,36 +405,7 @@ export default function App() {
   const [shareCodeError, setShareCodeError] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
 
-  // ── UX-07: Accessibility bar state ───────────────────────────────────────────
-  type A11yTheme = 'light' | 'dark';
-  type A11yFontSize = 'small' | 'normal' | 'large';
-const [a11yTheme, setA11yTheme] = useState<A11yTheme>(() => {
-    const saved = localStorage.getItem('a11y-theme') as A11yTheme | null;
-    if (saved) return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
-  const [a11yHighContrast, setA11yHighContrast] = useState<boolean>(() => localStorage.getItem('a11y-contrast') === 'high');
-  const [a11yFontSize, setA11yFontSize] = useState<A11yFontSize>(() => (localStorage.getItem('a11y-font-size') as A11yFontSize) || 'normal');
-
-  // Apply a11y preferences to <html> element
-  useEffect(() => {
-    const html = document.documentElement;
-    // Theme (high contrast overrides dark)
-    if (a11yHighContrast) {
-      html.removeAttribute('data-theme');
-      html.classList.add('high-contrast');
-    } else {
-      html.classList.remove('high-contrast');
-      html.setAttribute('data-theme', a11yTheme);
-    }
-    // Font size
-    html.classList.remove('font-small', 'font-normal', 'font-large');
-    html.classList.add(`font-${a11yFontSize}`);
-    // Persist
-    localStorage.setItem('a11y-theme', a11yTheme);
-    localStorage.setItem('a11y-contrast', a11yHighContrast ? 'high' : 'normal');
-    localStorage.setItem('a11y-font-size', a11yFontSize);
-  }, [a11yTheme, a11yHighContrast, a11yFontSize]);
+  // Barra de acessibilidade: state/efeitos agora vivem no componente <AccessibilityBar/> (src/a11y/).
 
   // ── Reauditoria seletiva (#26) ────────────────────────────────────────────────
   const [reauditLoading, setReauditLoading] = useState(false);
@@ -1791,65 +1759,8 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
   return (
     <>
-    {/* ── UX-07: Accessibility bar — fixed top strip ───────────────────────── */}
-    <div
-      role="toolbar"
-      aria-orientation="horizontal"
-      aria-label="Barra de acessibilidade"
-      className="fixed top-0 left-0 right-0 h-8 z-[110] flex items-center px-4 gap-4 bg-[#21272a] text-white border-b border-white/10 text-[12px] select-none"
-    >
-      <span className="flex items-center gap-1.5 font-semibold text-white/60 shrink-0">
-        <Accessibility size={12} />
-        Acessibilidade
-      </span>
-      <span className="w-px h-4 bg-white/20 shrink-0" />
-      {/* Theme */}
-      <div role="group" aria-label="Tema" className="flex items-center gap-4 shrink-0">
-      <span className="text-white/40 shrink-0">Tema</span>
-      <button
-        onClick={() => { setA11yHighContrast(false); setA11yTheme('light'); }}
-        className={cn('flex items-center gap-1 px-2 py-0.5 rounded transition-all', !a11yHighContrast && a11yTheme === 'light' ? 'bg-primary text-white' : 'text-white/60 hover:text-white hover:bg-white/10')}
-        aria-pressed={!a11yHighContrast && a11yTheme === 'light'}
-        aria-label="Tema claro"
-      >
-        <Sun size={11} /> Claro
-      </button>
-      <button
-        onClick={() => { setA11yHighContrast(false); setA11yTheme('dark'); }}
-        className={cn('flex items-center gap-1 px-2 py-0.5 rounded transition-all', !a11yHighContrast && a11yTheme === 'dark' ? 'bg-primary text-white' : 'text-white/60 hover:text-white hover:bg-white/10')}
-        aria-pressed={!a11yHighContrast && a11yTheme === 'dark'}
-        aria-label="Tema escuro"
-      >
-        <Moon size={11} /> Escuro
-      </button>
-      </div>
-      <span className="w-px h-4 bg-white/20 shrink-0" />
-      {/* High contrast */}
-      <button
-        onClick={() => setA11yHighContrast(p => !p)}
-        className={cn('flex items-center gap-1 px-2 py-0.5 rounded transition-all', a11yHighContrast ? 'bg-primary text-white' : 'text-white/60 hover:text-white hover:bg-white/10')}
-        aria-pressed={a11yHighContrast}
-        aria-label="Alto contraste WCAG AA"
-      >
-        <Contrast size={11} /> Alto Contraste
-      </button>
-      <span className="w-px h-4 bg-white/20 shrink-0" />
-      {/* Font size */}
-      <div role="group" aria-label="Tamanho da fonte" className="flex items-center gap-4 shrink-0">
-      <span className="text-white/40 shrink-0">Fonte</span>
-      {([['small', 'A−'], ['normal', 'A'], ['large', 'A+']] as const).map(([size, label]) => (
-        <button
-          key={size}
-          onClick={() => setA11yFontSize(size)}
-          className={cn('px-2 py-0.5 rounded font-semibold transition-all', a11yFontSize === size ? 'bg-primary text-white' : 'text-white/60 hover:text-white hover:bg-white/10', size === 'small' ? 'text-[12px]' : size === 'large' ? 'text-[14px]' : 'text-[12px]')}
-          aria-pressed={a11yFontSize === size}
-          aria-label={`Fonte ${size === 'small' ? 'pequena' : size === 'normal' ? 'normal' : 'grande'}`}
-        >
-          {label}
-        </button>
-      ))}
-      </div>
-    </div>
+    {/* Barra de acessibilidade vendorizada (casahacker/barra-acessibilidade, sem VLibras) */}
+    <AccessibilityBar />
 
     {activeTool === 'launcher' && (
       <LauncherView user={user} onPick={setActiveTool} />

@@ -1,0 +1,243 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   Casa Hacker — Barra de Acessibilidade (vendorizada de casahacker/barra-acessibilidade)
+   Prefixo .ch-a11y-* (BEM). Sem dependência de framework.
+
+   ADAPTAÇÃO Auditoria: o bloco genérico `.ch-a11y-high-contrast` (fundo #000 com
+   !important) foi REMOVIDO — o alto contraste reaproveita os tokens Carbon de
+   high-contrast já definidos em index.css (seletor `.high-contrast, .ch-a11y-high-contrast`).
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.ch-a11y-bar,
+.ch-a11y-bar * {
+  box-sizing: border-box;
+}
+
+/* ── Container fixo ─────────────────────────────────────────────────────── */
+.ch-a11y-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 2147483600;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  background: #21272a;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  line-height: 1.2;
+  user-select: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* Grupos (Tema / Fonte) — flex inline para manter o layout horizontal. */
+.ch-a11y-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.ch-a11y-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+
+.ch-a11y-section-label {
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  flex-shrink: 0;
+  display: none;
+}
+@media (min-width: 640px) {
+  .ch-a11y-section-label {
+    display: inline;
+  }
+}
+
+.ch-a11y-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+/* ── Botão ──────────────────────────────────────────────────────────────── */
+.ch-a11y-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ch-a11y-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+.ch-a11y-btn:focus-visible {
+  outline: 2px solid #0f62fe;
+  outline-offset: 2px;
+}
+.ch-a11y-btn--active {
+  background: #0f62fe;
+  color: #fff;
+  font-weight: 600;
+}
+.ch-a11y-btn--active:hover {
+  background: #0353e9;
+  color: #fff;
+}
+
+/* Tamanhos de fonte (A−/A/A+) */
+.ch-a11y-btn--font-small {
+  font-size: 10px;
+  font-weight: 700;
+}
+.ch-a11y-btn--font-normal {
+  font-size: 11px;
+  font-weight: 700;
+}
+.ch-a11y-btn--font-large {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Label do botão: esconde em telas estreitas */
+.ch-a11y-btn__label {
+  display: none;
+}
+@media (min-width: 1280px) {
+  .ch-a11y-btn__label {
+    display: inline;
+  }
+}
+.ch-a11y-btn__label--md {
+  display: none;
+}
+@media (min-width: 768px) {
+  .ch-a11y-btn__label--md {
+    display: inline;
+  }
+}
+
+/* ── Régua de leitura ───────────────────────────────────────────────────── */
+.ch-a11y-ruler {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(244, 161, 0, 0.8);
+  pointer-events: none;
+  z-index: 2147483500;
+  box-shadow: 0 0 8px rgba(244, 161, 0, 0.5);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Classes aplicadas em <html> pelo hook — features de acessibilidade.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* 1. Dislexia — Atkinson Hyperlegible */
+.ch-a11y-dyslexia,
+.ch-a11y-dyslexia body,
+.ch-a11y-dyslexia button,
+.ch-a11y-dyslexia input,
+.ch-a11y-dyslexia textarea,
+.ch-a11y-dyslexia select,
+.ch-a11y-dyslexia *:not(.font-mono):not(code):not(kbd):not(pre):not([class*="font-mono"]) {
+  font-family: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif !important;
+  letter-spacing: 0.02em;
+  word-spacing: 0.05em;
+}
+
+/* 2. Cursor ampliado — SVG inline 32x32 */
+.ch-a11y-big-cursor,
+.ch-a11y-big-cursor * {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path d='M4 4 L4 24 L10 18 L14 28 L18 26 L14 16 L22 16 Z' fill='%23000' stroke='%23fff' stroke-width='2'/></svg>") 4 4, auto !important;
+}
+.ch-a11y-big-cursor a,
+.ch-a11y-big-cursor button,
+.ch-a11y-big-cursor [role="button"] {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path d='M14 4 L14 18 L8 16 L8 22 L14 24 L18 28 L22 28 L18 22 L26 22 L20 18 L20 4 Z' fill='%23000' stroke='%23fff' stroke-width='2'/></svg>") 16 4, pointer !important;
+}
+
+/* 3. Modo Foco — escurece áreas auxiliares */
+.ch-a11y-focus-mode body {
+  background: #000 !important;
+}
+.ch-a11y-focus-mode header,
+.ch-a11y-focus-mode aside,
+.ch-a11y-focus-mode footer,
+.ch-a11y-focus-mode nav {
+  opacity: 0.25;
+  transition: opacity 0.2s;
+}
+.ch-a11y-focus-mode header:hover,
+.ch-a11y-focus-mode aside:hover,
+.ch-a11y-focus-mode footer:hover,
+.ch-a11y-focus-mode nav:hover {
+  opacity: 1;
+}
+/* a própria barra de acessibilidade nunca é escurecida pelo modo foco */
+.ch-a11y-focus-mode .ch-a11y-bar {
+  opacity: 1 !important;
+}
+
+/* 4. Sem animação */
+.ch-a11y-no-motion,
+.ch-a11y-no-motion *,
+.ch-a11y-no-motion *::before,
+.ch-a11y-no-motion *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+/* 5. Foco realçado — outline laranja persistente */
+.ch-a11y-highlight-focus *:focus-visible,
+.ch-a11y-highlight-focus *:focus {
+  outline: 3px solid #f4a100 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 6px rgba(244, 161, 0, 0.3) !important;
+}
+
+/* 6. Alvos maiores — WCAG 2.5.8 (44x44). A própria barra fica de fora (densa por design). */
+.ch-a11y-bigger-targets a,
+.ch-a11y-bigger-targets button:not(.ch-a11y-btn),
+.ch-a11y-bigger-targets [role="button"],
+.ch-a11y-bigger-targets input[type="checkbox"],
+.ch-a11y-bigger-targets input[type="radio"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+.ch-a11y-bigger-targets a,
+.ch-a11y-bigger-targets button:not(.ch-a11y-btn) {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 7. Sublinhar links */
+.ch-a11y-underline-links a {
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+}
