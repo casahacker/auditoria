@@ -219,7 +219,7 @@ export async function consultaPT(recurso: string, label: string, razaoSocial: st
 
 // ── supplier base ─────────────────────────────────────────────────────────────
 
-function collectSuppliers(DATA_DIR: string): any[] {
+export function collectSuppliers(DATA_DIR: string): any[] {
   const map = new Map<string, any>();
   const add = (taxId: string, nome: string, origem: string) => {
     const d = onlyDigits(taxId);

@@ -112,7 +112,7 @@ export default function KycApp({ user, apiFetch, addToast, onHome, navigate }: K
   );
 }
 
-function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loading: boolean; openDetail: (id: string) => void }) {
+export function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loading: boolean; openDetail: (id: string) => void }) {
   const [q, setQ] = useState('');
   const [tf, setTf] = useState('all');
   const [sf, setSf] = useState('all');
@@ -197,7 +197,7 @@ function BaseView({ records, loading, openDetail }: { records: KycSummary[]; loa
   );
 }
 
-function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast'] }) {
+export function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast'] }) {
   const [invites, setInvites] = useState<(KycInvite & { url?: string })[]>([]);
   const [type, setType] = useState<KycType>('kys');
   const [cnpj, setCnpj] = useState('');
@@ -269,7 +269,7 @@ function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch'
 
 const TRAIL_TONE: Record<string, string> = { ok: 'text-success', alerta: 'text-error', erro: 'text-error', pendente: 'text-warning' };
 
-function DetailView({ current, busy, apiFetch, addToast, reload }: { current: any; busy: boolean; apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; reload: () => void }) {
+export function DetailView({ current, busy, apiFetch, addToast, reload }: { current: any; busy: boolean; apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; reload: () => void }) {
   const [showData, setShowData] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando…</div>;

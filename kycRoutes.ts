@@ -21,7 +21,7 @@ import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, collectSuppliers } from "./diligenciaRoutes";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
 } from "./src/kyc/kycTypes";
@@ -447,6 +447,33 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
   app.get("/api/kyc", requireAuth, (_req, res) => {
     const out = listRecs().map(toSummary).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     res.json(out);
+  });
+
+  // cockpit unificado: 1 linha por fornecedor (doc) com Diligência + KYS/KYG juntos
+  app.get("/api/fornecedores", requireAuth, (_req, res) => {
+    const DIL_DIR = path.join(DATA_DIR, "diligencia");
+    const readDil = (cnpj: string): any => { try { return JSON.parse(fs.readFileSync(path.join(DIL_DIR, `${cnpj}.json`), "utf-8")); } catch { return null; } };
+    const dilValid = (r: any) => !!(r && r.validUntil && new Date(r.validUntil).getTime() > Date.now());
+    const dilOf = (cnpj: string) => { const r = readDil(cnpj); return r ? { verdict: r.verdict, valida: dilValid(r), checkedAt: r.checkedAt } : null; };
+    // KYS/KYG mais recente por documento
+    const kycByDoc = new Map<string, KycRecord>();
+    for (const rec of listRecs()) {
+      const d = recDoc(rec); if (!d) continue;
+      const cur = kycByDoc.get(d);
+      if (!cur || String(rec.createdAt) > String(cur.createdAt)) kycByDoc.set(d, rec);
+    }
+    const rows = new Map<string, any>();
+    for (const s of collectSuppliers(DATA_DIR)) {
+      rows.set(s.cnpj, { doc: s.cnpj, docFmt: fmtCnpj(s.cnpj), nome: s.nome || "", origens: s.origens || [], diligencia: dilOf(s.cnpj), kyc: null });
+    }
+    for (const [d, rec] of kycByDoc) {
+      let row = rows.get(d);
+      if (!row) { row = { doc: d, docFmt: fmtCnpj(d), nome: recNome(rec) || "", origens: ["KYS/KYG"], diligencia: dilOf(d), kyc: null }; rows.set(d, row); }
+      else if (!row.origens.includes("KYS/KYG")) row.origens = [...row.origens, "KYS/KYG"];
+      if (!row.nome) row.nome = recNome(rec);
+      row.kyc = { id: rec.id, type: rec.type, status: rec.status, elegivel: rec.elegibilidade?.elegivel, fiscalYear: rec.fiscalYear, valida: rec.status === "assinado" && isFiscalValid(rec), signedAt: rec.signedAt };
+    }
+    res.json([...rows.values()].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")));
   });
 
   app.get("/api/kyc/invites", requireAuth, (_req, res) => {

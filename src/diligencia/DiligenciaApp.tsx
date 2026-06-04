@@ -463,7 +463,7 @@ const KVr = ({ k, v, cls }: { k: string; v: any; cls?: string }) => (
   <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{k}</span><span className={cn('font-medium break-words', cls)}>{v || '—'}</span></div>
 );
 
-function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
+export function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
   if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Consultando Receita Federal e listas de restrição…</div>;
   if (!current) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor ou informe um CNPJ.</div>;
   const r = current;

@@ -39,23 +39,22 @@ import {
   Layers,
   Keyboard,
   Clock,
-  BadgeCheck,
 } from 'lucide-react';
 import { cn, formatCurrency, truncateFileName } from './lib/utils';
 import Papa from 'papaparse';
 import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from './types';
 import { processAudit, reprocessItems } from './services/auditService';
 import FeacApp from './feac/FeacApp';
-import DiligenciaApp from './diligencia/DiligenciaApp';
-import KycApp from './kyc/KycApp';
+import FornecedoresApp from './fornecedores/FornecedoresApp';
 import { Btn, ToolSidebar, ToolHeader, SidebarItem, SkipLink } from './ui/kit';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' | 'documentacao';
 
 // ── Multi-tool suite: top-level tool selector (sits above the audit's Section) ──
-type Tool = 'launcher' | 'audit' | 'feac' | 'diligencia' | 'kyc';
-const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', diligencia: 'diligencia', kyc: 'conformidade' };
-const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', diligencia: 'diligencia', conformidade: 'kyc' };
+type Tool = 'launcher' | 'audit' | 'feac' | 'fornecedores';
+const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', fornecedores: 'fornecedores' };
+// /diligencia e /conformidade redirecionam (soft) para o cockpit unificado de Fornecedores.
+const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', fornecedores: 'fornecedores', diligencia: 'fornecedores', conformidade: 'fornecedores' };
 const AUDIT_PATH_SECTIONS = ['nova', 'processando', 'resultado', 'historico', 'pesquisa', 'documentacao'];
 const AUDIT_HEADERS: Record<Section, [string, string]> = {
   nova:         ['Configuração de', 'Nova Auditoria'],
@@ -327,7 +326,7 @@ export default function App() {
   // ── Multi-tool suite + URL routing (tool/section ↔ browser path) ────────────
   const [activeTool, setActiveTool] = useState<Tool>(() => SHARE_TOKEN ? 'launcher' : (PATH_TO_TOOL[pathSegs()[0]] || 'launcher'));
   const [feacInitialId] = useState(() => { const s = pathSegs(); return s[0] === 'feac' && s[1] && s[1] !== 'nova' ? s[1] : ''; });
-  const [diligInitialCnpj] = useState(() => { const s = pathSegs(); return s[0] === 'diligencia' ? (s[1] || '') : ''; });
+  const [fornInitialDoc] = useState(() => { const s = pathSegs(); return (s[0] === 'fornecedores' || s[0] === 'diligencia') ? (s[1] || '') : ''; });
   const routeFirst = useRef(true);
   const routePop = useRef(false);
   const navigate = useCallback((p: string) => { if (window.location.pathname !== p) window.history.pushState({}, '', p); }, []);
@@ -340,8 +339,7 @@ export default function App() {
     let p = '/';
     if (activeTool === 'audit') p = '/auditoria/' + activeSection;
     else if (activeTool === 'feac') p = '/feac';
-    else if (activeTool === 'diligencia') p = '/diligencia';
-    else if (activeTool === 'kyc') p = '/conformidade';
+    else if (activeTool === 'fornecedores') p = '/fornecedores';
     navigate(p);
   }, [activeTool, activeSection, navigate]);
   // back/forward
@@ -1852,12 +1850,8 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       <LauncherView user={user} onPick={setActiveTool} />
     )}
 
-    {activeTool === 'diligencia' && (
-      <DiligenciaApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialCnpj={diligInitialCnpj} />
-    )}
-
-    {activeTool === 'kyc' && (
-      <KycApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} />
+    {activeTool === 'fornecedores' && (
+      <FornecedoresApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialDoc={fornInitialDoc} />
     )}
 
     {activeTool === 'feac' && (
@@ -3635,19 +3629,11 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
       enabled: true,
     },
     {
-      id: 'diligencia',
-      title: 'Diligência de Fornecedores',
-      subtitle: 'CNPJ + listas de restrição',
-      description: 'Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS/CNEP/CEPIM/Leniência) com relatório auditável e validade de 30 dias.',
+      id: 'fornecedores',
+      title: 'Cockpit de Fornecedores',
+      subtitle: 'Diligência + KYS/KYG num só lugar',
+      description: 'Todos os fornecedores num cockpit: diligência (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) e conformidade KYS/KYG (cadastro verificado + assinatura via Documenso), com elegibilidade e gestão de assinaturas.',
       icon: Building2,
-      enabled: true,
-    },
-    {
-      id: 'kyc',
-      title: 'Conformidade KYS / KYG',
-      subtitle: 'Cadastro verificado + assinatura',
-      description: 'Ficha de conformidade preenchida pelo próprio fornecedor (KYS) ou organização/liderança (KYG) numa página pública, com verificação por APIs em tempo real e assinatura eletrônica via Documenso. Validade por ano fiscal.',
-      icon: BadgeCheck,
       enabled: true,
     },
   ];
