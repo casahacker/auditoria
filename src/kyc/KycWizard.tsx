@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ShieldCheck, Loader2, CheckCircle2, AlertTriangle, ChevronRight, ChevronLeft,
-  Building2, UserCheck, FileSignature, Info,
+  Building2, UserCheck, FileSignature, Info, Check,
 } from 'lucide-react';
 import {
   KycType, KysData, KygData, KycAddress, emptyAddress, emptyBank,
@@ -62,11 +62,37 @@ function Field({ label, value, onChange, placeholder, required, type = 'text', h
   );
 }
 
-function AddressFields({ addr, onChange, onCep }: { addr: KycAddress; onChange: (a: KycAddress) => void; onCep: (cep: string) => void }) {
+const ESTADO_CIVIL_OPCOES = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável', 'Separado(a)'];
+const isValidPhone = (s: string) => { const d = onlyDigits(s); return d.length === 10 || d.length === 11; };
+
+function SelectField({ label, value, onChange, options, required }: { label: string; value: string; onChange: (v: string) => void; options: string[]; required?: boolean }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{label}{required && <span className="text-error"> *</span>}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer">
+        <option value="">Selecione…</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function AddressFields({ addr, onChange, onCep }: { addr: KycAddress; onChange: (a: KycAddress) => void; onCep: (cep: string) => Promise<boolean> }) {
   const set = (k: keyof KycAddress) => (v: string) => onChange({ ...addr, [k]: v });
+  const [cepStatus, setCepStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
+  const onCepChange = async (v: string) => {
+    set('cep')(v);
+    const d = onlyDigits(v);
+    if (d.length !== 8) { setCepStatus('idle'); return; }
+    setCepStatus('loading');
+    setCepStatus((await onCep(v)) ? 'ok' : 'error');
+  };
   return (
     <div className="grid sm:grid-cols-6 gap-3">
-      <div className="sm:col-span-2"><Field label="CEP" value={addr.cep} onChange={(v) => { set('cep')(v); if (onlyDigits(v).length === 8) onCep(v); }} placeholder="00000-000" /></div>
+      <div className="sm:col-span-2"><Field label="CEP" value={addr.cep} onChange={onCepChange} placeholder="00000-000"
+        status={cepStatus === 'idle' ? undefined : cepStatus}
+        hint={cepStatus === 'error' ? <span className="text-error">CEP não encontrado</span> : cepStatus === 'ok' ? <span className="text-success">Endereço preenchido automaticamente</span> : 'Preenche o endereço automaticamente'} /></div>
       <div className="sm:col-span-4"><Field label="Logradouro" value={addr.logradouro} onChange={set('logradouro')} /></div>
       <div className="sm:col-span-1"><Field label="Número" value={addr.numero} onChange={set('numero')} /></div>
       <div className="sm:col-span-3"><Field label="Complemento" value={addr.complemento} onChange={set('complemento')} /></div>
@@ -77,23 +103,31 @@ function AddressFields({ addr, onChange, onCep }: { addr: KycAddress; onChange: 
   );
 }
 
-function YesNoField({ q, value, obs, onResp, onObs }: { q: { key: string; text: string; obsOn?: YesNo }; value: YesNo; obs: string; onResp: (v: YesNo) => void; onObs: (v: string) => void }) {
+function YesNoField({ n, q, value, obs, onResp, onObs }: { n: number; q: { key: string; text: string; obsOn?: YesNo }; value: YesNo; obs: string; onResp: (v: YesNo) => void; onObs: (v: string) => void }) {
   const showObs = value && value === kysObsTrigger(q);
   return (
-    <div className="border border-line rounded-lg p-3.5 bg-card">
-      <p className="text-[12.5px] text-text leading-relaxed mb-2.5">{q.text}</p>
-      <div className="flex gap-2">
-        {(['sim', 'nao'] as YesNo[]).map((opt) => (
-          <button key={opt} type="button" onClick={() => onResp(opt)}
-            className={`px-4 py-1.5 rounded text-[12px] font-bold uppercase tracking-wider border transition-colors ${value === opt ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary hover:text-primary'}`}>
-            {opt === 'sim' ? 'Sim' : 'Não'}
-          </button>
-        ))}
+    <div className={`rounded-lg border bg-card p-4 transition-colors ${value ? 'border-line' : 'border-line hover:border-primary/30'}`}>
+      <div className="flex gap-2.5">
+        <span className="shrink-0 w-5 h-5 rounded-full bg-surface-hover text-text-secondary text-[10px] font-bold flex items-center justify-center mt-0.5">{n}</span>
+        <p className="text-[12.5px] text-text leading-relaxed">{q.text}</p>
       </div>
-      {showObs && (
-        <textarea value={obs} onChange={(e) => onObs(e.target.value)} rows={2} placeholder="Observações (obrigatório) — informe os detalhes solicitados."
-          className="mt-2.5 w-full bg-bg border border-line rounded px-3 py-2 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
-      )}
+      <div className="mt-3 pl-7">
+        <div className="inline-flex rounded-md border border-line overflow-hidden">
+          {(['sim', 'nao'] as YesNo[]).map((opt) => (
+            <button key={opt} type="button" onClick={() => onResp(opt)} aria-pressed={value === opt}
+              className={`inline-flex items-center gap-1.5 px-5 py-1.5 text-[12px] font-bold uppercase tracking-wider transition-colors ${opt === 'sim' ? 'border-r border-line' : ''} ${value === opt ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+              {value === opt && <Check size={13} aria-hidden />}{opt === 'sim' ? 'Sim' : 'Não'}
+            </button>
+          ))}
+        </div>
+        {showObs && (
+          <div className="mt-3">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">Observações (obrigatório)</label>
+            <textarea value={obs} onChange={(e) => onObs(e.target.value)} rows={2} placeholder="Informe os detalhes solicitados na pergunta."
+              className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -143,16 +177,17 @@ export default function KycWizard() {
     } catch { setCnpjStatus('error'); }
   };
 
-  const lookupCep = async (cep: string, target: 'empresa' | 'rep' | 'kyg') => {
+  const lookupCep = async (cep: string, target: 'empresa' | 'rep' | 'kyg'): Promise<boolean> => {
     try {
       const r = await fetch(`/api/public/kyc/cep/${onlyDigits(cep)}`);
-      if (!r.ok) return;
+      if (!r.ok) return false;
       const a = await r.json();
       const patch = (prev: KycAddress): KycAddress => ({ ...prev, cep: a.cep || prev.cep, logradouro: a.logradouro || prev.logradouro, bairro: a.bairro || prev.bairro, municipio: a.municipio || prev.municipio, uf: a.uf || prev.uf });
       if (target === 'empresa') setKys((k) => ({ ...k, endereco: patch(k.endereco) }));
       else if (target === 'rep') setKys((k) => ({ ...k, repEndereco: patch(k.repEndereco) }));
       else setKyg((g) => ({ ...g, endereco: patch(g.endereco) }));
-    } catch { /* */ }
+      return true;
+    } catch { return false; }
   };
 
   const bankOptions = useMemo(() => banks.map((b) => ({ value: `${b.code} - ${b.name}`, label: `${b.code} — ${b.name}` })), [banks]);
@@ -258,7 +293,9 @@ export default function KycWizard() {
               <Field label="Nome fantasia" value={kys.nomeFantasia} onChange={(v) => setKys({ ...kys, nomeFantasia: v })} />
               <AddressFields addr={kys.endereco} onChange={(a) => setKys({ ...kys, endereco: a })} onCep={(c) => lookupCep(c, 'empresa')} />
               <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="Telefone (celular/fixo)" value={kys.telefone} onChange={(v) => setKys({ ...kys, telefone: v })} />
+                <Field label="Telefone (celular/fixo)" value={kys.telefone} onChange={(v) => setKys({ ...kys, telefone: v })} placeholder="(11) 90000-0000"
+                  status={kys.telefone ? (isValidPhone(kys.telefone) ? 'ok' : 'error') : undefined}
+                  hint={kys.telefone && !isValidPhone(kys.telefone) ? <span className="text-error">Telefone inválido — inclua o DDD</span> : undefined} />
                 <Field label="E-mail" type="email" value={kys.email} onChange={(v) => setKys({ ...kys, email: v })} />
               </div>
               <SectionTitle>Dados bancários</SectionTitle>
@@ -274,12 +311,14 @@ export default function KycWizard() {
                 <Field label="Nome completo" value={kys.repNome} required onChange={(v) => setKys({ ...kys, repNome: v })} />
                 <Field label="CPF" value={kys.repCpf} required onChange={(v) => setKys({ ...kys, repCpf: v })} placeholder="000.000.000-00"
                   status={kys.repCpf ? (isValidCpf(kys.repCpf) ? 'ok' : 'error') : undefined} hint={kys.repCpf && !isValidCpf(kys.repCpf) ? <span className="text-error">CPF inválido</span> : undefined} />
-                <Field label="Estado civil" value={kys.repEstadoCivil} onChange={(v) => setKys({ ...kys, repEstadoCivil: v })} />
+                <SelectField label="Estado civil" value={kys.repEstadoCivil} onChange={(v) => setKys({ ...kys, repEstadoCivil: v })} options={ESTADO_CIVIL_OPCOES} />
                 <Field label="Profissão" value={kys.repProfissao} onChange={(v) => setKys({ ...kys, repProfissao: v })} />
               </div>
               <AddressFields addr={kys.repEndereco} onChange={(a) => setKys({ ...kys, repEndereco: a })} onCep={(c) => lookupCep(c, 'rep')} />
               <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="Telefone (celular/fixo)" value={kys.repTelefone} onChange={(v) => setKys({ ...kys, repTelefone: v })} />
+                <Field label="Telefone (celular/fixo)" value={kys.repTelefone} onChange={(v) => setKys({ ...kys, repTelefone: v })} placeholder="(11) 90000-0000"
+                  status={kys.repTelefone ? (isValidPhone(kys.repTelefone) ? 'ok' : 'error') : undefined}
+                  hint={kys.repTelefone && !isValidPhone(kys.repTelefone) ? <span className="text-error">Telefone inválido — inclua o DDD (10 ou 11 dígitos)</span> : undefined} />
                 <Field label="E-mail (receberá o documento p/ assinar)" type="email" value={kys.repEmail} required onChange={(v) => setKys({ ...kys, repEmail: v })} />
               </div>
             </div>
@@ -291,8 +330,8 @@ export default function KycWizard() {
             return (
               <div className="space-y-3">
                 <SectionTitle>{sec.title}</SectionTitle>
-                {sec.questions.map((q) => (
-                  <YesNoField key={q.key} q={q} value={kys.respostas[q.key]?.resposta || ''} obs={kys.respostas[q.key]?.obs || ''}
+                {sec.questions.map((q, qi) => (
+                  <YesNoField key={q.key} n={qi + 1} q={q} value={kys.respostas[q.key]?.resposta || ''} obs={kys.respostas[q.key]?.obs || ''}
                     onResp={(v) => setKys({ ...kys, respostas: { ...kys.respostas, [q.key]: { ...kys.respostas[q.key], resposta: v } } })}
                     onObs={(v) => setKys({ ...kys, respostas: { ...kys.respostas, [q.key]: { ...kys.respostas[q.key], obs: v } } })} />
                 ))}
@@ -331,7 +370,9 @@ export default function KycWizard() {
               <Field label="Nome do projeto" value={kyg.projeto} required onChange={(v) => setKyg({ ...kyg, projeto: v })} />
               <AddressFields addr={kyg.endereco} onChange={(a) => setKyg({ ...kyg, endereco: a })} onCep={(c) => lookupCep(c, 'kyg')} />
               <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="Telefone" value={kyg.telefone} onChange={(v) => setKyg({ ...kyg, telefone: v })} />
+                <Field label="Telefone" value={kyg.telefone} onChange={(v) => setKyg({ ...kyg, telefone: v })} placeholder="(11) 90000-0000"
+                  status={kyg.telefone ? (isValidPhone(kyg.telefone) ? 'ok' : 'error') : undefined}
+                  hint={kyg.telefone && !isValidPhone(kyg.telefone) ? <span className="text-error">Telefone inválido — inclua o DDD</span> : undefined} />
                 <Field label="E-mail (receberá o documento p/ assinar)" type="email" value={kyg.email} required onChange={(v) => setKyg({ ...kyg, email: v })} />
               </div>
               <SectionTitle>Dados bancários (recebimento)</SectionTitle>
@@ -364,18 +405,32 @@ export default function KycWizard() {
 
           {/* Revisão e assinatura (último step) */}
           {step === lastStep && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <SectionTitle icon={FileSignature}>Revisão e assinatura</SectionTitle>
               <ReviewSummary type={type} kys={kys} kyg={kyg} requester={requester} />
-              <div className="bg-card border border-line rounded-lg p-4 text-[12px] text-text-secondary leading-relaxed">{ASSINATURA_ACEITE}</div>
+
               {type === 'kys' && (
-                <div className="space-y-2">
-                  {KYS_DECLARACOES.map((d, i) => <div key={i} className="text-[11.5px] text-text-secondary leading-relaxed">• {d}</div>)}
+                <div className="bg-card border border-line rounded-lg overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-line bg-surface-hover text-[11px] font-bold uppercase tracking-wider text-text-secondary">Declarações da empresa</div>
+                  <ul className="p-4 space-y-2.5 max-h-60 overflow-y-auto custom-scrollbar">
+                    {KYS_DECLARACOES.map((d, i) => (
+                      <li key={i} className="flex gap-2.5 text-[12px] text-text-secondary leading-relaxed">
+                        <CheckCircle2 size={15} className="text-primary shrink-0 mt-0.5" aria-hidden />
+                        <span>{d}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" checked={aceiteAssinatura} onChange={(e) => setAceiteAssinatura(e.target.checked)} className="mt-1 w-4 h-4 accent-[color:var(--color-primary)]" />
-                <span className="text-[13px] text-text">Li e concordo com as declarações e com o processo de <b>assinatura eletrônica</b>. As informações prestadas são verdadeiras.</span>
+
+              <div className="rounded-lg border border-line bg-surface-hover/40 p-4">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-text-secondary mb-1.5 flex items-center gap-1.5"><FileSignature size={13} className="text-primary" aria-hidden /> Assinatura eletrônica</div>
+                <p className="text-[11.5px] text-text-secondary leading-relaxed">{ASSINATURA_ACEITE}</p>
+              </div>
+
+              <label className={`flex items-start gap-3 cursor-pointer rounded-lg border p-4 transition-colors ${aceiteAssinatura ? 'border-primary bg-primary/5' : 'border-line hover:border-primary/50'}`}>
+                <input type="checkbox" checked={aceiteAssinatura} onChange={(e) => setAceiteAssinatura(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[color:var(--color-primary)]" />
+                <span className="text-[13px] text-text">Li e concordo com as declarações e com o processo de <b>assinatura eletrônica</b>, e confirmo que as informações prestadas são <b>verdadeiras</b>.</span>
               </label>
             </div>
           )}
