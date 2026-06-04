@@ -197,10 +197,10 @@ export function BaseView({ records, loading, openDetail }: { records: KycSummary
   );
 }
 
-export function ConvitesView({ apiFetch, addToast }: { apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast'] }) {
+export function ConvitesView({ apiFetch, addToast, initialCnpj }: { apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; initialCnpj?: string }) {
   const [invites, setInvites] = useState<(KycInvite & { url?: string })[]>([]);
   const [type, setType] = useState<KycType>('kys');
-  const [cnpj, setCnpj] = useState('');
+  const [cnpj, setCnpj] = useState(initialCnpj || '');
   const [creating, setCreating] = useState(false);
   const load = async () => { try { const r = await apiFetch('/api/kyc/invites'); if (r.ok) setInvites(await r.json()); } catch { /* */ } };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps

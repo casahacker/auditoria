@@ -2,26 +2,26 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Cockpit de Fornecedores (Tool C+D unificada).
+ * Cockpit de Fornecedores (Diligência + KYS/KYG unificados).
  *
- * Concentra, por fornecedor (CNPJ/CPF), a Diligência (Receita + listas de restrição) e
- * o KYS/KYG (cadastro verificado + assinatura) num só lugar. A diferença entre
- * fornecedores é apenas ter ou não KYS/KYG assinado. Reaproveita os componentes de
- * detalhe da Diligência (ResultadoView) e do KYS/KYG (DetailView) e a gestão de
- * convites — substituindo os dois cards antigos do lançador por um único cockpit.
+ * Uma só visão por fornecedor (CNPJ/CPF): situação de Diligência (Receita + listas de
+ * restrição) e de Conformidade KYS/KYG (cadastro verificado + assinatura) lado a lado.
+ * A diferença entre fornecedores é apenas ter ou não KYS/KYG assinado. Reaproveita os
+ * detalhes da Diligência (ResultadoView) e do KYS/KYG (DetailView) e os convites.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2, BookOpen, Link2, Loader2, Search, RefreshCw, ChevronRight, ChevronLeft,
-  ShieldCheck, ShieldAlert, AlertTriangle, Upload, FileUp, ClipboardList, BadgeCheck, History,
+  ShieldCheck, ShieldAlert, AlertTriangle, Upload, FileUp, History, BadgeCheck,
+  ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
 import { Btn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput, Modal } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
 import { ResultadoView } from '../diligencia/DiligenciaApp';
-import { BaseView as KycListView, ConvitesView, DetailView as KycDetailView } from '../kyc/KycApp';
-import { onlyDigits, maskDoc, KYC_TYPE_LABEL, KYC_STATUS_LABEL } from '../kyc/kycTypes';
+import { ConvitesView, DetailView as KycDetailView } from '../kyc/KycApp';
+import { onlyDigits, maskDoc, KYC_STATUS_LABEL } from '../kyc/kycTypes';
 import type { KycStatus } from '../kyc/kycTypes';
 
 export interface FornecedoresAppProps {
@@ -33,13 +33,11 @@ export interface FornecedoresAppProps {
   initialDoc?: string;
 }
 
-type Section = 'base' | 'kyc' | 'historico' | 'ajuda' | 'detalhe';
+type Section = 'base' | 'historico' | 'ajuda' | 'detalhe';
 const segs = () => window.location.pathname.split('/').filter(Boolean);
-const path = (s: Section, doc?: string) =>
-  s === 'detalhe' && doc ? `/fornecedores/${doc}` : s === 'base' ? '/fornecedores' : `/fornecedores/${s}`;
+const toPath = (s: Section, doc?: string) => s === 'detalhe' && doc ? `/fornecedores/${doc}` : s === 'base' ? '/fornecedores' : `/fornecedores/${s}`;
 const HEADERS: Record<Section, [string, string]> = {
-  base: ['Cockpit de', 'Fornecedores'], kyc: ['Gestão de', 'KYS / KYG'], historico: ['Histórico de', 'Diligências'],
-  ajuda: ['Como', 'usar'], detalhe: ['Ficha do', 'Fornecedor'],
+  base: ['Cockpit de', 'Fornecedores'], historico: ['Histórico de', 'Diligências'], ajuda: ['Como', 'usar'], detalhe: ['Ficha do', 'Fornecedor'],
 };
 
 const DIL: Record<string, { tone: ChipTone; icon: React.ElementType; label: string }> = {
@@ -47,71 +45,62 @@ const DIL: Record<string, { tone: ChipTone; icon: React.ElementType; label: stri
   ALERTA: { tone: 'error', icon: ShieldAlert, label: 'Alerta' },
   PENDENTE: { tone: 'warning', icon: AlertTriangle, label: 'Pendente' },
 };
-const kycStatusChip = (k: any) => {
+const dilChip = (d: any) => {
+  if (!d) return <span className="text-[10px] text-text-secondary">não consultada</span>;
+  const m = DIL[d.verdict];
+  return <span className="inline-flex items-center gap-1.5"><Chip tone={m?.tone} icon={m?.icon} size="sm">{m?.label || d.verdict}</Chip>{!d.valida && <span className="text-[10px] text-warning">vencida</span>}</span>;
+};
+const kycChip = (k: any) => {
   if (!k) return <span className="text-[10px] text-text-secondary">—</span>;
   const vencido = k.status === 'assinado' && !k.valida;
   const tone: ChipTone = vencido ? 'warning' : k.status === 'assinado' ? 'success' : k.status === 'aguardando_assinatura' ? 'warning' : 'neutral';
   return <Chip tone={tone} size="sm">{vencido ? 'Vencido' : KYC_STATUS_LABEL[k.status as KycStatus]}{k.type ? ` · ${String(k.type).toUpperCase()}` : ''}</Chip>;
 };
+const eligChip = (k: any) => k?.elegivel === true ? <Chip tone="success" size="sm">Elegível</Chip> : k?.elegivel === false ? <Chip tone="error" size="sm">Inelegível</Chip> : <span className="text-text-secondary">—</span>;
 
 export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navigate, initialDoc }: FornecedoresAppProps) {
   const [section, setSection] = useState<Section>('base');
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [kycRecords, setKycRecords] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [cnpjInput, setCnpjInput] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+  const [convites, setConvites] = useState<{ open: boolean; cnpj?: string }>({ open: false });
   // detalhe
-  const [dDoc, setDDoc] = useState('');
-  const [dDil, setDDil] = useState<any>(null);
-  const [dKyc, setDKyc] = useState<any>(null);
-  const [dBusy, setDBusy] = useState(false);
+  const [dDoc, setDDoc] = useState(''); const [dDil, setDDil] = useState<any>(null); const [dKyc, setDKyc] = useState<any>(null); const [dBusy, setDBusy] = useState(false);
 
   const loadRows = async () => { setLoading(true); try { const r = await apiFetch('/api/fornecedores'); if (r.ok) setRows(await r.json()); } catch { /* */ } finally { setLoading(false); } };
-  const loadKyc = async () => { try { const r = await apiFetch('/api/kyc'); if (r.ok) setKycRecords(await r.json()); } catch { /* */ } };
   const loadHistory = async () => { try { const r = await apiFetch('/api/diligencia'); if (r.ok) setHistory(await r.json()); } catch { /* */ } };
-  useEffect(() => { loadRows(); loadKyc(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadRows(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // progresso da fila de diligência automática
-  const [queue, setQueue] = useState<any>(null);
-  const lastDone = useRef(-1);
+  const [queue, setQueue] = useState<any>(null); const lastDone = useRef(-1);
   useEffect(() => {
     let alive = true; let t: ReturnType<typeof setTimeout>;
     const tick = async () => {
-      let q: any = null;
-      try { const r = await apiFetch('/api/diligencia/queue'); if (r.ok) q = await r.json(); } catch { /* */ }
-      if (!alive) return;
-      setQueue(q);
+      let q: any = null; try { const r = await apiFetch('/api/diligencia/queue'); if (r.ok) q = await r.json(); } catch { /* */ }
+      if (!alive) return; setQueue(q);
       if (q && q.done !== lastDone.current) { if (lastDone.current !== -1) loadRows(); lastDone.current = q.done; }
       t = setTimeout(tick, q && (q.running || q.pending > 0) ? 4000 : 30000);
     };
-    tick();
-    return () => { alive = false; clearTimeout(t); };
+    tick(); return () => { alive = false; clearTimeout(t); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openFornecedor = async (doc: string, kycId?: string) => {
     const d = onlyDigits(doc);
-    setSection('detalhe'); setDDoc(d); setDDil(null); setDKyc(null); setDBusy(true);
-    navigate?.(path('detalhe', d));
+    setSection('detalhe'); setDDoc(d); setDDil(null); setDKyc(null); setDBusy(true); navigate?.(toPath('detalhe', d));
     try {
-      const row = rows.find((r) => r.doc === d);
-      const kid = kycId || row?.kyc?.id;
+      const row = rows.find((r) => r.doc === d); const kid = kycId || row?.kyc?.id;
       const tasks: Promise<void>[] = [];
       if (d.length === 14) tasks.push(apiFetch(`/api/diligencia/${d}`).then(async (r) => { if (r.ok) setDDil(await r.json()); }).catch(() => {}));
       if (kid) tasks.push(apiFetch(`/api/kyc/${kid}`).then(async (r) => { if (r.ok) setDKyc(await r.json()); }).catch(() => {}));
       await Promise.all(tasks);
     } finally { setDBusy(false); }
   };
-  const openByKycId = async (id: string) => {
-    try { const r = await apiFetch(`/api/kyc/${id}`); if (!r.ok) return; const rec = await r.json(); const doc = onlyDigits(rec.kys?.cnpj || rec.kyg?.documento); openFornecedor(doc, id); }
-    catch { addToast('error', 'Falha ao abrir.'); }
-  };
 
   const runCheck = async (cnpj: string, force = false) => {
     const d = onlyDigits(cnpj);
     if (d.length !== 14) { addToast('error', 'Informe um CNPJ válido (14 dígitos).'); return; }
-    if (section !== 'detalhe') { setSection('detalhe'); setDDoc(d); setDDil(null); setDKyc(null); navigate?.(path('detalhe', d)); }
+    if (section !== 'detalhe') { setSection('detalhe'); setDDoc(d); setDDil(null); setDKyc(null); navigate?.(toPath('detalhe', d)); }
     setDBusy(true);
     try {
       const r = await apiFetch(`/api/diligencia/${d}/check${force ? '?force=1' : ''}`, { method: 'POST' });
@@ -121,12 +110,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
       loadRows();
     } catch (e: any) { addToast('error', e.message); } finally { setDBusy(false); }
   };
-
-  const runAll = async () => {
-    try { const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' }); const j = await r.json();
-      addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} fornecedor(es) na fila de diligência.` : 'Tudo em dia.');
-    } catch { addToast('error', 'Falha ao iniciar.'); }
-  };
+  const runAll = async () => { try { const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' }); const j = await r.json(); addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} na fila de diligência.` : 'Tudo em dia.'); } catch { addToast('error', 'Falha ao iniciar.'); } };
   const doImport = async (text: string): Promise<boolean> => {
     try { const r = await apiFetch('/api/diligencia/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
       const j = await r.json().catch(() => ({})); if (!r.ok) { addToast('error', j.error || 'Falha ao importar.'); return false; }
@@ -134,18 +118,17 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
     } catch { addToast('error', 'Falha ao importar.'); return false; }
   };
 
-  const goSection = (s: Section) => { setSection(s); if (s === 'historico') loadHistory(); if (s === 'kyc') loadKyc(); navigate?.(path(s)); };
+  const goSection = (s: Section) => { setSection(s); if (s === 'historico') loadHistory(); navigate?.(toPath(s)); };
   const applyPath = () => {
     const s = segs(); if (s[0] !== 'fornecedores') return; const a = s[1];
-    if (!a) setSection('base'); else if (a === 'kyc') { setSection('kyc'); loadKyc(); } else if (a === 'historico') { setSection('historico'); loadHistory(); }
-    else if (a === 'ajuda') setSection('ajuda'); else openFornecedor(a);
+    if (!a) setSection('base'); else if (a === 'historico') { setSection('historico'); loadHistory(); } else if (a === 'ajuda') setSection('ajuda');
+    else if (a === 'kyc' || a === 'convites') setSection('base'); else openFornecedor(a);
   };
   useEffect(() => { if (initialDoc) openFornecedor(initialDoc); else applyPath(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const onPop = () => applyPath(); window.addEventListener('popstate', onPop); return () => window.removeEventListener('popstate', onPop); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const navItems: { id: Section; label: string; icon: React.ElementType }[] = [
     { id: 'base', label: 'Fornecedores', icon: Building2 },
-    { id: 'kyc', label: 'KYS / KYG', icon: BadgeCheck },
     { id: 'historico', label: 'Histórico', icon: History },
     { id: 'ajuda', label: 'Como usar', icon: BookOpen },
   ];
@@ -156,7 +139,6 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
       <ToolSidebar brand="Fornecedores" onHome={onHome} user={user}>
         {navItems.map((it) => <SidebarItem key={it.id} icon={it.icon} active={section === it.id} onClick={() => goSection(it.id)}>{it.label}</SidebarItem>)}
       </ToolSidebar>
-
       <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader light={HEADERS[section][0]} accent={HEADERS[section][1]} right={
           <div className="flex items-center gap-2">
@@ -168,50 +150,109 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
             <Btn onClick={() => runCheck(cnpjInput)} disabled={dBusy}>Consultar</Btn>
           </div>
         } />
-
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
-          {section === 'base' && <CockpitBase rows={rows} loading={loading} openFornecedor={openFornecedor} queue={queue} runAll={runAll} onImport={() => setImportOpen(true)} />}
-          {section === 'kyc' && <KycSection records={kycRecords} apiFetch={apiFetch} addToast={addToast} openByKycId={openByKycId} reload={loadKyc} />}
+          {section === 'base' && <CockpitBase rows={rows} loading={loading} openFornecedor={openFornecedor} queue={queue} runAll={runAll}
+            onImport={() => setImportOpen(true)} onConvites={() => setConvites({ open: true })} />}
           {section === 'historico' && <HistoricoView history={history} openFornecedor={openFornecedor} />}
           {section === 'ajuda' && <AjudaFornecedores />}
-          {section === 'detalhe' && (
-            <FichaFornecedor doc={dDoc} dil={dDil} kyc={dKyc} busy={dBusy} apiFetch={apiFetch} addToast={addToast}
-              runCheck={runCheck} reloadKyc={() => dKyc && apiFetch(`/api/kyc/${dKyc.id}`).then((r) => r.ok && r.json().then(setDKyc))}
-              onBack={() => goSection('base')} onInvite={() => goSection('kyc')} />
-          )}
+          {section === 'detalhe' && <FichaFornecedor doc={dDoc} dil={dDil} kyc={dKyc} busy={dBusy} apiFetch={apiFetch} addToast={addToast}
+            runCheck={runCheck} reloadKyc={() => dKyc && apiFetch(`/api/kyc/${dKyc.id}`).then((r) => r.ok && r.json().then(setDKyc))}
+            onBack={() => goSection('base')} onInvite={() => setConvites({ open: true, cnpj: dDoc.length === 14 ? dDoc : undefined })} />}
         </div>
       </main>
       {importOpen && <ImportModal onClose={() => setImportOpen(false)} onSubmit={doImport} />}
+      {convites.open && (
+        <Modal title="Convites de KYS / KYG" onClose={() => setConvites({ open: false })} size="lg">
+          <div className="p-6"><ConvitesView apiFetch={apiFetch} addToast={addToast} initialCnpj={convites.cnpj} /></div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport }: any) {
-  const [q, setQ] = useState(''); const [df, setDf] = useState('all'); const [kf, setKf] = useState('all'); const [ef, setEf] = useState('all'); const [origem, setOrigem] = useState('all');
+// ── stat card (clicável) ────────────────────────────────────────────────────────
+function Stat({ icon: Icon, label, value, tone, active, onClick }: { icon: React.ElementType; label: string; value: number; tone: ChipTone; active?: boolean; onClick?: () => void }) {
+  const ring: Record<ChipTone, string> = { success: 'text-success', error: 'text-error', warning: 'text-warning', info: 'text-primary', neutral: 'text-text-secondary' };
+  return (
+    <button onClick={onClick} aria-pressed={active}
+      className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        active ? 'border-primary ring-1 ring-primary' : 'border-line hover:border-primary/50')}>
+      <Icon size={18} className={ring[tone]} aria-hidden />
+      <div><div className="text-[18px] font-bold leading-none">{value}</div><div className="text-[10px] uppercase tracking-wider text-text-secondary mt-1">{label}</div></div>
+    </button>
+  );
+}
+
+type SortKey = 'nome' | 'diligencia' | 'kyc' | 'elegivel';
+function SortTh({ label, k, sort, setSort, className }: { label: string; k: SortKey; sort: { k: SortKey; dir: 1 | -1 }; setSort: (s: { k: SortKey; dir: 1 | -1 }) => void; className?: string }) {
+  const active = sort.k === k;
+  return (
+    <th scope="col" aria-sort={active ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'} className={cn('px-4 py-2.5 font-semibold', className)}>
+      <button onClick={() => setSort({ k, dir: active && sort.dir === 1 ? -1 : 1 })}
+        className="inline-flex items-center gap-1 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+        {label}{active ? (sort.dir === 1 ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />) : <ArrowUpDown size={11} className="opacity-40" aria-hidden />}
+      </button>
+    </th>
+  );
+}
+
+function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, onConvites }: any) {
+  const [q, setQ] = useState(''); const [df, setDf] = useState('all'); const [kf, setKf] = useState('all'); const [tf, setTf] = useState('all'); const [ef, setEf] = useState('all'); const [origem, setOrigem] = useState('all');
+  const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: 'nome', dir: 1 });
   const qd = onlyDigits(q);
   const origens: string[] = (Array.from(new Set(rows.flatMap((r: any) => r.origens || []))) as string[]).sort();
-  const unconsulted = rows.filter((r: any) => r.doc.length === 14 && (!r.diligencia || !r.diligencia.valida)).length;
-  const filtered = rows.filter((r: any) => {
+  const clear = () => { setQ(''); setDf('all'); setKf('all'); setTf('all'); setEf('all'); setOrigem('all'); };
+  const hasFilter = q || df !== 'all' || kf !== 'all' || tf !== 'all' || ef !== 'all' || origem !== 'all';
+
+  const stats = useMemo(() => ({
+    total: rows.length,
+    alerta: rows.filter((r: any) => r.diligencia?.verdict === 'ALERTA').length,
+    semDilig: rows.filter((r: any) => r.doc.length === 14 && (!r.diligencia || !r.diligencia.valida)).length,
+    kycOk: rows.filter((r: any) => r.kyc?.status === 'assinado' && r.kyc?.valida).length,
+    inelegivel: rows.filter((r: any) => r.kyc?.elegivel === false).length,
+  }), [rows]);
+
+  const filtered = useMemo(() => rows.filter((r: any) => {
     if (q) { const hay = `${r.nome || ''} ${r.docFmt || ''}`.toLowerCase(); if (!hay.includes(q.toLowerCase()) && !(qd && r.doc.includes(qd))) return false; }
-    if (df !== 'all') { if (df === 'none') { if (r.diligencia) return false; } else if (r.diligencia?.verdict !== df) return false; }
-    if (kf !== 'all') { if (kf === 'none') { if (r.kyc) return false; } else if (kf === 'assinado') { if (!(r.kyc?.status === 'assinado' && r.kyc?.valida)) return false; } else if (r.kyc?.status !== kf) return false; }
+    if (df !== 'all') { if (df === 'none') { if (r.diligencia) return false; } else if (df === 'vencida') { if (!(r.diligencia && !r.diligencia.valida)) return false; } else if (r.diligencia?.verdict !== df) return false; }
+    if (kf !== 'all') { if (kf === 'none') { if (r.kyc) return false; } else if (kf === 'assinado') { if (!(r.kyc?.status === 'assinado' && r.kyc?.valida)) return false; } else if (kf === 'vencido') { if (!(r.kyc?.status === 'assinado' && !r.kyc?.valida)) return false; } else if (r.kyc?.status !== kf) return false; }
+    if (tf !== 'all' && (tf === 'pj' ? r.doc.length !== 14 : r.doc.length !== 11)) return false;
     if (ef !== 'all') { const e = r.kyc?.elegivel === true ? 'sim' : r.kyc?.elegivel === false ? 'nao' : 'na'; if (e !== ef) return false; }
     if (origem !== 'all' && !(r.origens || []).includes(origem)) return false;
     return true;
-  });
+  }), [rows, q, qd, df, kf, tf, ef, origem]);
+
+  const sorted = useMemo(() => {
+    const dRank = (r: any) => r.diligencia ? ({ ALERTA: 0, PENDENTE: 1, NADA_CONSTA: 2 } as any)[r.diligencia.verdict] ?? 3 : 4;
+    const kRank = (r: any) => !r.kyc ? 4 : r.kyc.status === 'aguardando_assinatura' ? 0 : (r.kyc.status === 'assinado' && !r.kyc.valida) ? 1 : r.kyc.status === 'assinado' ? 2 : 3;
+    const eRank = (r: any) => r.kyc?.elegivel === false ? 0 : r.kyc?.elegivel === true ? 1 : 2;
+    const val = (r: any) => sort.k === 'nome' ? (r.nome || '~').toLowerCase() : sort.k === 'diligencia' ? dRank(r) : sort.k === 'kyc' ? kRank(r) : eRank(r);
+    return [...filtered].sort((a, b) => { const va = val(a), vb = val(b); return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir; });
+  }, [filtered, sort]);
+
   const active = !!queue && (queue.running || queue.pending > 0);
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <p className="text-[13px] text-text-secondary max-w-2xl">
-          Todos os fornecedores num só lugar: a <b className="text-text">Diligência</b> (Receita + listas de restrição) e o
-          <b className="text-text"> KYS/KYG</b> (cadastro verificado + assinatura). O KYS/KYG é exigido apenas para contratações
-          específicas — aqui você vê quem já tem assinado e gere os pendentes. Diligências de novos/vencidos rodam automaticamente.
+          Todos os fornecedores num só lugar: <b className="text-text">Diligência</b> (Receita + listas de restrição) e
+          <b className="text-text"> KYS/KYG</b> (cadastro verificado + assinatura). O KYS/KYG é exigido apenas para contratações específicas.
+          Diligências de novos/vencidos rodam automaticamente.
         </p>
         <div className="flex items-center gap-2 shrink-0">
+          <Btn variant="secondary" onClick={onConvites}><Link2 size={14} aria-hidden /> Convites</Btn>
           <Btn variant="secondary" onClick={onImport}><Upload size={14} aria-hidden /> Importar CNPJs</Btn>
-          <Btn variant="secondary" onClick={runAll} disabled={unconsulted === 0}><RefreshCw size={14} aria-hidden /> Consultar não consultados{unconsulted ? ` (${unconsulted})` : ''}</Btn>
+          <Btn variant="secondary" onClick={runAll} disabled={stats.semDilig === 0}><RefreshCw size={14} aria-hidden /> Consultar não consultados{stats.semDilig ? ` (${stats.semDilig})` : ''}</Btn>
         </div>
+      </div>
+
+      {/* dashboard de stats (clicáveis → filtram) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <Stat icon={Users} label="Fornecedores" value={stats.total} tone="info" active={!hasFilter} onClick={clear} />
+        <Stat icon={ShieldAlert} label="Alertas (diligência)" value={stats.alerta} tone="error" active={df === 'ALERTA'} onClick={() => { clear(); setDf('ALERTA'); }} />
+        <Stat icon={RefreshCw} label="Sem diligência válida" value={stats.semDilig} tone="warning" active={df === 'vencida'} onClick={() => { clear(); setDf('vencida'); }} />
+        <Stat icon={FileSignature} label="KYS/KYG assinado" value={stats.kycOk} tone="success" active={kf === 'assinado'} onClick={() => { clear(); setKf('assinado'); }} />
+        <Stat icon={AlertTriangle} label="Inelegíveis" value={stats.inelegivel} tone="error" active={ef === 'nao'} onClick={() => { clear(); setEf('nao'); }} />
       </div>
 
       {active && (
@@ -225,39 +266,40 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport }:
       {loading ? (
         <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
       ) : !rows.length ? (
-        <EmptyState icon={Building2} title="Nenhum fornecedor ainda" description="A base é montada das prestações de contas (Auditoria + FEAC), importação de CNPJs e dos KYS/KYG. Consulte um CNPJ no campo acima." />
+        <EmptyState icon={Building2} title="Nenhum fornecedor ainda" description="A base vem das prestações de contas (Auditoria + FEAC), da importação de CNPJs e dos KYS/KYG. Consulte um CNPJ no campo acima." />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput value={q} onChange={setQ} placeholder="Buscar por nome ou CNPJ/CPF" className="w-full sm:w-[240px]" />
-            <Select value={df} onChange={setDf} options={[{ value: 'all', label: 'Diligência: todas' }, { value: 'ALERTA', label: 'Alerta' }, { value: 'NADA_CONSTA', label: 'Nada consta' }, { value: 'PENDENTE', label: 'Pendente' }, { value: 'none', label: 'Não consultada' }]} />
-            <Select value={kf} onChange={setKf} options={[{ value: 'all', label: 'KYS/KYG: todos' }, { value: 'assinado', label: 'Assinado (válido)' }, { value: 'aguardando_assinatura', label: 'Aguardando' }, { value: 'none', label: 'Sem KYS/KYG' }]} />
-            <Select value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'sim', label: 'Elegível' }, { value: 'nao', label: 'Inelegível' }]} />
-            {origens.length > 1 && <Select value={origem} onChange={setOrigem} options={[{ value: 'all', label: 'Todas as origens' }, ...origens.map((o) => ({ value: o, label: o }))]} />}
-            {(q || df !== 'all' || kf !== 'all' || ef !== 'all' || origem !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setDf('all'); setKf('all'); setEf('all'); setOrigem('all'); }}>Limpar</Btn>}
-            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {rows.length}</span>
+            <SearchInput value={q} onChange={setQ} placeholder="Buscar por nome ou CNPJ/CPF" className="w-full sm:w-[230px]" />
+            <Select ariaLabel="Filtrar por diligência" value={df} onChange={setDf} options={[{ value: 'all', label: 'Diligência: todas' }, { value: 'ALERTA', label: 'Alerta' }, { value: 'NADA_CONSTA', label: 'Nada consta' }, { value: 'PENDENTE', label: 'Pendente' }, { value: 'vencida', label: 'Vencida' }, { value: 'none', label: 'Não consultada' }]} />
+            <Select ariaLabel="Filtrar por KYS/KYG" value={kf} onChange={setKf} options={[{ value: 'all', label: 'KYS/KYG: todos' }, { value: 'assinado', label: 'Assinado (válido)' }, { value: 'aguardando_assinatura', label: 'Aguardando' }, { value: 'vencido', label: 'Vencido' }, { value: 'none', label: 'Sem KYS/KYG' }]} />
+            <Select ariaLabel="Filtrar por tipo" value={tf} onChange={setTf} options={[{ value: 'all', label: 'Tipo: todos' }, { value: 'pj', label: 'PJ (CNPJ)' }, { value: 'pf', label: 'PF (CPF)' }]} />
+            <Select ariaLabel="Filtrar por elegibilidade" value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'sim', label: 'Elegível' }, { value: 'nao', label: 'Inelegível' }]} />
+            {origens.length > 1 && <Select ariaLabel="Filtrar por origem" value={origem} onChange={setOrigem} options={[{ value: 'all', label: 'Todas as origens' }, ...origens.map((o) => ({ value: o, label: o }))]} />}
+            {hasFilter && <Btn variant="ghost" size="sm" onClick={clear}><X size={13} aria-hidden /> Limpar</Btn>}
+            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{sorted.length} de {rows.length}</span>
           </div>
-          {!filtered.length ? <EmptyState icon={Search} title="Nenhum fornecedor com esses filtros" description="Ajuste a busca ou os filtros." /> : (
+          {!sorted.length ? <EmptyState icon={Search} title="Nenhum fornecedor com esses filtros" description="Ajuste a busca ou os filtros." /> : (
             <Card className="overflow-hidden">
               <table className="w-full text-[12px]">
                 <thead className={tableHeadCls}><tr>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th>
+                  <SortTh label="Fornecedor" k="nome" sort={sort} setSort={setSort} />
                   <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ / CPF</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Origem</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Diligência</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">KYS / KYG</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Elegível</th>
+                  <SortTh label="Diligência" k="diligencia" sort={sort} setSort={setSort} />
+                  <SortTh label="KYS / KYG" k="kyc" sort={sort} setSort={setSort} />
+                  <SortTh label="Elegível" k="elegivel" sort={sort} setSort={setSort} />
                   <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
                 </tr></thead>
                 <tbody>
-                  {filtered.map((r: any) => (
+                  {sorted.map((r: any) => (
                     <tr key={r.doc} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openFornecedor(r.doc)}>
-                      <td className="px-4 py-2.5 max-w-[240px] truncate">{r.nome || '—'}</td>
+                      <td className="px-4 py-2.5 max-w-[240px] truncate font-medium">{r.nome || '—'}</td>
                       <td className="px-4 py-2.5 font-mono whitespace-nowrap">{r.docFmt}</td>
                       <td className="px-4 py-2.5 text-text-secondary">{(r.origens || []).join(', ')}</td>
-                      <td className="px-4 py-2.5">{r.diligencia ? <Chip tone={DIL[r.diligencia.verdict]?.tone} icon={DIL[r.diligencia.verdict]?.icon} size="sm">{DIL[r.diligencia.verdict]?.label || r.diligencia.verdict}</Chip> : <span className="text-[10px] text-text-secondary">não consultada</span>}</td>
-                      <td className="px-4 py-2.5">{kycStatusChip(r.kyc)}</td>
-                      <td className="px-4 py-2.5">{r.kyc?.elegivel === true ? <Chip tone="success" size="sm">Elegível</Chip> : r.kyc?.elegivel === false ? <Chip tone="error" size="sm">Inelegível</Chip> : <span className="text-text-secondary">—</span>}</td>
+                      <td className="px-4 py-2.5">{dilChip(r.diligencia)}</td>
+                      <td className="px-4 py-2.5">{kycChip(r.kyc)}</td>
+                      <td className="px-4 py-2.5">{eligChip(r.kyc)}</td>
                       <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" aria-hidden /></td>
                     </tr>
                   ))}
@@ -271,59 +313,84 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport }:
   );
 }
 
+// ── Ficha do Fornecedor (header de status + abas acessíveis) ─────────────────────
 function FichaFornecedor({ doc, dil, kyc, busy, apiFetch, addToast, runCheck, reloadKyc, onBack, onInvite }: any) {
   const nome = dil?.razaoSocial || kyc?.kys?.razaoSocial || kyc?.kyg?.nome || '—';
+  const [tab, setTab] = useState<'diligencia' | 'kyc'>('diligencia');
+  const tablistRef = useRef<HTMLDivElement>(null);
+  const tabs: { id: 'diligencia' | 'kyc'; label: string; icon: React.ElementType }[] = [
+    { id: 'diligencia', label: 'Diligência', icon: ShieldCheck },
+    { id: 'kyc', label: 'KYS / KYG', icon: BadgeCheck },
+  ];
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const i = tabs.findIndex((t) => t.id === tab);
+    const ni = e.key === 'ArrowRight' ? (i + 1) % tabs.length : (i - 1 + tabs.length) % tabs.length;
+    setTab(tabs[ni].id);
+    (tablistRef.current?.querySelectorAll<HTMLButtonElement>('[role=tab]')[ni])?.focus();
+  };
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 max-w-4xl">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <button onClick={onBack} className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-primary uppercase tracking-wider mb-1"><ChevronLeft size={13} /> Fornecedores</button>
-          <div className="text-[18px] font-bold leading-tight">{nome}</div>
-          <div className="text-[12px] text-text-secondary font-mono">{maskDoc(doc)}</div>
+    <div className="space-y-5 max-w-4xl animate-in fade-in duration-300">
+      <button onClick={onBack} className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-primary uppercase tracking-wider rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronLeft size={13} aria-hidden /> Fornecedores</button>
+
+      {/* header de identidade + status num relance */}
+      <Card className="p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-[20px] font-bold leading-tight">{nome}</h2>
+            <div className="font-mono text-[13px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 mt-4">
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5">
+            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}
+          </div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5">
+            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}
+            {kyc && <span className="block text-[10px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}
+          </div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5">
+            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Elegibilidade</div>{eligChip(kyc)}
+          </div>
+        </div>
+      </Card>
+
+      {/* abas acessíveis */}
+      <div>
+        <div ref={tablistRef} role="tablist" aria-label="Seções da ficha" onKeyDown={onKey} className="flex gap-1 border-b border-line">
+          {tabs.map((t) => {
+            const sel = tab === t.id; const Icon = t.icon;
+            return (
+              <button key={t.id} role="tab" id={`tab-${t.id}`} aria-selected={sel} aria-controls={`panel-${t.id}`} tabIndex={sel ? 0 : -1}
+                onClick={() => setTab(t.id)}
+                className={cn('inline-flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-bold uppercase tracking-wider border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
+                  sel ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text')}>
+                <Icon size={14} aria-hidden /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0} className="pt-5 focus-visible:outline-none">
+          {tab === 'diligencia' ? (
+            dil ? <ResultadoView current={dil} busy={busy} apiFetch={apiFetch} addToast={addToast} runCheck={runCheck} />
+              : busy ? <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Consultando…</div>
+              : doc.length === 14 ? <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Consulte a Receita Federal e as listas de restrição." action={<Btn onClick={() => runCheck(doc)}><RefreshCw size={14} aria-hidden /> Consultar agora</Btn>} />
+              : <Card className="p-4 text-[12px] text-text-secondary">A diligência automática (Receita + listas) aplica-se a CNPJ. Este registro é pessoa física (CPF).</Card>
+          ) : (
+            kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} />
+              : <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade. O KYS/KYG é exigido para contratações específicas." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} aria-hidden /> Gerar convite KYS/KYG</Btn>} />
+          )}
         </div>
       </div>
-
-      <section>
-        <div className="text-[12px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><ShieldCheck size={14} className="text-primary" /> Diligência</div>
-        {dil ? (
-          <ResultadoView current={dil} busy={busy} apiFetch={apiFetch} addToast={addToast} runCheck={runCheck} />
-        ) : busy ? (
-          <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Consultando…</div>
-        ) : doc.length === 14 ? (
-          <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Rode a consulta à Receita Federal e às listas de restrição." action={<Btn onClick={() => runCheck(doc)}><RefreshCw size={14} /> Consultar agora</Btn>} />
-        ) : (
-          <Card className="p-4 text-[12px] text-text-secondary">A diligência automática (Receita + listas) aplica-se a CNPJ. Este registro é pessoa física (CPF).</Card>
-        )}
-      </section>
-
-      <section>
-        <div className="text-[12px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><BadgeCheck size={14} className="text-primary" /> KYS / KYG</div>
-        {kyc ? (
-          <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} />
-        ) : (
-          <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade. O KYS/KYG é exigido para contratações específicas." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} /> Gerar convite KYS/KYG</Btn>} />
-        )}
-      </section>
-    </div>
-  );
-}
-
-function KycSection({ records, apiFetch, addToast, openByKycId, reload }: any) {
-  const [tab, setTab] = useState<'lista' | 'convites'>('lista');
-  return (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <div className="flex items-center gap-2">
-        <Btn variant={tab === 'lista' ? 'primary' : 'secondary'} size="sm" onClick={() => { setTab('lista'); reload(); }}><ClipboardList size={13} /> Conformidades</Btn>
-        <Btn variant={tab === 'convites' ? 'primary' : 'secondary'} size="sm" onClick={() => setTab('convites')}><Link2 size={13} /> Convites</Btn>
-      </div>
-      {tab === 'lista' ? <KycListView records={records} loading={false} openDetail={openByKycId} /> : <ConvitesView apiFetch={apiFetch} addToast={addToast} />}
     </div>
   );
 }
 
 function HistoricoView({ history, openFornecedor }: any) {
-  const [q, setQ] = useState('');
-  const qd = onlyDigits(q);
+  const [q, setQ] = useState(''); const qd = onlyDigits(q);
   const filtered = history.filter((h: any) => { if (!q) return true; const hay = `${h.razaoSocial || ''} ${maskDoc(h.cnpj)}`.toLowerCase(); return hay.includes(q.toLowerCase()) || (qd && onlyDigits(h.cnpj).includes(qd)); });
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
@@ -378,11 +445,11 @@ function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (te
 
 function AjudaFornecedores() {
   const blocks = [
-    { t: 'O que é o cockpit', d: 'Reúne, por fornecedor (CNPJ/CPF), a Diligência (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) e o KYS/KYG (cadastro verificado + assinatura eletrônica). A base lista todos os fornecedores das prestações de contas (Auditoria + FEAC), dos CNPJs importados e dos KYS/KYG preenchidos.' },
-    { t: 'Diligência', d: 'Consulta automática por CNPJ na Receita (situação cadastral, endereço com CEP, quadro societário) e nas listas de restrição. Roda sozinha para novos e vencidos (validade 30 dias) e pode ser forçada no botão "Consultar não consultados" ou no campo do topo. Veredito Nada consta / Alerta / Pendente.' },
-    { t: 'KYS / KYG', d: 'O KYS (fornecedores) e o KYG (organizações/lideranças) são fichas de conformidade preenchidas pelo próprio fornecedor numa página pública (/kys, /kyg) e assinadas via Documenso. São exigidos apenas para contratações específicas. Na aba KYS/KYG você acompanha as conformidades e gera convites rastreáveis.' },
-    { t: 'Elegibilidade', d: 'Quando há KYS/KYG, o sistema indica se o fornecedor é Elegível: sem restrições + respostas de risco "Não" + impostos/previdência em dia. Use os filtros para encontrar pendências.' },
-    { t: 'Ficha do fornecedor', d: 'Abra qualquer fornecedor para ver tudo num lugar: o cadastro da Receita, as listas de restrição e o KYS/KYG (status, respostas, trilha de conformidade e PDF assinado), além das ações de reconsultar e gerar convite.' },
+    { t: 'O que é o cockpit', d: 'Reúne, por fornecedor (CNPJ/CPF), a Diligência (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) e o KYS/KYG (cadastro verificado + assinatura eletrônica) numa só visão. A base lista todos os fornecedores das prestações de contas (Auditoria + FEAC), dos CNPJs importados e dos KYS/KYG preenchidos.' },
+    { t: 'Painel e filtros', d: 'Os cartões no topo (Alertas, Sem diligência válida, KYS/KYG assinado, Inelegíveis) filtram a base com um clique. Há ainda filtros por diligência, KYS/KYG, tipo (PJ/PF), elegibilidade e origem, busca por nome/CNPJ/CPF e ordenação clicando nos cabeçalhos.' },
+    { t: 'Diligência', d: 'Consulta automática por CNPJ na Receita (situação cadastral, endereço com CEP, quadro societário) e nas listas de restrição. Roda sozinha para novos e vencidos (validade 30 dias) e pode ser forçada no botão "Consultar não consultados" ou no campo do topo.' },
+    { t: 'KYS / KYG', d: 'Fichas de conformidade preenchidas pelo próprio fornecedor numa página pública (/kys, /kyg) e assinadas via Documenso, exigidas apenas para contratações específicas. Use o botão "Convites" para gerar links rastreáveis. A elegibilidade indica quem está sem restrições + respostas adequadas + impostos/previdência em dia.' },
+    { t: 'Ficha do fornecedor', d: 'Abra qualquer fornecedor para ver, num só lugar, o status no topo e as abas Diligência (cadastro da Receita + listas) e KYS/KYG (respostas, trilha de conformidade e PDF assinado), com as ações de reconsultar e gerar convite.' },
   ];
   return (
     <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">

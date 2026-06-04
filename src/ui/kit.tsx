@@ -105,10 +105,10 @@ export function Card({ className, children, ...rest }: React.HTMLAttributes<HTML
 
 // ── Filtros: Select + busca ───────────────────────────────────────────────────
 export function Select({
-  value, onChange, options, label, className,
+  value, onChange, options, label, className, ariaLabel,
 }: {
   value: string; onChange: (v: string) => void;
-  options: { value: string; label: string }[]; label?: string; className?: string;
+  options: { value: string; label: string }[]; label?: string; className?: string; ariaLabel?: string;
 }) {
   return (
     <label className={cn('inline-flex items-center gap-2', className)}>
@@ -116,7 +116,8 @@ export function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-card border border-line rounded px-2.5 py-1.5 text-[12px] text-text hover:border-primary focus:border-primary focus:outline-none cursor-pointer"
+        aria-label={ariaLabel || label}
+        className="bg-card border border-line rounded px-2.5 py-1.5 text-[12px] text-text hover:border-primary focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
       >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
