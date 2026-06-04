@@ -172,7 +172,7 @@ export function ToolSidebar({
   top?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
-    <aside className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-[216px] bg-sidebar border-r border-line flex flex-col z-50">
+    <aside className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-[256px] bg-sidebar border-r border-line flex flex-col z-50">
       <div className="pt-6 pb-4 px-5">
         <img src={CASA_HACKER_LOGO} alt="Casa Hacker" className="h-9 w-auto object-contain object-left invert opacity-90 mb-3" />
         <div className="text-primary font-semibold text-[14px] mb-2">{brand}</div>

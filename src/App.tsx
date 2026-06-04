@@ -258,7 +258,7 @@ function LoginScreen({ errorParam }: { errorParam: string | null }) {
           className="h-12 mx-auto mb-6 invert opacity-90"
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
-        <h1 className="text-[28px] font-extrabold text-primary mb-2">Stack Audit™</h1>
+        <h1 className="text-[28px] font-semibold text-primary mb-2">Stack Audit™</h1>
         <p className="text-text-secondary text-[12px] mb-8">
           Plataforma de Auditoria com IA
         </p>
@@ -284,7 +284,7 @@ function LoginScreen({ errorParam }: { errorParam: string | null }) {
             window.location.href = '/auth/google';
           }}
           disabled={redirecting}
-          className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-white text-gray-800 font-bold text-[14px] rounded-lg hover:bg-gray-100 transition-all shadow disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-white text-gray-800 font-semibold text-[14px] rounded-lg hover:bg-gray-100 transition-all shadow disabled:opacity-60 disabled:cursor-not-allowed"
           aria-label="Entrar com Google Workspace"
         >
           {redirecting ? (
@@ -1437,7 +1437,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         <header className="px-10 py-4 border-b border-line flex items-center justify-between bg-sidebar sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-8 w-auto object-contain invert opacity-90" />
-            <div className="text-primary font-extrabold text-[12px]">Stack Audit™</div>
+            <div className="text-primary font-semibold text-[12px]">Stack Audit™</div>
             <span className="text-text-secondary text-[12px] font-mono hidden sm:inline">· Consulta Pública de Auditoria</span>
           </div>
           {sa && (
@@ -1458,7 +1458,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
               </div>
-              <h2 className="text-[14px] font-bold mb-1">Acesso Protegido</h2>
+              <h2 className="text-[14px] font-semibold mb-1">Acesso Protegido</h2>
               <p className="text-[12px] text-text-secondary mb-6">Informe o código de acesso enviado pelo auditor para visualizar esta auditoria.</p>
               <form onSubmit={e => { e.preventDefault(); setShareCodeError(''); fetchShareAudit(shareCodeInput.trim().toUpperCase()); }} className="space-y-3">
                 <input
@@ -1468,10 +1468,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   placeholder="EX: AB3K9Z"
                   maxLength={8}
                   autoFocus
-                  className="w-full bg-bg border border-line rounded px-4 py-3 text-center text-[20px] font-mono font-bold tracking-[0.4em] text-primary focus:outline-none focus:border-primary transition-colors"
+                  className="w-full bg-bg border border-line rounded px-4 py-3 text-center text-[20px] font-mono font-semibold tracking-[0.4em] text-primary focus:outline-none focus:border-primary transition-colors"
                 />
                 {shareCodeError && <p className="text-[12px] text-error">{shareCodeError}</p>}
-                <button type="submit" disabled={shareCodeInput.length < 4} className="w-full py-3 bg-primary text-white font-bold text-[12px] rounded hover:opacity-90 transition-all disabled:opacity-40">
+                <button type="submit" disabled={shareCodeInput.length < 4} className="w-full py-3 bg-primary text-white font-semibold text-[12px] rounded hover:opacity-90 transition-all disabled:opacity-40">
                   Acessar Auditoria
                 </button>
               </form>
@@ -1480,7 +1480,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
           {shareError && !shareRequiresCode && (
             <div className="max-w-lg mx-auto mt-16 p-8 border border-error/30 bg-error/5 rounded-xl text-center">
               <AlertCircle size={32} className="text-error mx-auto mb-4" />
-              <h2 className="text-[14px] font-bold text-error mb-2">Link inválido ou expirado</h2>
+              <h2 className="text-[14px] font-semibold text-error mb-2">Link inválido ou expirado</h2>
               <p className="text-[12px] text-text-secondary font-mono">{shareError}</p>
             </div>
           )}
@@ -1499,7 +1499,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
               {/* Budget by line */}
               <div className="bg-card p-6 border border-line rounded mb-10">
                 <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-                  <h3 className="text-[12px] font-bold text-text-secondary">
+                  <h3 className="text-[12px] font-semibold text-text-secondary">
                     Execução Orçamentária por Linha (Planejado × Executado)
                   </h3>
                   <div className="flex items-center gap-4">
@@ -1509,11 +1509,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-error inline-block" /> Excedido</span>
                     </div>
                     {(sa.metrics?.totalValue ?? 0) > (sa.metrics?.approvedValue ?? 0) ? (
-                      <div className="bg-error/10 text-error border border-error/20 px-3 py-1 text-[12px] font-bold rounded flex items-center gap-1.5">
+                      <div className="bg-error/10 text-error border border-error/20 px-3 py-1 text-[12px] font-semibold rounded flex items-center gap-1.5">
                         <AlertCircle size={12} /> Orçamento Extrapolado
                       </div>
                     ) : (
-                      <div className="bg-success/10 text-success border border-success/20 px-3 py-1 text-[12px] font-bold rounded">
+                      <div className="bg-success/10 text-success border border-success/20 px-3 py-1 text-[12px] font-semibold rounded">
                         ✓ Dentro do Limite Aprovado
                       </div>
                     )}
@@ -1546,11 +1546,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 )}
                 <div className="mt-6 pt-4 border-t border-line">
                   <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                    <span className="text-[12px] font-bold text-text-secondary">Total Geral</span>
+                    <span className="text-[12px] font-semibold text-text-secondary">Total Geral</span>
                     <div className="flex gap-6 text-[12px] font-mono flex-wrap">
-                      <span className="text-text-secondary">Aprovado: <span className="text-text font-bold">{formatCurrency(sa.metrics?.approvedValue ?? 0)}</span></span>
-                      <span className="text-text-secondary">Executado: <span className={cn('font-bold', (sa.metrics?.totalValue ?? 0) > (sa.metrics?.approvedValue ?? 0) ? 'text-error' : 'text-primary')}>{formatCurrency(sa.metrics?.totalValue ?? 0)}</span></span>
-                      <span className="text-text-secondary">Saldo: <span className={cn('font-bold', (sa.metrics?.approvedValue ?? 0) - (sa.metrics?.totalValue ?? 0) < 0 ? 'text-error' : 'text-success')}>{formatCurrency((sa.metrics?.approvedValue ?? 0) - (sa.metrics?.totalValue ?? 0))}</span></span>
+                      <span className="text-text-secondary">Aprovado: <span className="text-text font-semibold">{formatCurrency(sa.metrics?.approvedValue ?? 0)}</span></span>
+                      <span className="text-text-secondary">Executado: <span className={cn('font-semibold', (sa.metrics?.totalValue ?? 0) > (sa.metrics?.approvedValue ?? 0) ? 'text-error' : 'text-primary')}>{formatCurrency(sa.metrics?.totalValue ?? 0)}</span></span>
+                      <span className="text-text-secondary">Saldo: <span className={cn('font-semibold', (sa.metrics?.approvedValue ?? 0) - (sa.metrics?.totalValue ?? 0) < 0 ? 'text-error' : 'text-success')}>{formatCurrency((sa.metrics?.approvedValue ?? 0) - (sa.metrics?.totalValue ?? 0))}</span></span>
                     </div>
                   </div>
                   <div className="h-3 w-full bg-line rounded-full overflow-hidden">
@@ -1561,7 +1561,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   </div>
                   <div className="flex justify-between text-[12px] font-mono text-text-secondary mt-1">
                     <span>0%</span>
-                    <span className={cn('font-bold', (sa.metrics?.totalValue ?? 0) > (sa.metrics?.approvedValue ?? 0) ? 'text-error' : '')}>
+                    <span className={cn('font-semibold', (sa.metrics?.totalValue ?? 0) > (sa.metrics?.approvedValue ?? 0) ? 'text-error' : '')}>
                       {((sa.metrics?.totalValue ?? 0) / (sa.metrics?.approvedValue || 1) * 100).toFixed(1)}% executado
                     </span>
                     <span>100% (Aprovado)</span>
@@ -1572,7 +1572,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
               {/* RAPC Table */}
               <div className="bg-card border border-line rounded overflow-hidden mb-10">
                 <div className="px-6 py-4 border-b border-line flex justify-between items-center bg-bg/50 flex-wrap gap-3">
-                  <h3 className="text-[12px] font-bold flex items-center gap-2">
+                  <h3 className="text-[12px] font-semibold flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary" />Relatório de Conciliação (RAPC)
                   </h3>
                   <div className="flex gap-3 flex-wrap">
@@ -1583,7 +1583,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     </div>
                     <div className="flex gap-1 border border-line rounded p-1 bg-bg/50">
                       {['Todos', 'Conciliado', 'Ressalva', 'Pendente'].map(s => (
-                        <button key={s} onClick={() => setStatusFilter(s as any)} className={cn('px-3 py-1 text-[12px] font-bold rounded transition-all', statusFilter === s ? 'bg-primary text-white' : 'text-text-secondary hover:text-text')}>{s}</button>
+                        <button key={s} onClick={() => setStatusFilter(s as any)} className={cn('px-3 py-1 text-[12px] font-semibold rounded transition-all', statusFilter === s ? 'bg-primary text-white' : 'text-text-secondary hover:text-text')}>{s}</button>
                       ))}
                     </div>
                   </div>
@@ -1610,7 +1610,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                           <td className="px-4 py-2.5 border-r border-line">{formatTaxId(item.taxId)}</td>
                           <td className="px-4 py-2.5 border-r border-line text-right">{formatCurrency(item.value)}</td>
                           <td className="px-4 py-2.5 border-r border-line text-center">
-                            <span className={cn('px-2 py-0.5 text-[12px] font-bold rounded-full', item.status === 'Conciliado' ? 'bg-success/20 text-success' : item.status === 'Ressalva' ? 'bg-warning/20 text-warning' : 'bg-error/20 text-error')}>{item.status}</span>
+                            <span className={cn('px-2 py-0.5 text-[12px] font-semibold rounded-full', item.status === 'Conciliado' ? 'bg-success/20 text-success' : item.status === 'Ressalva' ? 'bg-warning/20 text-warning' : 'bg-error/20 text-error')}>{item.status}</span>
                           </td>
                           <td className="px-4 py-2.5 border-r border-line text-center text-text-secondary">{item.nfPage || '—'}</td>
                           <td className="px-4 py-2.5 border-r border-line text-center text-text-secondary">{item.paymentPage || '—'}</td>
@@ -1624,22 +1624,22 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
               {/* Lançamentos Diligenciados */}
               <div className="bg-card p-6 rounded border border-line mb-10">
-                <h3 className="text-[12px] font-bold mb-6 flex items-center gap-2">
+                <h3 className="text-[12px] font-semibold mb-6 flex items-center gap-2">
                   <AlertCircle size={14} className="text-warning" />
                   Lançamentos Diligenciados
                   {shareDiligenced.length > 0 && (
-                    <span className="ml-2 bg-warning/20 text-warning text-[12px] font-bold px-2 py-0.5 rounded-full border border-warning/30">{shareDiligenced.length}</span>
+                    <span className="ml-2 bg-warning/20 text-warning text-[12px] font-semibold px-2 py-0.5 rounded-full border border-warning/30">{shareDiligenced.length}</span>
                   )}
                 </h3>
                 {shareDiligenced.length > 0 ? (
                   <div className="space-y-3">
                     {shareDiligenced.map((item, i) => (
                       <div key={i} onClick={() => setSelectedItem(item)} className={cn('p-4 border rounded flex gap-4 cursor-pointer hover:border-primary/40 transition-all', item.status === 'Pendente' ? 'bg-error/5 border-error/20' : 'bg-warning/5 border-warning/20')}>
-                        <div className={cn('text-[12px] font-mono font-bold px-2 py-1 h-fit border rounded shrink-0', item.status === 'Pendente' ? 'bg-error/10 text-error border-error/30' : 'bg-warning/10 text-warning border-warning/30')}>#{item.id} · {item.status}</div>
+                        <div className={cn('text-[12px] font-mono font-semibold px-2 py-1 h-fit border rounded shrink-0', item.status === 'Pendente' ? 'bg-error/10 text-error border-error/30' : 'bg-warning/10 text-warning border-warning/30')}>#{item.id} · {item.status}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-4 mb-1">
                             <p className="text-[12px] text-text font-semibold truncate">{item.description}</p>
-                            <span className="text-[12px] font-mono font-bold text-text shrink-0">{formatCurrency(item.value)}</span>
+                            <span className="text-[12px] font-mono font-semibold text-text shrink-0">{formatCurrency(item.value)}</span>
                           </div>
                           <div className="flex gap-4 text-[12px] text-text-secondary font-mono mb-2">
                             <span>{item.activity}</span><span>&bull;</span><span>{item.date}</span><span>&bull;</span><span>{item.entity}</span>
@@ -1660,7 +1660,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
           {/* Footer */}
           <div className="border-t border-line pt-6 text-center text-[12px] text-text-secondary font-mono">
-            Auditoria gerada pela plataforma <span className="text-primary font-bold">Stack Audit™</span> · Casa Hacker &bull; Este link é público e foi compartilhado pela equipe auditora.
+            Auditoria gerada pela plataforma <span className="text-primary font-semibold">Stack Audit™</span> · Casa Hacker &bull; Este link é público e foi compartilhado pela equipe auditora.
           </div>
         </main>
 
@@ -1676,14 +1676,14 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="bg-card border border-line rounded-xl w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-line sticky top-0 bg-card z-10">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-[12px] font-bold">Apuração Stack Audit™ — Lançamento #{selectedItem.id}</h2>
+                  <h2 className="text-[12px] font-semibold">Apuração Stack Audit™ — Lançamento #{selectedItem.id}</h2>
                   {selectedItem.itemCode && (
                     <button
                       onClick={() => {
                         const url = `${window.location.origin}/?item=${selectedItem.itemCode}`;
                         navigator.clipboard.writeText(url);
                       }}
-                      className="flex items-center gap-1.5 px-2 py-1 bg-sidebar border border-line hover:border-primary text-[12px] font-mono font-bold text-text-secondary hover:text-primary transition-all rounded"
+                      className="flex items-center gap-1.5 px-2 py-1 bg-sidebar border border-line hover:border-primary text-[12px] font-mono font-semibold text-text-secondary hover:text-primary transition-all rounded"
                       title="Copiar link direto deste lançamento"
                     >
                       <Link2 size={10} />
@@ -1726,14 +1726,14 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 {/* ── Download doc PDFs ──────────────────────────────────── */}
                 {auditId && (canDownloadNf || canDownloadPay) && (
                   <div className="mt-5 pt-4 border-t border-line">
-                    <p className="text-[12px] font-bold text-text-secondary mb-3">Exportar Documentos</p>
+                    <p className="text-[12px] font-semibold text-text-secondary mb-3">Exportar Documentos</p>
                     <div className="flex gap-3 flex-wrap">
                       <a
                         href={canDownloadNf ? docUrl('nf') : undefined}
                         download
                         aria-disabled={!canDownloadNf}
                         className={cn(
-                          'flex items-center gap-2 px-3 py-2 rounded border text-[12px] font-bold transition-all',
+                          'flex items-center gap-2 px-3 py-2 rounded border text-[12px] font-semibold transition-all',
                           canDownloadNf
                             ? 'bg-sidebar border-line hover:border-primary hover:text-primary text-text-secondary cursor-pointer'
                             : 'border-line/40 text-text-secondary/30 cursor-not-allowed pointer-events-none'
@@ -1751,7 +1751,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                         download
                         aria-disabled={!canDownloadPay}
                         className={cn(
-                          'flex items-center gap-2 px-3 py-2 rounded border text-[12px] font-bold transition-all',
+                          'flex items-center gap-2 px-3 py-2 rounded border text-[12px] font-semibold transition-all',
                           canDownloadPay
                             ? 'bg-sidebar border-line hover:border-primary hover:text-primary text-text-secondary cursor-pointer'
                             : 'border-line/40 text-text-secondary/30 cursor-not-allowed pointer-events-none'
@@ -1798,7 +1798,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       aria-label="Barra de acessibilidade"
       className="fixed top-0 left-0 right-0 h-8 z-[110] flex items-center px-4 gap-4 bg-[#21272a] text-white border-b border-white/10 text-[12px] select-none"
     >
-      <span className="flex items-center gap-1.5 font-bold text-white/60 shrink-0">
+      <span className="flex items-center gap-1.5 font-semibold text-white/60 shrink-0">
         <Accessibility size={12} />
         Acessibilidade
       </span>
@@ -1841,7 +1841,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         <button
           key={size}
           onClick={() => setA11yFontSize(size)}
-          className={cn('px-2 py-0.5 rounded font-bold transition-all', a11yFontSize === size ? 'bg-primary text-white' : 'text-white/60 hover:text-white hover:bg-white/10', size === 'small' ? 'text-[12px]' : size === 'large' ? 'text-[14px]' : 'text-[12px]')}
+          className={cn('px-2 py-0.5 rounded font-semibold transition-all', a11yFontSize === size ? 'bg-primary text-white' : 'text-white/60 hover:text-white hover:bg-white/10', size === 'small' ? 'text-[12px]' : size === 'large' ? 'text-[14px]' : 'text-[12px]')}
           aria-pressed={a11yFontSize === size}
           aria-label={`Fonte ${size === 'small' ? 'pequena' : size === 'normal' ? 'normal' : 'grande'}`}
         >
@@ -1887,11 +1887,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       </ToolSidebar>
 
       {/* Main Content */}
-      <main id="main-content" className="ml-[216px] flex-1 min-w-[844px] flex flex-col">
+      <main id="main-content" className="ml-[256px] flex-1 min-w-[844px] flex flex-col">
         {/* Header (kit compartilhado) */}
         <ToolHeader
           light={AUDIT_HEADERS[activeSection][0]} accent={AUDIT_HEADERS[activeSection][1]}
-          right={<div className="text-[12px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-bold">Stack Audit™</div>}
+          right={<div className="text-[12px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-semibold">Stack Audit™</div>}
         />
 
         {/* Metadata strip — só nas telas em que os dados do contrato são relevantes */}
@@ -1957,7 +1957,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
             <div className="space-y-8">
               <div className="bg-card border border-line rounded-xl p-6 h-fit">
-                <h3 className="text-[14px] font-bold mb-6">Checklist de Conformidade</h3>
+                <h3 className="text-[14px] font-semibold mb-6">Checklist de Conformidade</h3>
                 <div className="space-y-4">
                   <CheckItem label="Rubricas carregadas" checked={!!files.budget} />
                   <CheckItem label="Planilha proponente OK" checked={!!files.report} />
@@ -1970,7 +1970,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   onClick={() => { setTermsChecked([false, false, false, false]); setShowTermsModal(true); }}
                   disabled={!canStartAudit}
                   className={cn(
-                    'w-full mt-8 py-4 rounded-lg font-bold text-[12px] transition-all',
+                    'w-full mt-8 py-4 rounded-lg font-semibold text-[12px] transition-all',
                     canStartAudit ? 'bg-primary text-white shadow-lg hover:scale-[1.02]' : 'bg-line text-text-secondary opacity-50 cursor-not-allowed'
                   )}
                 >
@@ -1997,7 +1997,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         {activeSection === 'processando' && (
           <section className="px-10 py-20 max-w-4xl mx-auto flex-1">
             <div className="text-center mb-16">
-              <h1 className="text-[32px] font-bold tracking-tighter mb-4">Auditoria em execução</h1>
+              <h1 className="text-[32px] font-semibold tracking-tighter mb-4">Auditoria em execução</h1>
               <p className="text-text-secondary text-[14px]">O Stack Audit™ está cruzando 4 camadas de dados para cada lançamento financeiro.</p>
             </div>
             <div className="mb-16">
@@ -2057,7 +2057,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       setTimeout(() => setLinkCopied(false), 2000);
                     }}
                     className={cn(
-                      'shrink-0 flex items-center gap-2 px-4 py-1.5 text-[12px] font-bold rounded border transition-all',
+                      'shrink-0 flex items-center gap-2 px-4 py-1.5 text-[12px] font-semibold rounded border transition-all',
                       linkCopied ? 'border-success/40 bg-success/10 text-success' : 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'
                     )}
                   >
@@ -2071,7 +2071,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     <div className="flex items-center gap-3 flex-1">
                       <span className="text-[12px] text-text-secondary">Código de acesso:</span>
-                      <span className="font-mono font-bold text-primary text-[14px] tracking-[0.3em]">{lastAuditResult.shareAccessCode}</span>
+                      <span className="font-mono font-semibold text-primary text-[14px] tracking-[0.3em]">{lastAuditResult.shareAccessCode}</span>
                       <span className="text-[12px] text-text-secondary/60">· Envie separadamente do link por segurança</span>
                     </div>
                     <button
@@ -2100,7 +2100,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                             }).catch(() => {});
                           }
                         }}
-                        className={cn('px-2 py-0.5 text-[12px] font-bold rounded border transition-all', shareExpiry === val ? 'border-primary/50 bg-primary/10 text-primary' : 'border-line text-text-secondary hover:text-text')}
+                        className={cn('px-2 py-0.5 text-[12px] font-semibold rounded border transition-all', shareExpiry === val ? 'border-primary/50 bg-primary/10 text-primary' : 'border-line text-text-secondary hover:text-text')}
                       >
                         {lbl}
                       </button>
@@ -2137,7 +2137,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             {/* Budget by line */}
             <div className="bg-card p-6 border border-line rounded mb-10">
               <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-                <h3 className="text-[12px] font-bold text-text-secondary">
+                <h3 className="text-[12px] font-semibold text-text-secondary">
                   Execução Orçamentária por Linha (Planejado × Executado)
                 </h3>
                 <div className="flex items-center gap-4">
@@ -2147,11 +2147,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-error inline-block" /> Excedido</span>
                   </div>
                   {(lastAuditResult.metrics?.totalValue ?? 0) > (lastAuditResult.metrics?.approvedValue ?? 0) ? (
-                    <div className="bg-error/10 text-error border border-error/20 px-3 py-1 text-[12px] font-bold rounded flex items-center gap-1.5">
+                    <div className="bg-error/10 text-error border border-error/20 px-3 py-1 text-[12px] font-semibold rounded flex items-center gap-1.5">
                       <AlertCircle size={12} /> Orçamento Extrapolado
                     </div>
                   ) : (
-                    <div className="bg-success/10 text-success border border-success/20 px-3 py-1 text-[12px] font-bold rounded">
+                    <div className="bg-success/10 text-success border border-success/20 px-3 py-1 text-[12px] font-semibold rounded">
                       ✓ Dentro do Limite Aprovado
                     </div>
                   )}
@@ -2187,11 +2187,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
               {/* Total summary */}
               <div className="mt-6 pt-4 border-t border-line">
                 <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                  <span className="text-[12px] font-bold text-text-secondary">Total Geral</span>
+                  <span className="text-[12px] font-semibold text-text-secondary">Total Geral</span>
                   <div className="flex gap-6 text-[12px] font-mono flex-wrap">
-                    <span className="text-text-secondary">Aprovado: <span className="text-text font-bold">{formatCurrency(lastAuditResult.metrics?.approvedValue ?? 0)}</span></span>
-                    <span className="text-text-secondary">Executado: <span className={cn('font-bold', (lastAuditResult.metrics?.totalValue ?? 0) > (lastAuditResult.metrics?.approvedValue ?? 0) ? 'text-error' : 'text-primary')}>{formatCurrency(lastAuditResult.metrics?.totalValue ?? 0)}</span></span>
-                    <span className="text-text-secondary">Saldo: <span className={cn('font-bold', (lastAuditResult.metrics?.approvedValue ?? 0) - (lastAuditResult.metrics?.totalValue ?? 0) < 0 ? 'text-error' : 'text-success')}>{formatCurrency((lastAuditResult.metrics?.approvedValue ?? 0) - (lastAuditResult.metrics?.totalValue ?? 0))}</span></span>
+                    <span className="text-text-secondary">Aprovado: <span className="text-text font-semibold">{formatCurrency(lastAuditResult.metrics?.approvedValue ?? 0)}</span></span>
+                    <span className="text-text-secondary">Executado: <span className={cn('font-semibold', (lastAuditResult.metrics?.totalValue ?? 0) > (lastAuditResult.metrics?.approvedValue ?? 0) ? 'text-error' : 'text-primary')}>{formatCurrency(lastAuditResult.metrics?.totalValue ?? 0)}</span></span>
+                    <span className="text-text-secondary">Saldo: <span className={cn('font-semibold', (lastAuditResult.metrics?.approvedValue ?? 0) - (lastAuditResult.metrics?.totalValue ?? 0) < 0 ? 'text-error' : 'text-success')}>{formatCurrency((lastAuditResult.metrics?.approvedValue ?? 0) - (lastAuditResult.metrics?.totalValue ?? 0))}</span></span>
                   </div>
                 </div>
                 <div className="h-3 w-full bg-line rounded-full overflow-hidden">
@@ -2202,7 +2202,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 </div>
                 <div className="flex justify-between text-[12px] font-mono text-text-secondary mt-1">
                   <span>0%</span>
-                  <span className={cn('font-bold', (lastAuditResult.metrics?.totalValue ?? 0) > (lastAuditResult.metrics?.approvedValue ?? 0) ? 'text-error' : '')}>
+                  <span className={cn('font-semibold', (lastAuditResult.metrics?.totalValue ?? 0) > (lastAuditResult.metrics?.approvedValue ?? 0) ? 'text-error' : '')}>
                     {((lastAuditResult.metrics?.totalValue ?? 0) / (lastAuditResult.metrics?.approvedValue || 1) * 100).toFixed(1)}% executado
                   </span>
                   <span>100% (Aprovado)</span>
@@ -2214,7 +2214,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="bg-card border border-line rounded mb-10">
               <button
                 onClick={() => setAuditNoteExpanded(p => !p)}
-                className="w-full px-5 py-3.5 flex items-center justify-between text-[12px] font-bold text-text-secondary hover:text-text transition-colors"
+                className="w-full px-5 py-3.5 flex items-center justify-between text-[12px] font-semibold text-text-secondary hover:text-text transition-colors"
               >
                 <span className="flex items-center gap-2">
                   <NotebookPen size={13} className="text-primary" />
@@ -2243,7 +2243,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             {/* RAPC Table */}
             <div className="bg-card border border-line rounded overflow-hidden mb-10">
               <div className="px-6 py-4 border-b border-line flex justify-between items-center bg-bg/50 flex-wrap gap-3">
-                <h3 className="text-[12px] font-bold flex items-center gap-2">
+                <h3 className="text-[12px] font-semibold flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-primary" />Relatório de Conciliação (RAPC)
                 </h3>
                 <div className="flex gap-3 flex-wrap">
@@ -2268,7 +2268,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   {/* Status filter */}
                   <div className="flex gap-1 border border-line rounded p-1 bg-bg/50">
                     {['Todos', 'Conciliado', 'Ressalva', 'Pendente'].map(s => (
-                      <button key={s} onClick={() => setStatusFilter(s as any)} className={cn('px-3 py-1 text-[12px] font-bold rounded transition-all', statusFilter === s ? 'bg-primary text-white' : 'text-text-secondary hover:text-text')}>
+                      <button key={s} onClick={() => setStatusFilter(s as any)} className={cn('px-3 py-1 text-[12px] font-semibold rounded transition-all', statusFilter === s ? 'bg-primary text-white' : 'text-text-secondary hover:text-text')}>
                         {s}
                       </button>
                     ))}
@@ -2276,7 +2276,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   {/* #53 Review filter */}
                   <button
                     onClick={() => setReviewFilter(p => !p)}
-                    className={cn('flex items-center gap-1.5 px-3 py-1.5 border text-[12px] font-bold transition-all rounded', reviewFilter ? 'border-amber-500/50 bg-amber-500/10 text-amber-400' : 'border-line bg-sidebar text-text-secondary hover:text-text')}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 border text-[12px] font-semibold transition-all rounded', reviewFilter ? 'border-amber-500/50 bg-amber-500/10 text-amber-400' : 'border-line bg-sidebar text-text-secondary hover:text-text')}
                     title="Filtrar itens marcados para revisão"
                   >
                     <Flag size={11} /> Revisão
@@ -2284,18 +2284,18 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   {/* #47 Group by activity */}
                   <button
                     onClick={() => setGroupByActivity(p => !p)}
-                    className={cn('flex items-center gap-1.5 px-3 py-1.5 border text-[12px] font-bold transition-all rounded', groupByActivity ? 'border-primary/50 bg-primary/10 text-primary' : 'border-line bg-sidebar text-text-secondary hover:text-text')}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 border text-[12px] font-semibold transition-all rounded', groupByActivity ? 'border-primary/50 bg-primary/10 text-primary' : 'border-line bg-sidebar text-text-secondary hover:text-text')}
                     title="Agrupar por atividade/rubrica"
                   >
                     <Layers size={11} /> Agrupar
                   </button>
-                  <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-bold transition-all">
+                  <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-semibold transition-all">
                     <Download size={12} /> CSV
                   </button>
-                  <button onClick={handleDownloadXLSX} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-bold transition-all">
+                  <button onClick={handleDownloadXLSX} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-semibold transition-all">
                     <Download size={12} /> XLSX
                   </button>
-                  <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-bold transition-all">
+                  <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-semibold transition-all">
                     <FileDown size={12} /> PDF
                   </button>
                   {/* #26 — Reauditoria seletiva */}
@@ -2303,7 +2303,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <button
                       onClick={handleReauditSelectiva}
                       disabled={reauditLoading}
-                      className="flex items-center gap-2 px-3 py-1.5 border border-warning/50 text-warning bg-warning/5 hover:bg-warning/10 text-[12px] font-bold transition-all disabled:opacity-50"
+                      className="flex items-center gap-2 px-3 py-1.5 border border-warning/50 text-warning bg-warning/5 hover:bg-warning/10 text-[12px] font-semibold transition-all disabled:opacity-50"
                     >
                       {reauditLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                       Reanalisar Pendentes/Ressalvas ({diligencedItems.length})
@@ -2332,7 +2332,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       ['?', 'Mostrar atalhos'],
                     ].map(([key, desc]) => (
                       <span key={key} className="flex items-center gap-1.5">
-                        <kbd className="px-1.5 py-0.5 bg-bg border border-line rounded text-[12px] font-mono font-bold text-primary">{key}</kbd>
+                        <kbd className="px-1.5 py-0.5 bg-bg border border-line rounded text-[12px] font-mono font-semibold text-primary">{key}</kbd>
                         <span>{desc}</span>
                       </span>
                     ))}
@@ -2411,7 +2411,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       ).sort(([a], [b]) => a.localeCompare(b)).map(([activity, groupItems]) => (
                         <React.Fragment key={activity}>
                           <tr className="bg-sidebar/70">
-                            <td colSpan={14} className="px-4 py-2 text-[12px] font-bold text-primary border-r border-line">
+                            <td colSpan={14} className="px-4 py-2 text-[12px] font-semibold text-primary border-r border-line">
                               <span className="flex items-center gap-2">
                                 <Layers size={10} />
                                 {activity}
@@ -2436,11 +2436,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
             {/* Lançamentos Diligenciados */}
             <div className="bg-card p-6 rounded border border-line mb-10">
-              <h3 className="text-[12px] font-bold mb-6 flex items-center gap-2">
+              <h3 className="text-[12px] font-semibold mb-6 flex items-center gap-2">
                 <AlertCircle size={14} className="text-warning" />
                 Lançamentos Diligenciados
                 {diligencedItems.length > 0 && (
-                  <span className="ml-2 bg-warning/20 text-warning text-[12px] font-bold px-2 py-0.5 rounded-full border border-warning/30">
+                  <span className="ml-2 bg-warning/20 text-warning text-[12px] font-semibold px-2 py-0.5 rounded-full border border-warning/30">
                     {diligencedItems.length}
                   </span>
                 )}
@@ -2457,7 +2457,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       )}
                     >
                       <div className={cn(
-                        'text-[12px] font-mono font-bold px-2 py-1 h-fit border rounded shrink-0',
+                        'text-[12px] font-mono font-semibold px-2 py-1 h-fit border rounded shrink-0',
                         item.status === 'Pendente' ? 'bg-error/10 text-error border-error/30' : 'bg-warning/10 text-warning border-warning/30'
                       )}>
                         #{item.id} · {item.status}
@@ -2465,7 +2465,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-4 mb-1">
                           <p className="text-[12px] text-text font-semibold truncate">{item.description}</p>
-                          <span className="text-[12px] font-mono font-bold text-text shrink-0">{formatCurrency(item.value)}</span>
+                          <span className="text-[12px] font-mono font-semibold text-text shrink-0">{formatCurrency(item.value)}</span>
                         </div>
                         <div className="flex gap-4 text-[12px] text-text-secondary font-mono mb-2">
                           <span>{item.activity}</span>
@@ -2488,7 +2488,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
             {/* Base de Preparação */}
             <div className="bg-card p-6 rounded border border-line mb-10">
-              <h3 className="text-[12px] font-bold mb-6 flex items-center gap-2">
+              <h3 className="text-[12px] font-semibold mb-6 flex items-center gap-2">
                 <FileDown size={14} className="text-primary" />
                 Base de Preparação
               </h3>
@@ -2514,7 +2514,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       className="flex items-center gap-4 p-4 border border-line rounded hover:border-primary hover:bg-primary/5 transition-all group"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-bold text-text group-hover:text-primary transition-colors">{label}</p>
+                        <p className="text-[12px] font-semibold text-text group-hover:text-primary transition-colors">{label}</p>
                         <p className="text-[12px] text-text-secondary font-mono truncate mt-0.5">{savedName || 'Arquivo não disponível'}</p>
                       </div>
                       <Download size={14} className="text-text-secondary group-hover:text-primary transition-colors shrink-0" />
@@ -2531,7 +2531,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
           <section className="px-10 py-8 overflow-y-auto pb-24">
             <div className="flex items-end justify-between mb-6">
               <div>
-                <h1 className="text-[20px] font-bold">Base de Dados de Auditorias</h1>
+                <h1 className="text-[20px] font-semibold">Base de Dados de Auditorias</h1>
                 <p className="text-[12px] text-text-secondary font-mono mt-1">{history.length} auditoria{history.length !== 1 ? 's' : ''} armazenada{history.length !== 1 ? 's' : ''}</p>
               </div>
             </div>
@@ -2551,8 +2551,8 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     { label: 'Auditorias Armazenadas', value: history.length },
                   ].map(({ label, value }) => (
                     <div key={label} className="bg-card border border-line rounded p-4">
-                      <p className="text-[12px] font-bold text-text-secondary mb-1">{label}</p>
-                      <p className="text-[16px] font-bold font-mono text-primary">{value}</p>
+                      <p className="text-[12px] font-semibold text-text-secondary mb-1">{label}</p>
+                      <p className="text-[16px] font-semibold font-mono text-primary">{value}</p>
                     </div>
                   ))}
                 </div>
@@ -2560,7 +2560,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             })()}
 
             <div className="border border-line rounded overflow-hidden" role="grid" aria-label="Lista de auditorias">
-              <div role="row" className="grid grid-cols-[2fr_150px_100px_110px_130px_110px_80px] gap-3 px-6 py-2.5 bg-sidebar text-[12px] font-bold text-text-secondary border-b border-line">
+              <div role="row" className="grid grid-cols-[2fr_150px_100px_110px_130px_110px_80px] gap-3 px-6 py-2.5 bg-sidebar text-[12px] font-semibold text-text-secondary border-b border-line">
                 <span role="columnheader">Organização / Responsável</span>
                 <span role="columnheader">Período Auditado</span>
                 <span role="columnheader">Contrato</span>
@@ -2605,14 +2605,14 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <div className="flex items-start gap-3 min-w-0">
                       <div className={cn('w-2 h-2 rounded-full shrink-0 mt-1.5', item.verdict === 'APROVADO' ? 'bg-success' : item.verdict === 'DILIGÊNCIA' ? 'bg-error' : 'bg-warning')} />
                       <div className="min-w-0">
-                        <h3 className="text-[14px] font-bold group-hover:text-primary transition-colors truncate">{item.organization}</h3>
+                        <h3 className="text-[14px] font-semibold group-hover:text-primary transition-colors truncate">{item.organization}</h3>
                         {item.createdBy && (
                           <p className="text-[12px] text-text-secondary font-mono truncate mt-0.5">
                             {item.createdBy}
                           </p>
                         )}
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <p className="text-[12px] text-primary font-mono font-bold">{formatCurrency(item.metrics?.totalValue ?? 0)}</p>
+                          <p className="text-[12px] text-primary font-mono font-semibold">{formatCurrency(item.metrics?.totalValue ?? 0)}</p>
                           {(item as any).sourceFiles && (
                             <p className="text-[12px] text-text-secondary/60 font-mono truncate">
                               {Object.values((item as any).sourceFiles).join(' · ')}
@@ -2626,7 +2626,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     </div>
                     <div className="text-[12px] font-mono text-text-secondary">#{item.contractNumber}</div>
                     <div className="text-[12px] font-mono text-text-secondary whitespace-nowrap">{new Date(item.date).toLocaleDateString('pt-BR')}<br /><span className="text-[12px]">{new Date(item.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span></div>
-                    <div className={cn('text-[12px] font-mono font-bold', countColor)}>
+                    <div className={cn('text-[12px] font-mono font-semibold', countColor)}>
                       <span>{conciliated}/{total}</span>
                       <div className="text-[12px] font-normal text-text-secondary/70 mt-0.5">{(pct * 100).toFixed(0)}% conciliado</div>
                       {((item.metrics as any)?.findingsCount ?? 0) > 0 && (
@@ -2636,7 +2636,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                         <div className="text-[12px] text-error font-normal">{total - conciliated} pendente{total - conciliated !== 1 ? 's' : ''}</div>
                       )}
                     </div>
-                    <div className={cn('text-[12px] font-bold', item.verdict === 'APROVADO' ? 'text-success' : item.verdict === 'DILIGÊNCIA' ? 'text-error' : 'text-warning')}>
+                    <div className={cn('text-[12px] font-semibold', item.verdict === 'APROVADO' ? 'text-success' : item.verdict === 'DILIGÊNCIA' ? 'text-error' : 'text-warning')}>
                       {item.verdict}
                     </div>
                     <div className="flex items-center justify-end gap-2">
@@ -2697,7 +2697,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="flex items-center gap-3 mb-8">
               <Search size={22} className="text-primary" />
               <div>
-                <h1 className="text-[20px] font-bold">Pesquisa</h1>
+                <h1 className="text-[20px] font-semibold">Pesquisa</h1>
                 <p className="text-[12px] text-text-secondary font-mono mt-0.5">Busca global em todas as auditorias — fornecedores, lançamentos, notas fiscais</p>
               </div>
             </div>
@@ -2725,7 +2725,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 <span className="text-[12px] font-mono text-text-secondary">
                   {searchMeta.total} resultado{searchMeta.total !== 1 ? 's' : ''} &bull;&nbsp;
                   tipo detectado:&nbsp;
-                  <span className="text-primary font-bold">
+                  <span className="text-primary font-semibold">
                     {searchMeta.detectedType === 'itemCode' ? 'Código de item' :
                      searchMeta.detectedType === 'taxId' ? 'CNPJ / CPF' : 'Texto livre'}
                   </span>
@@ -2760,11 +2760,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       <div className="px-5 py-3 border-b border-line bg-sidebar flex items-center gap-3">
                         <FileText size={14} className="text-primary shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <span className="text-[12px] font-bold text-text">{group.meta.organization}</span>
+                          <span className="text-[12px] font-semibold text-text">{group.meta.organization}</span>
                           <span className="text-[12px] font-mono text-text-secondary ml-3">{group.meta.contractNumber}</span>
                           <span className="text-[12px] text-text-secondary ml-2 opacity-60">{group.meta.periodStart} → {group.meta.periodEnd}</span>
                         </div>
-                        <span className={cn('text-[12px] font-bold px-2 py-0.5 rounded border',
+                        <span className={cn('text-[12px] font-semibold px-2 py-0.5 rounded border',
                           group.meta.verdict === 'APROVADO' && 'bg-success/10 text-success border-success/30',
                           group.meta.verdict === 'APROVADO COM RESSALVAS' && 'bg-warning/10 text-warning border-warning/30',
                           group.meta.verdict === 'DILIGÊNCIA' && 'bg-error/10 text-error border-error/30',
@@ -2798,7 +2798,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                             >
                               <td className="py-3 pl-5 pr-2 w-10 text-text-secondary">{r.item.id}</td>
                               <td className="py-3 pr-3">
-                                <span className={cn('inline-block px-1.5 py-0.5 rounded text-[12px] font-bold',
+                                <span className={cn('inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold',
                                   r.item.status === 'Conciliado' && 'bg-success/10 text-success',
                                   r.item.status === 'Ressalva' && 'bg-warning/10 text-warning',
                                   r.item.status === 'Pendente' && 'bg-error/10 text-error',
@@ -2807,7 +2807,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                               <td className="py-3 pr-4 max-w-[240px] truncate text-text">{r.item.entity}</td>
                               <td className="py-3 pr-4 text-text-secondary max-w-[200px] truncate">{r.item.description}</td>
                               <td className="py-3 pr-4 text-text-secondary">{r.item.date}</td>
-                              <td className="py-3 pr-4 text-right font-bold text-text">{formatCurrency(r.item.value)}</td>
+                              <td className="py-3 pr-4 text-right font-semibold text-text">{formatCurrency(r.item.value)}</td>
                               <td className="py-3 pr-5 text-text-secondary/50 text-[12px] capitalize">{r.matchField}</td>
                             </tr>
                           ))}
@@ -2823,7 +2823,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             {!searchQuery.trim() && !searchLoading && (
               <div className="max-w-xl">
                 <div className="bg-card border border-line rounded p-6 space-y-4">
-                  <h3 className="text-[12px] font-bold text-text-secondary">O que você pode pesquisar</h3>
+                  <h3 className="text-[12px] font-semibold text-text-secondary">O que você pode pesquisar</h3>
                   <div className="space-y-3">
                     {[
                       ['CNPJ / CPF', '43.283.811/0001-75 ou 12345678000195', 'Todos os lançamentos deste fornecedor em qualquer auditoria'],
@@ -2833,7 +2833,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       ['Descrição', 'GESTÃO DE PROJETOS', 'Busca livre na descrição e atividade'],
                     ].map(([type, example, desc], i) => (
                       <div key={i} className="grid grid-cols-[120px_1fr] gap-x-4 text-[12px]">
-                        <span className="text-primary font-bold">{type}</span>
+                        <span className="text-primary font-semibold">{type}</span>
                         <span className="text-text-secondary">
                           <code className="font-mono bg-sidebar px-1 rounded text-[12px]">{example}</code>
                           <span className="ml-2 opacity-60">{desc}</span>
@@ -2853,7 +2853,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="flex items-center gap-3 mb-8">
               <BookOpen size={22} className="text-primary" />
               <div>
-                <h1 className="text-[20px] font-bold">Documentação da Plataforma</h1>
+                <h1 className="text-[20px] font-semibold">Documentação da Plataforma</h1>
                 <p className="text-[12px] text-text-secondary font-mono mt-0.5">Stack Audit™ — Casa Hacker &bull; Guia completo de uso e interpretação</p>
               </div>
             </div>
@@ -2862,7 +2862,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
               {/* 0. A suíte */}
               <div className="bg-card border border-line rounded p-6">
-                <h2 className="text-[12px] font-bold text-primary mb-4 pb-3 border-b border-line">Parte de uma suíte de 3 ferramentas</h2>
+                <h2 className="text-[12px] font-semibold text-primary mb-4 pb-3 border-b border-line">Parte de uma suíte de 3 ferramentas</h2>
                 <p className="text-[12px] text-text-secondary leading-relaxed mb-3">Esta é a <strong className="text-text">Auditoria de Prestação de Contas</strong>. Pelo botão <strong className="text-text">Ferramentas</strong> (topo da barra lateral) você acessa também o <strong className="text-text">Processador FEAC/SGPP</strong> e a <strong className="text-text">Diligência de Fornecedores</strong> — cada um com sua própria seção “Como usar”.</p>
                 <ul className="space-y-1.5 list-none text-[12px] text-text-secondary">
                   <li className="flex gap-2"><span className="text-primary">▸</span><span>Cada página tem uma <strong className="text-text">URL própria e compartilhável</strong> — ex.: <span className="font-mono text-[12px]">/auditoria/historico</span>, <span className="font-mono text-[12px]">/feac/ajuda</span>, <span className="font-mono text-[12px]">/diligencia/&lt;cnpj&gt;</span>. Use os botões Voltar/Avançar do navegador normalmente.</span></li>
@@ -2872,10 +2872,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
               {/* 1. Como usar */}
               <div className="bg-card border border-line rounded p-6">
-                <h2 className="text-[12px] font-bold text-primary mb-4 pb-3 border-b border-line">1. Como usar a plataforma</h2>
+                <h2 className="text-[12px] font-semibold text-primary mb-4 pb-3 border-b border-line">1. Como usar a plataforma</h2>
                 <div className="space-y-4 text-[12px] text-text-secondary leading-relaxed">
                   <div>
-                    <h3 className="text-[12px] font-bold text-text mb-2">Fluxo de trabalho</h3>
+                    <h3 className="text-[12px] font-semibold text-text mb-2">Fluxo de trabalho</h3>
                     <ol className="space-y-2 list-none">
                       {[
                         ['Nova análise', 'Faça upload dos 4 arquivos (2 CSVs + 2 PDFs) e preencha os metadados do contrato.'],
@@ -2884,14 +2884,14 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                         ['Histórico', 'Acesse auditorias anteriores a qualquer momento para consulta ou reprocessamento.'],
                       ].map(([title, desc], i) => (
                         <li key={i} className="flex gap-3">
-                          <span className="text-primary font-bold font-mono shrink-0">{i + 1}.</span>
+                          <span className="text-primary font-semibold font-mono shrink-0">{i + 1}.</span>
                           <span><strong className="text-text">{title}:</strong> {desc}</span>
                         </li>
                       ))}
                     </ol>
                   </div>
                   <div>
-                    <h3 className="text-[12px] font-bold text-text mb-2">Requisitos dos arquivos</h3>
+                    <h3 className="text-[12px] font-semibold text-text mb-2">Requisitos dos arquivos</h3>
                     <ul className="space-y-1.5 list-none">
                       <li className="flex gap-2"><span className="text-primary">▸</span><span><strong className="text-text">PDFs:</strong> apenas documentos com <strong className="text-text">texto selecionável</strong> (gerados digitalmente). PDFs escaneados (imagens) não são processados.</span></li>
                       <li className="flex gap-2"><span className="text-primary">▸</span><span><strong className="text-text">CSVs:</strong> codificação UTF-8, separador vírgula ou ponto-e-vírgula, cabeçalho na primeira linha.</span></li>
@@ -2903,17 +2903,17 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
               {/* 2. Layout dos CSVs */}
               <div className="bg-card border border-line rounded p-6">
-                <h2 className="text-[12px] font-bold text-primary mb-4 pb-3 border-b border-line">2. Layout dos arquivos CSV esperados</h2>
+                <h2 className="text-[12px] font-semibold text-primary mb-4 pb-3 border-b border-line">2. Layout dos arquivos CSV esperados</h2>
                 <div className="space-y-5 text-[12px]">
                   <div>
-                    <h3 className="text-[12px] font-bold text-text mb-3">CSV A — Orçamento Aprovado</h3>
+                    <h3 className="text-[12px] font-semibold text-text mb-3">CSV A — Orçamento Aprovado</h3>
                     <div className="overflow-x-auto">
                       <table className="w-full text-[12px] border-collapse">
                         <thead>
                           <tr className="bg-sidebar text-text-secondary">
-                            <th className="px-4 py-2 text-left border border-line font-bold">Coluna</th>
-                            <th className="px-4 py-2 text-left border border-line font-bold">Obrigatória?</th>
-                            <th className="px-4 py-2 text-left border border-line font-bold">Exemplos de nomes aceitos</th>
+                            <th className="px-4 py-2 text-left border border-line font-semibold">Coluna</th>
+                            <th className="px-4 py-2 text-left border border-line font-semibold">Obrigatória?</th>
+                            <th className="px-4 py-2 text-left border border-line font-semibold">Exemplos de nomes aceitos</th>
                           </tr>
                         </thead>
                         <tbody className="font-mono">
@@ -2932,14 +2932,14 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     </div>
                   </div>
                   <div>
-                    <h3 className="text-[12px] font-bold text-text mb-3">CSV B — Prestação de Contas</h3>
+                    <h3 className="text-[12px] font-semibold text-text mb-3">CSV B — Prestação de Contas</h3>
                     <div className="overflow-x-auto">
                       <table className="w-full text-[12px] border-collapse">
                         <thead>
                           <tr className="bg-sidebar text-text-secondary">
-                            <th className="px-4 py-2 text-left border border-line font-bold">Coluna</th>
-                            <th className="px-4 py-2 text-left border border-line font-bold">Obrigatória?</th>
-                            <th className="px-4 py-2 text-left border border-line font-bold">Exemplos de nomes aceitos</th>
+                            <th className="px-4 py-2 text-left border border-line font-semibold">Coluna</th>
+                            <th className="px-4 py-2 text-left border border-line font-semibold">Obrigatória?</th>
+                            <th className="px-4 py-2 text-left border border-line font-semibold">Exemplos de nomes aceitos</th>
                           </tr>
                         </thead>
                         <tbody className="font-mono">
@@ -2967,10 +2967,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
               {/* 3. Como interpretar */}
               <div className="bg-card border border-line rounded p-6">
-                <h2 className="text-[12px] font-bold text-primary mb-4 pb-3 border-b border-line">3. Como interpretar os resultados</h2>
+                <h2 className="text-[12px] font-semibold text-primary mb-4 pb-3 border-b border-line">3. Como interpretar os resultados</h2>
                 <div className="space-y-5 text-[12px] text-text-secondary">
                   <div>
-                    <h3 className="text-[12px] font-bold text-text mb-3">Status dos lançamentos</h3>
+                    <h3 className="text-[12px] font-semibold text-text mb-3">Status dos lançamentos</h3>
                     <dl className="space-y-2">
                       {[
                         ['Conciliado', 'success', 'O lançamento foi validado com correspondência exata nas 4 fontes: orçamento, CSV, nota fiscal e comprovante de pagamento.'],
@@ -2978,7 +2978,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                         ['Pendente', 'error', 'Falta um ou mais documentos de cruzamento. O lançamento não pôde ser auditado completamente. Ação obrigatória.'],
                       ].map(([status, color, desc]) => (
                         <div key={status as string} className="flex gap-3 items-start">
-                          <span className={cn('text-[12px] font-bold px-2 py-0.5 rounded border shrink-0 mt-0.5',
+                          <span className={cn('text-[12px] font-semibold px-2 py-0.5 rounded border shrink-0 mt-0.5',
                             color === 'success' ? 'bg-success/10 text-success border-success/30' :
                             color === 'warning' ? 'bg-warning/10 text-warning border-warning/30' :
                             'bg-error/10 text-error border-error/30'
@@ -2989,7 +2989,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     </dl>
                   </div>
                   <div>
-                    <h3 className="text-[12px] font-bold text-text mb-3">Parecer final (RAPC)</h3>
+                    <h3 className="text-[12px] font-semibold text-text mb-3">Parecer final (RAPC)</h3>
                     <dl className="space-y-2">
                       {[
                         ['APROVADO', 'success', 'Nenhum item pendente e nenhuma divergência registrada. Prestação de contas íntegra.'],
@@ -2997,7 +2997,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                         ['DILIGÊNCIA', 'error', '<80% dos lançamentos foram conciliados. A prestação de contas exige complementação documental.'],
                       ].map(([status, color, desc]) => (
                         <div key={status as string} className="flex gap-3 items-start">
-                          <span className={cn('text-[12px] font-bold px-2 py-0.5 rounded border shrink-0 mt-0.5 whitespace-nowrap',
+                          <span className={cn('text-[12px] font-semibold px-2 py-0.5 rounded border shrink-0 mt-0.5 whitespace-nowrap',
                             color === 'success' ? 'bg-success/10 text-success border-success/30' :
                             color === 'warning' ? 'bg-warning/10 text-warning border-warning/30' :
                             'bg-error/10 text-error border-error/30'
@@ -3008,7 +3008,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     </dl>
                   </div>
                   <div>
-                    <h3 className="text-[12px] font-bold text-text mb-2">Verificação Quádrupla</h3>
+                    <h3 className="text-[12px] font-semibold text-text mb-2">Verificação Quádrupla</h3>
                     <p>O algoritmo do Stack Audit™ cruza cada lançamento contra 4 fontes simultaneamente: <strong className="text-text">(1)</strong> CSV de Orçamento Aprovado, <strong className="text-text">(2)</strong> CSV de Prestação de Contas, <strong className="text-text">(3)</strong> PDF de Notas Fiscais e <strong className="text-text">(4)</strong> PDF de Comprovantes de Pagamento. Somente itens com correspondência em todas as camadas recebem status "Conciliado".</p>
                   </div>
                 </div>
@@ -3016,7 +3016,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
               {/* 4. Glossário */}
               <div className="bg-card border border-line rounded p-6">
-                <h2 className="text-[12px] font-bold text-primary mb-4 pb-3 border-b border-line">4. Glossário de termos</h2>
+                <h2 className="text-[12px] font-semibold text-primary mb-4 pb-3 border-b border-line">4. Glossário de termos</h2>
                 <dl className="grid grid-cols-1 gap-3 text-[12px]">
                   {[
                     ['RAPC', 'Relatório de Apuração de Prestação de Contas. Documento gerado pelo Stack Audit™ com o resultado da conciliação de todos os lançamentos.'],
@@ -3037,7 +3037,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     ['Terceiro Setor', 'Organizações sem fins lucrativos, como OSCs, institutos e fundações, que executam projetos com recursos públicos ou privados.'],
                   ].map(([term, def]) => (
                     <div key={term as string} className="grid grid-cols-[180px_1fr] gap-3 border-b border-line/30 pb-3 last:border-0 last:pb-0">
-                      <dt className="text-[12px] font-bold text-primary pt-0.5">{term as string}</dt>
+                      <dt className="text-[12px] font-semibold text-primary pt-0.5">{term as string}</dt>
                       <dd className="text-text-secondary leading-relaxed">{def as string}</dd>
                     </div>
                   ))}
@@ -3046,7 +3046,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
               {/* 5. Limitações */}
               <div className="bg-card border border-warning/30 bg-warning/5 rounded p-6">
-                <h2 className="text-[12px] font-bold text-warning mb-4 pb-3 border-b border-warning/20 flex items-center gap-2">
+                <h2 className="text-[12px] font-semibold text-warning mb-4 pb-3 border-b border-warning/20 flex items-center gap-2">
                   <AlertCircle size={14} /> 5. Limitações e informações importantes
                 </h2>
                 <ul className="space-y-3 text-[12px] text-text-secondary">
@@ -3060,7 +3060,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     'Tarifas bancárias de até R$ 150,00 são automaticamente classificadas como Conciliadas por regra institucional — confirme se este valor é adequado para o seu contrato.',
                   ].map((item, i) => (
                     <li key={i} className="flex gap-3 items-start">
-                      <span className="text-warning font-bold shrink-0">▸</span>
+                      <span className="text-warning font-semibold shrink-0">▸</span>
                       <span>{item}</span>
                     </li>
                   ))}
@@ -3075,7 +3075,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         {showTermsModal && (
           <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
             <div className="bg-bg border border-line p-8 max-w-2xl w-full">
-              <h2 className="text-[20px] font-bold mb-4 text-primary">Termo de Responsabilidade</h2>
+              <h2 className="text-[20px] font-semibold mb-4 text-primary">Termo de Responsabilidade</h2>
               <p className="text-[14px] text-text-secondary mb-6 leading-relaxed">
                 O Casa Hacker® Stack Audit™ é um auditor auxiliar e não deve substituir processos analíticos e de inteligência, mas sim <b>processos operacionais</b>.
               </p>
@@ -3103,11 +3103,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 ))}
               </div>
               <div className="flex gap-4 justify-end">
-                <button onClick={() => setShowTermsModal(false)} className="px-6 py-2 border border-line text-[12px] font-bold hover:bg-surface-hover transition-colors">Cancelar</button>
+                <button onClick={() => setShowTermsModal(false)} className="px-6 py-2 border border-line text-[12px] font-semibold hover:bg-surface-hover transition-colors">Cancelar</button>
                 <button
                   onClick={() => { setShowTermsModal(false); startAudit(); }}
                   disabled={!termsChecked.every(Boolean)}
-                  className={cn('px-6 py-2 text-[12px] font-bold transition-all', termsChecked.every(Boolean) ? 'bg-primary text-white hover:scale-[1.02]' : 'bg-line text-text-secondary cursor-not-allowed opacity-50')}
+                  className={cn('px-6 py-2 text-[12px] font-semibold transition-all', termsChecked.every(Boolean) ? 'bg-primary text-white hover:scale-[1.02]' : 'bg-line text-text-secondary cursor-not-allowed opacity-50')}
                 >
                   Aceitar e Iniciar Auditoria
                 </button>
@@ -3122,13 +3122,13 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="flex justify-between items-center px-8 py-5 border-b border-line bg-card shrink-0">
               <div className="flex items-center gap-4">
                 <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 shrink-0">
-                  <span className="text-primary font-bold font-mono text-[14px]">#{selectedItem.id}</span>
+                  <span className="text-primary font-semibold font-mono text-[14px]">#{selectedItem.id}</span>
                 </div>
                 <div>
-                  <h2 id="item-modal-title" className="text-[14px] font-bold text-primary">Detalhes do Lançamento</h2>
+                  <h2 id="item-modal-title" className="text-[14px] font-semibold text-primary">Detalhes do Lançamento</h2>
                   <p className="text-[12px] text-text-secondary font-mono mt-0.5">{selectedItem.date}</p>
                 </div>
-                <div className={cn('px-3 py-1 rounded text-[12px] font-bold border',
+                <div className={cn('px-3 py-1 rounded text-[12px] font-semibold border',
                   selectedItem.status === 'Conciliado' && 'bg-success/10 text-success border-success/30',
                   selectedItem.status === 'Ressalva' && 'bg-warning/10 text-warning border-warning/30',
                   selectedItem.status === 'Pendente' && 'bg-error/10 text-error border-error/30'
@@ -3146,7 +3146,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                         addToast('success', 'Link copiado — apenas usuários autenticados podem acessar')
                       );
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-bold text-text-secondary hover:text-primary transition-all rounded"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-semibold text-text-secondary hover:text-primary transition-all rounded"
                     title="Copiar link interno deste lançamento (requer autenticação)"
                   >
                     <Share2 size={12} /> Compartilhar
@@ -3156,7 +3156,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 {lastAuditResult && (
                   <button
                     onClick={handlePrintItem}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-bold text-text-secondary hover:text-primary transition-all rounded"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sidebar border border-line hover:border-primary text-[12px] font-semibold text-text-secondary hover:text-primary transition-all rounded"
                     title="Imprimir / exportar este lançamento como PDF"
                   >
                     <Printer size={12} /> Imprimir
@@ -3173,7 +3173,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 <div className="grid grid-cols-2 gap-0 border-b border-line">
                   {/* Left: Stack Audit™ analysis */}
                   <div className="p-8 border-r border-line">
-                    <h3 className="text-[12px] font-bold pb-3 mb-4 border-b border-line text-primary">
+                    <h3 className="text-[12px] font-semibold pb-3 mb-4 border-b border-line text-primary">
                       Apuração Stack Audit™
                     </h3>
                     <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-3 text-[12px]">
@@ -3197,7 +3197,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                           )],
                           ['CNPJ / CPF', <span className="font-mono text-text">{selectedItem.taxId}</span>],
                           ['Doc Fiscal (ID)', <span className="text-primary font-mono">{selectedItem.docId}</span>],
-                          ['Valor', <span className="font-bold text-text text-[14px]">{formatCurrency(selectedItem.value)}</span>],
+                          ['Valor', <span className="font-semibold text-text text-[14px]">{formatCurrency(selectedItem.value)}</span>],
                           ['Pág. Nota Fiscal', <span className="font-mono text-text-secondary">{selectedItem.nfPage || 'Não localizado'}</span>],
                           ['Pág. Comprovante', <span className="font-mono text-text-secondary">{selectedItem.paymentPage || 'Não localizado'}</span>],
                           ...(selectedItem.emissionDateTime ? [['Data/Hora Emissão', <span className="font-mono text-text-secondary">{selectedItem.emissionDateTime}</span>] as [string, React.ReactNode]] : []),
@@ -3207,7 +3207,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                           ...(selectedItem.transactionId ? [['ID da Transação', <span className="font-mono text-primary text-[12px] break-all">{selectedItem.transactionId}</span>] as [string, React.ReactNode]] : []),
                           ...(selectedItem.payerInfo ? [['Pagador', <span className="text-text-secondary font-sans text-[12px] break-words">{selectedItem.payerInfo}</span>] as [string, React.ReactNode]] : []),
                           ...(selectedItem.payeeInfo ? [['Recebedor / Beneficiário', <span className="text-text-secondary font-sans text-[12px] break-words">{selectedItem.payeeInfo}</span>] as [string, React.ReactNode]] : []),
-                          ...(selectedItem.paymentMethod ? [['Meio de Pagamento', <span className="font-bold text-text">{selectedItem.paymentMethod}</span>] as [string, React.ReactNode]] : []),
+                          ...(selectedItem.paymentMethod ? [['Meio de Pagamento', <span className="font-semibold text-text">{selectedItem.paymentMethod}</span>] as [string, React.ReactNode]] : []),
                         ];
                         return fields.map(([label, value], i) => (
                           <div key={i} className="contents">
@@ -3261,7 +3261,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       return (
                         <div className="mt-4 border-t border-line pt-4">
                           <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-[12px] font-bold text-primary flex items-center gap-1.5">
+                            <h4 className="text-[12px] font-semibold text-primary flex items-center gap-1.5">
                               <Building2 size={12} /> Dados Receita Federal — CNPJ {selectedItem.taxId}
                             </h4>
                             <button onClick={() => setShowCnpjPanel(false)} className="text-text-secondary hover:text-text text-[12px]"><X size={13} /></button>
@@ -3312,14 +3312,14 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
                   {/* Right: CSV original */}
                   <div className="p-8">
-                    <h3 className="text-[12px] font-bold pb-3 mb-4 border-b border-line text-text-secondary">
+                    <h3 className="text-[12px] font-semibold pb-3 mb-4 border-b border-line text-text-secondary">
                       Lançamento — Planilha de Prestação
                     </h3>
                     {selectedItem.originalRow ? (
                       <div className="space-y-2 font-mono text-[12px]">
                         {Object.entries(selectedItem.originalRow).map(([k, v], i) => (
                           <div key={i} className="grid grid-cols-[160px_1fr] gap-2 border-b border-line/30 pb-2 last:border-0">
-                            <span className="text-text-secondary text-[12px] font-bold truncate pt-0.5">{k}</span>
+                            <span className="text-text-secondary text-[12px] font-semibold truncate pt-0.5">{k}</span>
                             <span className="text-text break-words">{String(v || '—')}</span>
                           </div>
                         ))}
@@ -3333,7 +3333,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 {/* Bottom: observations + mitigation */}
                 <div className="grid grid-cols-2 gap-0">
                   <div className="p-8 border-r border-line">
-                    <h3 className="text-[12px] font-bold mb-4 text-primary">
+                    <h3 className="text-[12px] font-semibold mb-4 text-primary">
                       Observações Stack Audit™
                       <span className={cn('ml-2 text-[12px] px-2 py-0.5 rounded border font-normal',
                         selectedItem.status === 'Conciliado' && 'bg-success/10 text-success border-success/30',
@@ -3356,7 +3356,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     )}
                   </div>
                   <div className="p-8">
-                    <h3 className="text-[12px] font-bold mb-4 text-text-secondary">
+                    <h3 className="text-[12px] font-semibold mb-4 text-text-secondary">
                       Instrução de Mitigação
                     </h3>
                     <div className="bg-card border border-line p-4 rounded text-[14px] font-sans leading-relaxed text-text-secondary min-h-[100px]">
@@ -3377,7 +3377,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   if (!auditId || (!canDownloadNf && !canDownloadPay)) return null;
                   return (
                     <div className="border-t border-line p-8">
-                      <h3 className="text-[12px] font-bold mb-4 text-primary flex items-center gap-2">
+                      <h3 className="text-[12px] font-semibold mb-4 text-primary flex items-center gap-2">
                         <FileDown size={13} /> Exportar Documentos
                       </h3>
                       <div className="flex gap-3 flex-wrap">
@@ -3386,7 +3386,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                           download
                           aria-disabled={!canDownloadNf}
                           className={cn(
-                            'flex items-center gap-2 px-4 py-2.5 rounded border text-[12px] font-bold transition-all',
+                            'flex items-center gap-2 px-4 py-2.5 rounded border text-[12px] font-semibold transition-all',
                             canDownloadNf
                               ? 'bg-sidebar border-line hover:border-primary hover:text-primary text-text-secondary cursor-pointer'
                               : 'border-line/40 text-text-secondary/30 cursor-not-allowed pointer-events-none'
@@ -3404,7 +3404,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                           download
                           aria-disabled={!canDownloadPay}
                           className={cn(
-                            'flex items-center gap-2 px-4 py-2.5 rounded border text-[12px] font-bold transition-all',
+                            'flex items-center gap-2 px-4 py-2.5 rounded border text-[12px] font-semibold transition-all',
                             canDownloadPay
                               ? 'bg-sidebar border-line hover:border-primary hover:text-primary text-text-secondary cursor-pointer'
                               : 'border-line/40 text-text-secondary/30 cursor-not-allowed pointer-events-none'
@@ -3426,7 +3426,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 <div className="grid grid-cols-2 gap-0 border-t border-line">
                   {/* Reanálise individual */}
                   <div className="p-8 border-r border-line">
-                    <h3 className="text-[12px] font-bold mb-3 text-primary flex items-center gap-2">
+                    <h3 className="text-[12px] font-semibold mb-3 text-primary flex items-center gap-2">
                       <RefreshCw size={13} /> Reanálise Individual pela IA
                     </h3>
                     <div className="space-y-3">
@@ -3440,7 +3440,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                       <button
                         onClick={handleReanalyzeItem}
                         disabled={reanalyzingItem}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary text-[12px] font-bold transition-all disabled:opacity-50 rounded"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary text-[12px] font-semibold transition-all disabled:opacity-50 rounded"
                       >
                         {reanalyzingItem ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                         {reanalyzingItem ? 'Reanalisando...' : 'Reanalisar este lançamento'}
@@ -3450,7 +3450,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
                   {/* Anotação do auditor */}
                   <div className="p-8">
-                    <h3 className="text-[12px] font-bold mb-3 text-text-secondary flex items-center gap-2">
+                    <h3 className="text-[12px] font-semibold mb-3 text-text-secondary flex items-center gap-2">
                       <NotebookPen size={13} /> Anotação do Auditor
                     </h3>
                     <textarea
@@ -3467,7 +3467,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 {/* Related items across audits */}
                 {(relatedLoading || relatedItems.length > 0) && (
                   <div className="border-t border-line p-8">
-                    <h3 className="text-[12px] font-bold mb-4 text-primary flex items-center gap-2">
+                    <h3 className="text-[12px] font-semibold mb-4 text-primary flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
                       Outros Lançamentos — mesmo {selectedItem.taxId?.replace(/\D/g,'').length === 14 ? 'CNPJ' : 'CPF'} ({selectedItem.taxId})
                     </h3>
@@ -3480,7 +3480,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                           if (otherItems.length === 0) return null;
                           return (
                             <div key={ai}>
-                              <p className="text-[12px] font-bold text-text-secondary mb-2">
+                              <p className="text-[12px] font-semibold text-text-secondary mb-2">
                                 {audit.contractNumber} — {audit.organization}
                                 <span className="ml-2 font-normal opacity-60">{audit.periodStart} → {audit.periodEnd}</span>
                               </p>
@@ -3505,7 +3505,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                                         <td className="py-1.5 pr-4 text-text-secondary">{it.date}</td>
                                         <td className="py-1.5 pr-4 text-right">{formatCurrency(it.value)}</td>
                                         <td className="py-1.5">
-                                          <span className={cn('px-1.5 py-0.5 rounded text-[12px] font-bold',
+                                          <span className={cn('px-1.5 py-0.5 rounded text-[12px] font-semibold',
                                             it.status === 'Conciliado' && 'bg-success/10 text-success',
                                             it.status === 'Ressalva' && 'bg-warning/10 text-warning',
                                             it.status === 'Pendente' && 'bg-error/10 text-error'
@@ -3532,17 +3532,17 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
           <div className="fixed right-0 top-8 bottom-0 w-[380px] bg-card border-l border-line z-40 flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-line shrink-0 bg-sidebar">
               <div className="flex items-center gap-3">
-                <span className={cn('px-2 py-0.5 rounded text-[12px] font-bold border',
+                <span className={cn('px-2 py-0.5 rounded text-[12px] font-semibold border',
                   peekItem.status === 'Conciliado' && 'bg-success/10 text-success border-success/30',
                   peekItem.status === 'Ressalva' && 'bg-warning/10 text-warning border-warning/30',
                   peekItem.status === 'Pendente' && 'bg-error/10 text-error border-error/30',
                 )}>{peekItem.status}</span>
-                <span className="text-[12px] font-bold font-mono text-text-secondary">#{peekItem.id}</span>
+                <span className="text-[12px] font-semibold font-mono text-text-secondary">#{peekItem.id}</span>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => { setSelectedItem(peekItem); setPeekItem(null); }}
-                  className="px-3 py-1.5 text-[12px] font-bold bg-primary/10 text-primary border border-primary/30 rounded hover:bg-primary/20 transition-colors"
+                  className="px-3 py-1.5 text-[12px] font-semibold bg-primary/10 text-primary border border-primary/30 rounded hover:bg-primary/20 transition-colors"
                 >
                   Abrir completo
                 </button>
@@ -3554,11 +3554,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="flex-1 overflow-y-auto p-5 space-y-4 text-[12px]">
               <div>
                 <p className="text-text-secondary text-[12px] mb-1">Descrição</p>
-                <p className="font-bold text-text">{peekItem.description}</p>
+                <p className="font-semibold text-text">{peekItem.description}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-text-secondary text-[12px] mb-1">Data</p><p className="font-mono">{peekItem.date}</p></div>
-                <div><p className="text-text-secondary text-[12px] mb-1">Valor</p><p className="font-mono font-bold text-primary">{formatCurrency(peekItem.value)}</p></div>
+                <div><p className="text-text-secondary text-[12px] mb-1">Valor</p><p className="font-mono font-semibold text-primary">{formatCurrency(peekItem.value)}</p></div>
                 <div><p className="text-text-secondary text-[12px] mb-1">Atividade</p><p className="">{peekItem.activity}</p></div>
                 <div><p className="text-text-secondary text-[12px] mb-1">CNPJ/CPF</p><p className="font-mono">{formatTaxId(peekItem.taxId)}</p></div>
                 <div><p className="text-text-secondary text-[12px] mb-1">Pág NF</p><p className="font-mono">{peekItem.nfPage || '-'}</p></div>
@@ -3579,7 +3579,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
               <div className="pt-2 flex items-center gap-2">
                 <button
                   onClick={e => handleToggleReviewFlag(peekItem, e)}
-                  className={cn('flex items-center gap-1.5 px-3 py-1.5 border rounded text-[12px] font-bold transition-all', peekItem.needsReview ? 'border-amber-500/50 bg-amber-500/10 text-amber-400' : 'border-line text-text-secondary hover:text-text')}
+                  className={cn('flex items-center gap-1.5 px-3 py-1.5 border rounded text-[12px] font-semibold transition-all', peekItem.needsReview ? 'border-amber-500/50 bg-amber-500/10 text-amber-400' : 'border-line text-text-secondary hover:text-text')}
                 >
                   <Flag size={11} fill={peekItem.needsReview ? 'currentColor' : 'none'} />
                   {peekItem.needsReview ? 'Remover revisão' : 'Marcar para revisão'}
@@ -3591,8 +3591,8 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
       </main>
 
-      <footer className="fixed bottom-0 left-[216px] right-0 py-3 px-6 bg-sidebar border-t border-line text-[12px] text-text-secondary text-center leading-relaxed z-40">
-        <p className="font-bold">CONFIDENCIAL - USO INTERNO &nbsp;&bull;&nbsp; &copy; 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97 &nbsp;&bull;&nbsp; R. DR. RENATO PAES DE BARROS, 618 – ITAIM BIBI, SÃO PAULO – SP, 04530-000</p>
+      <footer className="fixed bottom-0 left-[256px] right-0 py-3 px-6 bg-sidebar border-t border-line text-[12px] text-text-secondary text-center leading-relaxed z-40">
+        <p className="font-semibold">CONFIDENCIAL - USO INTERNO &nbsp;&bull;&nbsp; &copy; 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97 &nbsp;&bull;&nbsp; R. DR. RENATO PAES DE BARROS, 618 – ITAIM BIBI, SÃO PAULO – SP, 04530-000</p>
       </footer>
 
     </div>
@@ -3648,7 +3648,7 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
       <header className="px-6 sm:px-10 py-5 border-b border-line flex items-center justify-between bg-sidebar">
         <div className="flex items-center gap-4">
           <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-9 w-auto object-contain invert opacity-90" />
-          <div className="text-primary font-extrabold text-[12px]">Stack Audit™</div>
+          <div className="text-primary font-semibold text-[12px]">Stack Audit™</div>
           <span className="text-text-secondary text-[12px] font-mono hidden sm:inline">· Suíte de Ferramentas</span>
         </div>
         <div className="flex items-center gap-3">
@@ -3662,7 +3662,7 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
 
       <main id="main-content" className="flex-1 px-6 sm:px-10 py-12 sm:py-16 max-w-6xl mx-auto w-full">
         <div className="mb-10">
-          <h1 className="text-[28px] sm:text-[28px] font-light">Selecione uma <span className="font-bold text-primary">ferramenta</span></h1>
+          <h1 className="text-[28px] sm:text-[28px] font-light">Selecione uma <span className="font-semibold text-primary">ferramenta</span></h1>
           <p className="text-[14px] text-text-secondary mt-2 max-w-2xl">
             Plataforma de auditoria e prestação de contas para organizações de impacto social.
           </p>
@@ -3689,11 +3689,11 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
                   {t.enabled ? (
                     <ChevronRight size={18} className="text-text-secondary group-hover:text-primary transition-colors" />
                   ) : (
-                    <span className="text-[12px] font-bold text-text-secondary border border-line rounded px-2 py-1">Em breve</span>
+                    <span className="text-[12px] font-semibold text-text-secondary border border-line rounded px-2 py-1">Em breve</span>
                   )}
                 </div>
                 <div>
-                  <h2 className="text-[14px] font-bold leading-snug">{t.title}</h2>
+                  <h2 className="text-[14px] font-semibold leading-snug">{t.title}</h2>
                   <p className="text-[12px] text-primary font-semibold mt-0.5">{t.subtitle}</p>
                 </div>
                 <p className="text-[12px] text-text-secondary leading-relaxed">{t.description}</p>
@@ -3704,7 +3704,7 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
       </main>
 
       <footer className="py-4 px-6 border-t border-line text-[12px] text-text-secondary text-center leading-relaxed">
-        <p className="font-bold">CONFIDENCIAL — USO INTERNO &nbsp;&bull;&nbsp; © 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97</p>
+        <p className="font-semibold">CONFIDENCIAL — USO INTERNO &nbsp;&bull;&nbsp; © 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97</p>
       </footer>
     </div>
   );
@@ -3724,7 +3724,7 @@ function ToolPlaceholder({ title, description, onHome }: { title: string; descri
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-sidebar-active text-primary mb-5">
             <Building2 size={26} />
           </div>
-          <h2 className="text-[16px] font-bold mb-2">Em desenvolvimento</h2>
+          <h2 className="text-[16px] font-semibold mb-2">Em desenvolvimento</h2>
           <p className="text-[14px] text-text-secondary leading-relaxed">{description}</p>
           <button onClick={onHome} className="mt-6 px-4 py-2 bg-primary text-white text-[12px] rounded hover:bg-primary-hover transition-colors">
             Voltar às ferramentas
@@ -3751,18 +3751,18 @@ function BudgetLineChart({ lines }: { lines: BudgetLine[] }) {
               <span className="text-[12px] font-semibold text-text">{line.activity}</span>
               <div className="flex gap-4 text-[12px] font-mono shrink-0 items-center flex-wrap">
                 {hasPlanValues && (
-                  <span className="text-text-secondary">Planejado: <span className="text-text font-bold">{formatCurrency(line.plannedValue)}</span></span>
+                  <span className="text-text-secondary">Planejado: <span className="text-text font-semibold">{formatCurrency(line.plannedValue)}</span></span>
                 )}
-                <span className={cn(over ? 'text-error font-bold' : 'text-primary font-bold')}>
+                <span className={cn(over ? 'text-error font-semibold' : 'text-primary font-semibold')}>
                   Executado: {formatCurrency(line.executedValue)}
                 </span>
                 {hasPlanValues && (
-                  <span className={cn('font-bold', saldo < 0 ? 'text-error' : 'text-success')}>
+                  <span className={cn('font-semibold', saldo < 0 ? 'text-error' : 'text-success')}>
                     {saldo < 0 ? '▲' : '▼'} {formatCurrency(Math.abs(saldo))}
                   </span>
                 )}
                 {over && (
-                  <span className="bg-error/10 text-error border border-error/30 text-[12px] px-1.5 py-0.5 rounded font-bold">
+                  <span className="bg-error/10 text-error border border-error/30 text-[12px] px-1.5 py-0.5 rounded font-semibold">
                     ⚠ EXCEDIDO {(pct - 100).toFixed(1)}%
                   </span>
                 )}
@@ -3778,7 +3778,7 @@ function BudgetLineChart({ lines }: { lines: BudgetLine[] }) {
                 </div>
                 <div className="flex justify-between mt-1 text-[12px] font-mono text-text-secondary">
                   <span>0%</span>
-                  <span className={over ? 'text-error font-bold' : ''}>{pct.toFixed(1)}%</span>
+                  <span className={over ? 'text-error font-semibold' : ''}>{pct.toFixed(1)}%</span>
                   <span>100%</span>
                 </div>
               </>
@@ -3800,7 +3800,7 @@ function UploadSlot({ label, description, file, onFileSelect }: { label: string;
       <div className="flex items-center gap-3">
         {file ? <FileText size={18} className="text-primary shrink-0" /> : <Upload size={18} className="text-text-secondary group-hover:text-primary shrink-0 transition-colors" />}
         <div className="min-w-0">
-          <p className="text-[12px] font-bold text-text group-hover:text-primary transition-colors truncate">{label}</p>
+          <p className="text-[12px] font-semibold text-text group-hover:text-primary transition-colors truncate">{label}</p>
           <p className="text-[12px] text-text-secondary">{description}</p>
         </div>
       </div>
@@ -3863,7 +3863,7 @@ function ProcessStep({ step, current, label }: { step: number; current: number; 
   const active = current === step;
   return (
     <div className={cn('flex items-center gap-4 p-4 border rounded transition-all', done ? 'border-success/30 bg-success/5' : active ? 'border-primary/30 bg-primary/5' : 'border-line bg-sidebar')}>
-      <div className={cn('w-8 h-8 rounded-full border-2 flex items-center justify-center text-[12px] font-bold shrink-0 transition-all', done ? 'border-success text-success bg-success/10' : active ? 'border-primary text-primary bg-primary/10 animate-pulse' : 'border-line text-text-secondary')}>
+      <div className={cn('w-8 h-8 rounded-full border-2 flex items-center justify-center text-[12px] font-semibold shrink-0 transition-all', done ? 'border-success text-success bg-success/10' : active ? 'border-primary text-primary bg-primary/10 animate-pulse' : 'border-line text-text-secondary')}>
         {done ? '✓' : step}
       </div>
       <span className={cn('text-[12px] font-mono', done ? 'text-success' : active ? 'text-primary' : 'text-text-secondary')}>
@@ -3877,7 +3877,7 @@ function MetricCard({ label, value, sub, color }: { label: string; value: string
   return (
     <div className="bg-card p-5 border border-line rounded">
       <p className="text-[12px] text-text-secondary mb-2">{label}</p>
-      <p className={cn('text-[32px] font-mono font-bold mb-1', color === 'amber' ? 'text-warning' : 'text-text')}>{value}</p>
+      <p className={cn('text-[32px] font-mono font-semibold mb-1', color === 'amber' ? 'text-warning' : 'text-text')}>{value}</p>
       <p className="text-[12px] text-text-secondary">{sub}</p>
     </div>
   );
@@ -3890,7 +3890,7 @@ function VerdictBanner({ result }: { result: AuditResult }) {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-[12px] text-text-secondary mb-2">Parecer Final — Stack Audit™</p>
-          <h2 className={cn('text-[32px] font-extrabold', `text-${color}`)}>{result.verdict}</h2>
+          <h2 className={cn('text-[32px] font-semibold', `text-${color}`)}>{result.verdict}</h2>
           <p className="text-text-secondary text-[14px] mt-2 font-mono">
             {result.organization} &bull; {result.periodStart} → {result.periodEnd} &bull; Contrato {result.contractNumber}
           </p>
@@ -4030,9 +4030,9 @@ function RapcTableRow({
       <td className="px-4 py-2.5 border-r border-line/20">{src?.razao_social || item.entity}</td>
       <td className="px-4 py-2.5 text-[12px] text-primary border-r border-line/20">{item.docId}</td>
       <td className="px-4 py-2.5 text-[12px] whitespace-nowrap border-r border-line/20">{formatTaxId(item.taxId)}</td>
-      <td className="px-4 py-2.5 text-right font-bold border-r border-line/20">{formatCurrency(item.value)}</td>
+      <td className="px-4 py-2.5 text-right font-semibold border-r border-line/20">{formatCurrency(item.value)}</td>
       <td className="px-4 py-2.5 border-r border-line/20">
-        <div className={cn('mx-auto w-fit px-2 py-0.5 rounded-sm text-[12px] font-bold', item.status === 'Conciliado' && 'bg-success/10 text-success border border-success/30', item.status === 'Ressalva' && 'bg-warning/10 text-warning border border-warning/30', item.status === 'Pendente' && 'bg-error/10 text-error border border-error/30')}>{item.status}</div>
+        <div className={cn('mx-auto w-fit px-2 py-0.5 rounded-sm text-[12px] font-semibold', item.status === 'Conciliado' && 'bg-success/10 text-success border border-success/30', item.status === 'Ressalva' && 'bg-warning/10 text-warning border border-warning/30', item.status === 'Pendente' && 'bg-error/10 text-error border border-error/30')}>{item.status}</div>
       </td>
       <td className="px-4 py-2.5 text-center text-text-secondary border-r border-line/20">{item.nfPage || '-'}</td>
       <td className="px-4 py-2.5 text-center text-text-secondary border-r border-line/20">{item.paymentPage || '-'}</td>

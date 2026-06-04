@@ -99,7 +99,7 @@ export default function KycApp({ user, apiFetch, addToast, onHome, navigate }: K
         {navItems.map((it) => <SidebarItem key={it.id} icon={it.icon} active={section === it.id} onClick={() => goSection(it.id)}>{it.label}</SidebarItem>)}
       </ToolSidebar>
 
-      <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
+      <main id="main-content" className="ml-[256px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader light={HEADERS[section][0]} accent={HEADERS[section][1]} />
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
           {section === 'base' && <BaseView records={records} loading={loading} openDetail={openDetail} />}
@@ -174,7 +174,7 @@ export function BaseView({ records, loading, openDetail }: { records: KycSummary
                   {filtered.map((r) => (
                     <tr key={r.id} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openDetail(r.id)}>
                       <td className="px-4 py-2.5 max-w-[260px] truncate">{r.nome}</td>
-                      <td className="px-4 py-2.5"><span className="text-[12px] font-bold uppercase text-primary">{r.type}</span></td>
+                      <td className="px-4 py-2.5"><span className="text-[12px] font-semibold uppercase text-primary">{r.type}</span></td>
                       <td className="px-4 py-2.5 font-mono whitespace-nowrap">{r.documentoFmt}</td>
                       <td className="px-4 py-2.5">{r.verdict ? <Chip tone={VERDICT[r.verdict]?.tone} icon={VERDICT[r.verdict]?.icon} size="sm">{VERDICT[r.verdict]?.label}</Chip> : '—'}</td>
                       <td className="px-4 py-2.5">{r.elegivel === true ? <Chip tone="success" size="sm">Elegível</Chip> : r.elegivel === false ? <Chip tone="error" size="sm">Inelegível</Chip> : <span className="text-text-secondary">—</span>}</td>
@@ -248,7 +248,7 @@ export function ConvitesView({ apiFetch, addToast, initialCnpj }: { apiFetch: Ky
                 const url = i.url || `${base}/${i.type}/${i.token}`;
                 return (
                   <tr key={i.token} className="border-t border-line hover:bg-primary/5">
-                    <td className="px-4 py-2.5"><span className="text-[12px] font-bold uppercase text-primary">{i.type}</span></td>
+                    <td className="px-4 py-2.5"><span className="text-[12px] font-semibold uppercase text-primary">{i.type}</span></td>
                     <td className="px-4 py-2.5 font-mono">{i.cnpj ? maskDoc(i.cnpj) : '—'}</td>
                     <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(i.createdAt).toLocaleDateString('pt-BR')}</td>
                     <td className="px-4 py-2.5">{i.usedByRecordId ? <Chip tone="success" size="sm">Utilizado</Chip> : <Chip tone="info" size="sm">Pendente</Chip>}</td>
@@ -291,7 +291,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload }: { curr
       <Card className="p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2"><span className="text-[12px] font-bold text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span></div>
+            <div className="flex items-center gap-2"><span className="text-[12px] font-semibold text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span></div>
             <div className="text-[16px] font-semibold mt-0.5">{nome || '—'}</div>
             <div className="text-[12px] text-text-secondary font-mono">{maskDoc(doc)}</div>
           </div>
@@ -321,7 +321,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload }: { curr
         <Card className={cn('p-5 border-2', r.elegibilidade.elegivel ? 'border-success/40' : 'border-error/40')}>
           <div className="flex items-center gap-2 mb-1.5">
             {r.elegibilidade.elegivel ? <ShieldCheck size={16} className="text-success" /> : <ShieldAlert size={16} className="text-error" />}
-            <span className="text-[14px] font-bold">{r.elegibilidade.elegivel ? 'Elegível' : 'Inelegível'}</span>
+            <span className="text-[14px] font-semibold">{r.elegibilidade.elegivel ? 'Elegível' : 'Inelegível'}</span>
           </div>
           <p className="text-[12px] text-text-secondary mb-2">Critério: não constar em listas de restrição + respostas adequadas (risco = "Não") + obrigações de impostos/previdência cumpridas.</p>
           {!r.elegibilidade.elegivel && (

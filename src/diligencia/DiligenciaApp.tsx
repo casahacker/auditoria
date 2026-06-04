@@ -181,7 +181,7 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
         ))}
       </ToolSidebar>
 
-      <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
+      <main id="main-content" className="ml-[256px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader
           light={DIL_HEADERS[section][0]} accent={DIL_HEADERS[section][1]}
           right={
@@ -543,7 +543,7 @@ export function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: a
             <div key={i} className="border-b border-line pb-3 last:border-0 last:pb-0">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12px] font-semibold">{s.fonte}</span>
-                <span className={cn('text-[12px] font-bold px-2 py-0.5 rounded border',
+                <span className={cn('text-[12px] font-semibold px-2 py-0.5 rounded border',
                   s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{ST_LABEL(s)}</span>
               </div>
               {(s.hits || []).map((h: any, j: number) => (

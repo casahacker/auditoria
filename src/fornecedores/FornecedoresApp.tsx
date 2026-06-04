@@ -165,7 +165,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
       <ToolSidebar brand="Fornecedores" onHome={onHome} user={user}>
         {navItems.map((it) => <SidebarItem key={it.id} icon={it.icon} active={section === it.id} onClick={() => goSection(it.id)}>{it.label}</SidebarItem>)}
       </ToolSidebar>
-      <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
+      <main id="main-content" className="ml-[256px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader light={HEADERS[section][0]} accent={HEADERS[section][1]} right={
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2 bg-card border border-line rounded px-3 py-1.5 focus-within:border-primary">
@@ -204,7 +204,7 @@ function Stat({ icon: Icon, label, value, tone, active, onClick }: { icon: React
       className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         active ? 'border-primary ring-1 ring-primary' : 'border-line hover:border-primary/50')}>
       <Icon size={18} className={ring[tone]} aria-hidden />
-      <div><div className="text-[20px] font-bold leading-none">{value}</div><div className="text-[12px] text-text-secondary mt-1">{label}</div></div>
+      <div><div className="text-[20px] font-semibold leading-none">{value}</div><div className="text-[12px] text-text-secondary mt-1">{label}</div></div>
     </button>
   );
 }
@@ -421,7 +421,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
 
       {/* header: identidade + status num relance */}
       <Card className="p-5">
-        <h2 ref={headingRef} tabIndex={-1} className="text-[20px] font-bold leading-tight outline-none">{nome}</h2>
+        <h2 ref={headingRef} tabIndex={-1} className="text-[20px] font-semibold leading-tight outline-none">{nome}</h2>
         <div className="font-mono text-[14px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
         <div className="grid sm:grid-cols-3 gap-3 mt-4">
           <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
@@ -433,7 +433,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
       {/* dados cadastrais consolidados (editável) */}
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <div className="text-[14px] font-bold flex items-center gap-1.5"><Building2 size={15} className="text-primary" aria-hidden /> Dados cadastrais</div>
+          <div className="text-[14px] font-semibold flex items-center gap-1.5"><Building2 size={15} className="text-primary" aria-hidden /> Dados cadastrais</div>
           <div className="flex items-center gap-2">
             <Btn variant="secondary" size="sm" onClick={onRefresh} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} Atualizar das APIs</Btn>
             {edit ? (<>
@@ -446,7 +446,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
           <datalist id="cad-banks">{banks.map((b) => <option key={b.code} value={`${b.code} - ${b.name}`} />)}</datalist>
           {CAD_GROUPS.map((g) => (
             <div key={g.title}>
-              <div className="text-[12px] font-bold text-text-secondary mb-2">{g.title}</div>
+              <div className="text-[12px] font-semibold text-text-secondary mb-2">{g.title}</div>
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
                 {g.fields.map((f) => (
                   <div key={f.k} className={f.full ? 'sm:col-span-2' : ''}>
@@ -470,12 +470,12 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
             </div>
           ))}
           <div>
-            <div className="text-[12px] font-bold text-text-secondary mb-2">Observações</div>
+            <div className="text-[12px] font-semibold text-text-secondary mb-2">Observações</div>
             {edit ? <textarea value={form.observacoes || ''} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={3} className="w-full bg-bg border border-line rounded px-3 py-2 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
               : <div className="text-[12px] text-text">{c.observacoes || '—'}</div>}
           </div>
           {profile.qsa?.length > 0 && (
-            <div><div className="text-[12px] font-bold text-text-secondary mb-2">Quadro societário (Receita)</div>
+            <div><div className="text-[12px] font-semibold text-text-secondary mb-2">Quadro societário (Receita)</div>
               <div className="text-[12px] text-text-secondary">{profile.qsa.map((s: any) => `${s.nome}${s.qual ? ` (${s.qual})` : ''}`).join('; ')}</div></div>
           )}
         </div>
@@ -489,7 +489,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
       {/* restrições / diligência */}
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <div className="text-[14px] font-bold flex items-center gap-1.5"><ShieldCheck size={15} className="text-primary" aria-hidden /> Diligência — listas de restrição</div>
+          <div className="text-[14px] font-semibold flex items-center gap-1.5"><ShieldCheck size={15} className="text-primary" aria-hidden /> Diligência — listas de restrição</div>
           <div className="flex items-center gap-2">
             {dil && <Btn variant="ghost" size="sm" onClick={() => window.open(`/api/diligencia/${doc}/report.html`, '_blank')}>Relatório (PDF)</Btn>}
             {doc.length === 14 && <Btn variant="secondary" size="sm" onClick={onReconsultar} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} Reconsultar</Btn>}
@@ -501,7 +501,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
             {(dil.sancoes || []).map((s: any, i: number) => (
               <div key={i} className="border-b border-line pb-2 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-semibold">{s.fonte}</span>
-                  <span className={cn('text-[12px] font-bold px-2 py-0.5 rounded border', s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{sancaoLabel(s)}</span></div>
+                  <span className={cn('text-[12px] font-semibold px-2 py-0.5 rounded border', s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{sancaoLabel(s)}</span></div>
                 {(s.hits || []).map((h: any, j: number) => <div key={j} className="mt-1 text-[12px] bg-error/5 border border-error/20 rounded px-2 py-1.5"><div className="font-semibold text-error">{h.tipo}</div><div className="text-text-secondary">{h.orgao} · vigência {h.dataInicio || '?'}–{h.dataFim || '?'} · processo {h.processo || '—'}</div></div>)}
               </div>
             ))}
@@ -513,7 +513,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
 
       {/* KYS / KYG */}
       <div>
-        <div className="text-[14px] font-bold flex items-center gap-1.5 mb-3"><BadgeCheck size={15} className="text-primary" aria-hidden /> Conformidade KYS / KYG</div>
+        <div className="text-[14px] font-semibold flex items-center gap-1.5 mb-3"><BadgeCheck size={15} className="text-primary" aria-hidden /> Conformidade KYS / KYG</div>
         {kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} />
           : <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade (exigida para contratações específicas)." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} aria-hidden /> Gerar convite KYS/KYG</Btn>} />}
       </div>
@@ -592,7 +592,7 @@ function AjudaFornecedores() {
   return (
     <div className="max-w-3xl space-y-5">
       <p className="text-[14px] text-text-secondary leading-relaxed">O <b className="text-text">Cockpit de Fornecedores</b> concentra a diligência e a conformidade (KYS/KYG) de todos os fornecedores num único lugar.</p>
-      <div className="space-y-3">{blocks.map((b, i) => <Card key={i} className="p-4"><div className="text-[14px] font-bold text-primary mb-1">{b.t}</div><div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div></Card>)}</div>
+      <div className="space-y-3">{blocks.map((b, i) => <Card key={i} className="p-4"><div className="text-[14px] font-semibold text-primary mb-1">{b.t}</div><div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div></Card>)}</div>
     </div>
   );
 }

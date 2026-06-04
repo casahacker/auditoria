@@ -65,7 +65,7 @@ function Metric({ label, value, sub, tone }: { label: string; value: string | nu
   return (
     <Card className="p-4">
       <div className="text-[12px] text-text-secondary">{label}</div>
-      <div className={cn('text-[28px] font-bold mt-1', tone)}>{value}</div>
+      <div className={cn('text-[28px] font-semibold mt-1', tone)}>{value}</div>
       {sub && <div className="text-[12px] text-text-secondary mt-0.5">{sub}</div>}
     </Card>
   );
@@ -78,8 +78,8 @@ function FileField({ label, hint, multiple, accept, files, onChange }: {
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[12px] font-bold text-text-secondary">{label}</span>
-        {files.length > 0 && <span className="text-[12px] text-success font-bold">{files.length} arquivo{files.length !== 1 ? 's' : ''}</span>}
+        <span className="text-[12px] font-semibold text-text-secondary">{label}</span>
+        {files.length > 0 && <span className="text-[12px] text-success font-semibold">{files.length} arquivo{files.length !== 1 ? 's' : ''}</span>}
       </div>
       <button
         onClick={() => ref.current?.click()}
@@ -111,7 +111,7 @@ function Field({ label, value, onChange, placeholder, textarea }: {
 }) {
   return (
     <label className="block">
-      <span className="text-[12px] font-bold text-text-secondary">{label}</span>
+      <span className="text-[12px] font-semibold text-text-secondary">{label}</span>
       {textarea ? (
         <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={2}
           className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none resize-y" />
@@ -335,7 +335,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome, navigate, in
           return (
             <SidebarItem key={s.id} disabled={!s.enabled} active={active} onClick={() => s.enabled && goSection(s.id)}
               indicator={
-                <span className={cn('shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[12px] font-bold border',
+                <span className={cn('shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[12px] font-semibold border',
                   done ? 'bg-primary border-primary text-white' : active ? 'border-primary text-primary' : 'border-line text-text-secondary')}>
                   {done ? <CheckCircle2 size={12} /> : i + 1}
                 </span>
@@ -346,7 +346,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome, navigate, in
         })}
       </ToolSidebar>
 
-      <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
+      <main id="main-content" className="ml-[256px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader
           light={FEAC_HEADERS[section][0]} accent={FEAC_HEADERS[section][1]}
           right={record ? <div className="text-[12px] text-text-secondary truncate">{record.accountability?.projeto || '—'} · Contrato {record.accountability?.contractNumber || '—'}</div> : undefined}
@@ -405,7 +405,7 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[['1', 'Entrada de documentos'], ['2', 'Relatório preliminar'], ['3', 'Tratamento'], ['4', 'Prestação de contas']].map(([n, l]) => (
           <div key={n} className="bg-surface-hover border border-line rounded p-3 text-center">
-            <div className="text-primary font-extrabold text-[14px]">{n}</div>
+            <div className="text-primary font-semibold text-[14px]">{n}</div>
             <div className="text-[12px] text-text-secondary leading-tight mt-0.5">{l}</div>
           </div>
         ))}
@@ -413,7 +413,7 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
 
       {/* ETAPA 1 — detalhada */}
       <Card className="p-5">
-        <div className="flex items-center gap-2 mb-1"><span className="text-primary font-extrabold text-[14px]">1 · Entrada de documentos</span></div>
+        <div className="flex items-center gap-2 mb-1"><span className="text-primary font-semibold text-[14px]">1 · Entrada de documentos</span></div>
         <p className="text-[12px] text-text-secondary leading-relaxed mb-4">
           Clique em <b className="text-text">Nova prestação</b> e preencha os quatro campos abaixo. Cada campo aceita
           <b className="text-text"> vários arquivos</b> (exceto a planilha) — eles são mesclados automaticamente.
@@ -424,7 +424,7 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
               <f.icon size={18} className="text-primary shrink-0 mt-0.5" aria-hidden />
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[12px] font-bold text-text">{f.t}</span>
+                  <span className="text-[12px] font-semibold text-text">{f.t}</span>
                   <Chip tone={f.req === 'Opcional' ? 'neutral' : 'info'} size="sm">{f.req}</Chip>
                 </div>
                 <p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">{f.d}</p>
@@ -434,7 +434,7 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
         </div>
 
         <div className="mt-4 pt-4 border-t border-line">
-          <div className="text-[12px] font-bold text-text-secondary mb-2">Identificação (conforme SGPP)</div>
+          <div className="text-[12px] font-semibold text-text-secondary mb-2">Identificação (conforme SGPP)</div>
           <ul className="space-y-1.5 text-[12px] text-text-secondary">
             <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Nome do Projeto</b> — exatamente como cadastrado no SGPP. Entra no carimbo e no relatório.</span></li>
             <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Número do Contrato FEAC</b> — o nº do contrato no SGPP (ex.: <span className="font-mono">2025NDOES_1</span>). Entra no carimbo e no relatório.</span></li>
@@ -483,7 +483,7 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
 
       {/* dúvidas */}
       <div>
-        <div className="text-[12px] font-bold text-text-secondary mb-2">Dúvidas frequentes</div>
+        <div className="text-[12px] font-semibold text-text-secondary mb-2">Dúvidas frequentes</div>
         <div className="space-y-2">
           <FaqItem q="Posso enviar as NFs e comprovantes separados?">Sim — selecione vários no mesmo campo; o sistema mescla e concilia cada documento.</FaqItem>
           <FaqItem q="Reabri a prestação e quero mudar um rateio.">Abra-a no Histórico → volte ao Relatório preliminar → ajuste → Tratar documentos de novo. A Observação e os PDFs são regerados.</FaqItem>
@@ -499,8 +499,8 @@ function HelpStep({ n, title, children }: { n: string; title: string; children: 
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-1">
-        <span className="shrink-0 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold">{n}</span>
-        <span className="text-[14px] font-bold text-text">{title}</span>
+        <span className="shrink-0 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-semibold">{n}</span>
+        <span className="text-[14px] font-semibold text-text">{title}</span>
       </div>
       <p className="text-[12px] text-text-secondary leading-relaxed">{children}</p>
     </Card>
@@ -538,12 +538,12 @@ function HistoricoView({ history, historyLoading, openRecord, deleteRecord, newP
           {history.map((h: FeacSummary) => (
             <Card key={h.id} className="p-4 flex flex-col gap-2 hover:border-primary transition-colors">
               <div className="flex items-start justify-between gap-2">
-                <div className="font-bold text-[14px] leading-snug">{h.projeto || 'Sem projeto'}</div>
+                <div className="font-semibold text-[14px] leading-snug">{h.projeto || 'Sem projeto'}</div>
                 <IconBtn label={`Excluir prestação ${h.projeto || ''}`.trim()} className="p-0.5 hover:text-error" onClick={() => deleteRecord(h.id)}><Trash2 size={13} /></IconBtn>
               </div>
               <div className="text-[12px] text-text-secondary">Contrato {h.contractNumber || '—'} · {h.competencia || '—'}</div>
               <div className="flex items-center gap-2 text-[12px]">
-                <span className="px-2 py-0.5 rounded-full bg-sidebar-active text-primary font-bold">{STAGE_LABEL[h.stage] || h.stage}</span>
+                <span className="px-2 py-0.5 rounded-full bg-sidebar-active text-primary font-semibold">{STAGE_LABEL[h.stage] || h.stage}</span>
                 <span className="text-text-secondary">{h.okCount}/{h.lancamentosCount} conciliados</span>
               </div>
               <div className="text-[12px] text-text-secondary">{formatCurrency(h.totalSaidas || 0)} · {new Date(h.updatedAt).toLocaleDateString('pt-BR')}</div>
@@ -571,7 +571,7 @@ function UploadView(p: any) {
         <FileField label="Fluxo de caixa (planilha)" hint="Arquivo .xlsx do centro de custo" accept=".xlsx,.xls" files={p.fluxo} onChange={p.setFluxo} />
       </div>
       <Card className="p-5 space-y-4">
-        <div className="text-[12px] font-bold text-text-secondary">Identificação (conforme SGPP)</div>
+        <div className="text-[12px] font-semibold text-text-secondary">Identificação (conforme SGPP)</div>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Nome do Projeto (conforme SGPP) *" value={p.meta.projeto} onChange={(v: string) => p.setMeta({ ...p.meta, projeto: v })} placeholder="Ex.: Hub de Cidadania Ativa Integração" />
           <Field label="Número do Contrato FEAC (conforme SGPP) *" value={p.meta.contractNumber} onChange={(v: string) => p.setMeta({ ...p.meta, contractNumber: v })} placeholder="Ex.: 2025NDOES_1" />
@@ -581,7 +581,7 @@ function UploadView(p: any) {
         <div>
           <div className="text-[12px] text-text-secondary mb-1">Carimbo aplicado na margem esquerda de cada documento</div>
           <div className="rounded bg-bg px-3 py-2 border-l-2 border-dashed border-text-secondary/60">
-            <p className="text-[12px] font-bold leading-snug text-text">{stampPreview}</p>
+            <p className="text-[12px] font-semibold leading-snug text-text">{stampPreview}</p>
           </div>
         </div>
       </Card>
@@ -646,7 +646,7 @@ function PreliminarView(p: any) {
                 <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => p.patchLanc(l.id, { rateio: l.rateio === 'SIM' ? 'NAO' : 'SIM' })}
                     aria-pressed={l.rateio === 'SIM'} aria-label={`Rateio ${l.rateio === 'SIM' ? 'ativado' : 'desativado'} para ${l.razaoSocial || l.fornecedor || 'lançamento'}`}
-                    className={cn('px-2 py-0.5 rounded text-[12px] font-bold border transition-colors',
+                    className={cn('px-2 py-0.5 rounded text-[12px] font-semibold border transition-colors',
                       l.rateio === 'SIM' ? 'bg-primary/10 text-primary border-primary/40' : 'border-line text-text-secondary hover:text-text')}>
                     {l.rateio === 'SIM' ? 'Sim' : 'Não'}
                   </button>
@@ -660,7 +660,7 @@ function PreliminarView(p: any) {
 
       {orphans.length > 0 && (
         <div className="bg-warning/5 border border-warning/30 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-warning font-bold text-[12px] mb-2"><AlertTriangle size={14} aria-hidden /> Documentos sem lançamento ({orphans.length})</div>
+          <div className="flex items-center gap-2 text-warning font-semibold text-[12px] mb-2"><AlertTriangle size={14} aria-hidden /> Documentos sem lançamento ({orphans.length})</div>
           <ul className="text-[12px] text-text-secondary space-y-1">
             {orphans.map((o: any, i: number) => (
               <li key={i}>{o.kind === 'nf' ? 'NF' : 'Comprovante'} · {o.extractedName || 's/ nome'} · {formatCurrency(o.extractedValue || 0)} · pág. {o.pages?.join(',')}</li>
@@ -681,14 +681,14 @@ function TratamentoView({ record, busy, progress }: any) {
         <Card className="flex items-center gap-3 p-6">
           <Loader2 className="animate-spin text-primary" size={22} aria-hidden />
           <div>
-            <div className="text-[14px] font-bold text-text">Tratando documentos…</div>
+            <div className="text-[14px] font-semibold text-text">Tratando documentos…</div>
             <div className="text-[12px] text-text-secondary">{progress}</div>
             <div className="text-[12px] text-text-secondary mt-1">Mesclagem · carimbo de margem · compressão · conversão PDF/A-2b · declaração de rateio · atualização do fluxo de caixa.</div>
           </div>
         </Card>
       ) : record?.treatment ? (
         <Card className="p-6 space-y-2">
-          <div className="flex items-center gap-2 text-success font-bold text-[14px]"><CheckCircle2 size={18} aria-hidden /> Tratamento concluído</div>
+          <div className="flex items-center gap-2 text-success font-semibold text-[14px]"><CheckCircle2 size={18} aria-hidden /> Tratamento concluído</div>
           <div className="text-[12px] text-text-secondary">{record.treatment.treatedCount || 0} documento(s) mesclado(s), carimbado(s) e convertido(s) para PDF/A-2b.</div>
           {errors.length > 0 && <div className="text-[12px] text-warning">{errors.length} item(ns) com aviso — verifique no relatório.</div>}
         </Card>
@@ -786,7 +786,7 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
                   <td className="px-2.5 py-2">{l.dataPagamento || '—'}</td>
                   <td className="px-2.5 py-2">{l.nf?.extractedDate || '—'}</td>
                   <td className="px-2.5 py-2">{l.nf?.docNumber || '—'}</td>
-                  <td className="px-2.5 py-2 text-center">{l.rateio === 'SIM' ? <span className="text-primary font-bold">Sim</span> : 'Não'}</td>
+                  <td className="px-2.5 py-2 text-center">{l.rateio === 'SIM' ? <span className="text-primary font-semibold">Sim</span> : 'Não'}</td>
                   <td className={cn('px-2.5 py-2 text-right font-mono', v < 0 ? 'text-error' : 'text-success')}>{v < 0 ? '− ' : '+ '}{formatCurrency(Math.abs(v))}</td>
                   <td className="px-2.5 py-2 max-w-[220px] truncate text-text-secondary" title={(l.notaExplicativa || '').replace(/\*\*/g, '')}>{(l.notaExplicativa || '').replace(/\*\*/g, '').replace(/\n+/g, ' · ').slice(0, 70) || '—'}</td>
                   <td className="px-2.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
@@ -878,7 +878,7 @@ function LancModal({ lanc, record, apiFetch, cnpj, onClose, onPatch, onLookupCnp
               <div className="flex items-center gap-3">
                 <span className="text-[12px] text-text-secondary">Rateio</span>
                 <button onClick={() => onPatch(lanc.id, { rateio: lanc.rateio === 'SIM' ? 'NAO' : 'SIM' })}
-                  className={cn('px-3 py-1 rounded text-[12px] font-bold border', lanc.rateio === 'SIM' ? 'bg-primary/10 text-primary border-primary/40' : 'border-line text-text-secondary')}>
+                  className={cn('px-3 py-1 rounded text-[12px] font-semibold border', lanc.rateio === 'SIM' ? 'bg-primary/10 text-primary border-primary/40' : 'border-line text-text-secondary')}>
                   {lanc.rateio === 'SIM' ? 'Sim' : 'Não'}
                 </button>
               </div>

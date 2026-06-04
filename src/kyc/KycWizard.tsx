@@ -108,21 +108,21 @@ function YesNoField({ n, q, value, obs, onResp, onObs }: { n: number; q: { key: 
   return (
     <div className={`rounded-lg border bg-card p-4 transition-colors ${value ? 'border-line' : 'border-line hover:border-primary/30'}`}>
       <div className="flex gap-2.5">
-        <span className="shrink-0 w-5 h-5 rounded-full bg-surface-hover text-text-secondary text-[12px] font-bold flex items-center justify-center mt-0.5">{n}</span>
+        <span className="shrink-0 w-5 h-5 rounded-full bg-surface-hover text-text-secondary text-[12px] font-semibold flex items-center justify-center mt-0.5">{n}</span>
         <p className="text-[12px] text-text leading-relaxed">{q.text}</p>
       </div>
       <div className="mt-3 pl-7">
         <div className="inline-flex rounded-md border border-line overflow-hidden">
           {(['sim', 'nao'] as YesNo[]).map((opt) => (
             <button key={opt} type="button" onClick={() => onResp(opt)} aria-pressed={value === opt}
-              className={`inline-flex items-center gap-1.5 px-5 py-1.5 text-[12px] font-bold transition-colors ${opt === 'sim' ? 'border-r border-line' : ''} ${value === opt ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+              className={`inline-flex items-center gap-1.5 px-5 py-1.5 text-[12px] font-semibold transition-colors ${opt === 'sim' ? 'border-r border-line' : ''} ${value === opt ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
               {value === opt && <Check size={13} aria-hidden />}{opt === 'sim' ? 'Sim' : 'Não'}
             </button>
           ))}
         </div>
         {showObs && (
           <div className="mt-3">
-            <label className="text-[12px] font-bold text-text-secondary">Observações (obrigatório)</label>
+            <label className="text-[12px] font-semibold text-text-secondary">Observações (obrigatório)</label>
             <textarea value={obs} onChange={(e) => onObs(e.target.value)} rows={2} placeholder="Informe os detalhes solicitados na pergunta."
               className="mt-1 w-full bg-bg border border-line rounded px-3 py-2 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
           </div>
@@ -241,7 +241,7 @@ export default function KycWizard() {
       <header className="bg-sidebar border-b border-line px-5 sm:px-10 py-4 flex items-center gap-4">
         <img src={CASA_HACKER_LOGO} alt="Casa Hacker" className="h-8 w-auto object-contain invert opacity-90" />
         <div>
-          <div className="text-primary font-extrabold text-[12px]">{type === 'kys' ? 'Formulário de Conformidade — Fornecedores (KYS)' : 'Declaração de Conformidade (KYG)'}</div>
+          <div className="text-primary font-semibold text-[12px]">{type === 'kys' ? 'Formulário de Conformidade — Fornecedores (KYS)' : 'Declaração de Conformidade (KYG)'}</div>
           <div className="text-[12px] text-text-secondary">Associação Casa Hacker · preenchimento seguro e verificado</div>
         </div>
       </header>
@@ -250,7 +250,7 @@ export default function KycWizard() {
       <div className="px-5 sm:px-10 pt-5">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between text-[12px] text-text-secondary mb-1.5">
-            <span className="font-bold text-primary">{steps[step]}</span>
+            <span className="font-semibold text-primary">{steps[step]}</span>
             <span>Etapa {step + 1} de {steps.length}</span>
           </div>
           <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
@@ -287,7 +287,7 @@ export default function KycWizard() {
                 <Field label="CNPJ" value={kys.cnpj} required status={cnpjStatus === 'idle' ? undefined : cnpjStatus}
                   onChange={(v) => { setKys({ ...kys, cnpj: v }); setCnpjStatus('idle'); }} placeholder="00.000.000/0000-00"
                   hint={kys.cnpj && !isValidCnpj(kys.cnpj) ? <span className="text-error">CNPJ inválido</span> : cnpjSituacao ? <span className={/ATIVA/i.test(cnpjSituacao) ? 'text-success' : 'text-error'}>Receita: {cnpjSituacao}</span> : 'Ao informar, buscamos os dados na Receita Federal.'} />
-                <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kys.cnpj)} disabled={!isValidCnpj(kys.cnpj) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">Buscar na Receita</button></div>
+                <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kys.cnpj)} disabled={!isValidCnpj(kys.cnpj) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">Buscar na Receita</button></div>
               </div>
               <Field label="Razão social" value={kys.razaoSocial} required onChange={(v) => setKys({ ...kys, razaoSocial: v })} />
               <Field label="Nome fantasia" value={kys.nomeFantasia} onChange={(v) => setKys({ ...kys, nomeFantasia: v })} />
@@ -356,7 +356,7 @@ export default function KycWizard() {
               <div className="flex gap-2">
                 {(['pj', 'pf'] as const).map((tp) => (
                   <button key={tp} type="button" onClick={() => setKyg({ ...kyg, tipoPessoa: tp })}
-                    className={`px-4 py-1.5 rounded text-[12px] font-bold border ${kyg.tipoPessoa === tp ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary'}`}>
+                    className={`px-4 py-1.5 rounded text-[12px] font-semibold border ${kyg.tipoPessoa === tp ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary'}`}>
                     {tp === 'pj' ? 'Organização (CNPJ)' : 'Pessoa física (CPF)'}
                   </button>
                 ))}
@@ -364,7 +364,7 @@ export default function KycWizard() {
               <div className="grid sm:grid-cols-2 gap-3">
                 <Field label={kyg.tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} value={kyg.documento} required onChange={(v) => { setKyg({ ...kyg, documento: v }); setCnpjStatus('idle'); }}
                   status={kyg.documento ? ((kyg.tipoPessoa === 'pj' ? isValidCnpj(kyg.documento) : isValidCpf(kyg.documento)) ? 'ok' : 'error') : undefined} />
-                {kyg.tipoPessoa === 'pj' && <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kyg.documento)} disabled={!isValidCnpj(kyg.documento) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">{cnpjStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : 'Buscar na Receita'}</button></div>}
+                {kyg.tipoPessoa === 'pj' && <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kyg.documento)} disabled={!isValidCnpj(kyg.documento) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">{cnpjStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : 'Buscar na Receita'}</button></div>}
               </div>
               <Field label={kyg.tipoPessoa === 'pj' ? 'Razão social' : 'Nome completo'} value={kyg.nome} required onChange={(v) => setKyg({ ...kyg, nome: v })} />
               <Field label="Nome do projeto" value={kyg.projeto} required onChange={(v) => setKyg({ ...kyg, projeto: v })} />
@@ -411,7 +411,7 @@ export default function KycWizard() {
 
               {type === 'kys' && (
                 <div className="bg-card border border-line rounded-lg overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-line bg-surface-hover text-[12px] font-bold text-text-secondary">Declarações da empresa</div>
+                  <div className="px-4 py-2.5 border-b border-line bg-surface-hover text-[12px] font-semibold text-text-secondary">Declarações da empresa</div>
                   <ul className="p-4 space-y-2.5 max-h-60 overflow-y-auto custom-scrollbar">
                     {KYS_DECLARACOES.map((d, i) => (
                       <li key={i} className="flex gap-2.5 text-[12px] text-text-secondary leading-relaxed">
@@ -424,7 +424,7 @@ export default function KycWizard() {
               )}
 
               <div className="rounded-lg border border-line bg-surface-hover/40 p-4">
-                <div className="text-[12px] font-bold text-text-secondary mb-1.5 flex items-center gap-1.5"><FileSignature size={13} className="text-primary" aria-hidden /> Assinatura eletrônica</div>
+                <div className="text-[12px] font-semibold text-text-secondary mb-1.5 flex items-center gap-1.5"><FileSignature size={13} className="text-primary" aria-hidden /> Assinatura eletrônica</div>
                 <p className="text-[12px] text-text-secondary leading-relaxed">{ASSINATURA_ACEITE}</p>
               </div>
 
@@ -438,17 +438,17 @@ export default function KycWizard() {
           {/* navegação */}
           <div className="flex items-center justify-between pt-2">
             <button type="button" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-bold text-text-secondary hover:text-primary disabled:opacity-30">
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-semibold text-text-secondary hover:text-primary disabled:opacity-30">
               <ChevronLeft size={15} /> Voltar
             </button>
             {step < lastStep ? (
               <button type="button" onClick={() => canNext() && setStep((s) => s + 1)} disabled={!canNext()}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
                 Continuar <ChevronRight size={15} />
               </button>
             ) : (
               <button type="button" onClick={submit} disabled={!aceiteAssinatura || submitting}
-                className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
                 {submitting ? <><Loader2 size={15} className="animate-spin" /> Preparando…</> : <><FileSignature size={15} /> Verificar e assinar</>}
               </button>
             )}
@@ -537,7 +537,7 @@ function SignModal({ sign, onClose, onDone }: { sign: { id: string; token: strin
         <iframe title="Assinatura Documenso" src={`${sign.host}/embed/sign/${sign.token}`} className="flex-1 w-full border-0" allow="camera; microphone" />
         <div className="px-5 py-3 border-t border-line flex items-center justify-between gap-3">
           <span className="text-[12px] text-text-secondary">Assine no quadro acima. Se concluiu e a tela não avançar, clique ao lado.</span>
-          <button onClick={finish} disabled={confirming} className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-bold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
+          <button onClick={finish} disabled={confirming} className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
             {confirming ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Concluí a assinatura
           </button>
         </div>
@@ -550,7 +550,7 @@ function SuccessScreen({ needsSetup, type }: { needsSetup: boolean; type: KycTyp
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center px-6 text-center">
       <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mb-5"><CheckCircle2 size={32} className="text-success" /></div>
-      <h1 className="text-[20px] font-light">{needsSetup ? <>Dados <b className="font-bold text-primary">recebidos</b></> : <>Conformidade <b className="font-bold text-primary">concluída</b></>}</h1>
+      <h1 className="text-[20px] font-light">{needsSetup ? <>Dados <b className="font-semibold text-primary">recebidos</b></> : <>Conformidade <b className="font-semibold text-primary">concluída</b></>}</h1>
       <p className="text-[14px] text-text-secondary mt-3 max-w-md leading-relaxed">
         {needsSetup
           ? `Recebemos o seu ${type.toUpperCase()}. A etapa de assinatura eletrônica será habilitada em breve e você receberá o documento por e-mail.`
