@@ -22,6 +22,11 @@ import fs from "fs";
 
 const PT_BASE = "https://api.portaldatransparencia.gov.br/api-de-dados/";
 const VALIDADE_DIAS = 30;
+// A API do Portal devolve 15 registros por página e ignora `tamanhoPagina`. Como o
+// filtro por CNPJ é inoperante (ver consultaPT), paginamos por NOME e filtramos pelo
+// CNPJ exato — varrendo todas as páginas para não perder uma sanção além da 1ª página.
+const PT_PAGE_SIZE = 15;
+const PT_MAX_PAGES = 25; // teto de segurança: até 375 registros por razão social
 
 export interface DiligenciaCtx {
   DATA_DIR: string;
@@ -44,11 +49,49 @@ const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&l
 const PT_HEADERS = () => ({ "Accept": "application/json", "User-Agent": "StackAudit/1.0 (+https://stack-audit.casahacker.org)", "chave-api-dados": process.env.PORTAL_TRANSPARENCIA_KEY || "" });
 const HTTP_HEADERS = { "Accept": "application/json", "User-Agent": "StackAudit/1.0 (+https://stack-audit.casahacker.org)" };
 
+// ── rate limit global das APIs externas ─────────────────────────────────────────
+// No máximo RATE_PER_MIN chamadas HTTP por minuto (janela deslizante) para TODAS as
+// fontes externas da diligência (Receita + cada página do Portal da Transparência),
+// protegendo a cota da API. A aquisição de vaga é serializada (sem corrida no array);
+// as requisições correm em paralelo depois de obter a vaga.
+const RATE_PER_MIN = Math.max(1, Number(process.env.DILIGENCIA_RATE_PER_MIN || 100));
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, Math.max(0, ms)));
+
+function createRateLimiter(max: number, windowMs: number) {
+  const hits: number[] = [];
+  let gate: Promise<void> = Promise.resolve();
+  return function acquire(): Promise<void> {
+    const p = gate.then(async () => {
+      for (;;) {
+        const now = Date.now();
+        while (hits.length && now - hits[0] >= windowMs) hits.shift();
+        if (hits.length < max) { hits.push(now); return; }
+        await sleep(windowMs - (now - hits[0]) + 10);
+      }
+    });
+    gate = p.catch(() => {});
+    return p;
+  };
+}
+const acquireSlot = createRateLimiter(RATE_PER_MIN, 60_000);
+
+/** fetch com rate limit global + recuo em 429 (respeita Retry-After, até `retries` vezes). */
+async function limitedFetch(url: string, init: RequestInit, retries = 2): Promise<Response> {
+  await acquireSlot();
+  const r = await fetch(url, init);
+  if (r.status === 429 && retries > 0) {
+    const ra = Number(r.headers.get("retry-after"));
+    await sleep((Number.isFinite(ra) && ra > 0 ? Math.min(ra, 90) : 20) * 1000);
+    return limitedFetch(url, init, retries - 1);
+  }
+  return r;
+}
+
 // ── external lookups ──────────────────────────────────────────────────────────
 
 export async function fetchReceita(cnpj: string): Promise<any> {
   try {
-    const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
+    const r = await limitedFetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
     if (r.ok) {
       const d: any = await r.json();
       return {
@@ -66,7 +109,7 @@ export async function fetchReceita(cnpj: string): Promise<any> {
     }
   } catch { /* fall through */ }
   try {
-    const r = await fetch(`https://www.receitaws.com.br/v1/cnpj/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
+    const r = await limitedFetch(`https://www.receitaws.com.br/v1/cnpj/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
     if (r.ok) {
       const d: any = await r.json();
       return {
@@ -91,27 +134,55 @@ function recordMatchesCnpj(x: any, cnpjDigits: string): boolean {
   return onlyDigits(JSON.stringify(x || {})).includes(cnpjDigits);
 }
 
+function mapSancao(x: any): any {
+  return {
+    tipo: x.tipoSancao?.descricaoResumida || x.tipoSancao?.descricaoPortal || (typeof x.tipoSancao === "string" ? x.tipoSancao : "") || "Sanção",
+    orgao: x.orgaoSancionador?.nome || x.orgaoSancionador?.siglaUf || "",
+    dataInicio: x.dataInicioSancao || "", dataFim: x.dataFimSancao || "",
+    fundamentacao: Array.isArray(x.fundamentacao) ? x.fundamentacao.map((f: any) => f.descricao || f.descricaoResumida).filter(Boolean).join("; ") : "",
+    processo: x.numeroProcesso || "", nome: x.pessoa?.razaoSocialReceita || x.pessoa?.nome || "",
+  };
+}
+
+/**
+ * Consulta uma lista de restrição do Portal da Transparência por razão social e
+ * filtra os resultados pelo CNPJ EXATO. O parâmetro de CNPJ da API é inoperante
+ * (devolve a lista inteira), então o filtro confiável é por nome — mas o nome pode
+ * retornar dezenas de homônimos espalhados por várias páginas (15/página). Por isso
+ * percorremos as páginas até a última (ou até PT_MAX_PAGES), acumulando apenas os
+ * registros cujo CNPJ bate exatamente com o do fornecedor.
+ */
 export async function consultaPT(recurso: string, label: string, razaoSocial: string, cnpjDigits: string): Promise<any> {
-  const apiUrl = `${PT_BASE}${recurso}?nomeSancionado=${encodeURIComponent(razaoSocial)}&pagina=1`;
+  const urlForPage = (p: number) => `${PT_BASE}${recurso}?nomeSancionado=${encodeURIComponent(razaoSocial)}&pagina=${p}`;
+  const apiUrl = urlForPage(1);
   const consultaPublica: Record<string, string> = {
     ceis: "https://portaldatransparencia.gov.br/sancoes/ceis", cnep: "https://portaldatransparencia.gov.br/sancoes/cnep",
     cepim: "https://portaldatransparencia.gov.br/sancoes/cepim", "acordos-leniencia": "https://portaldatransparencia.gov.br/acordos-leniencia",
   };
   const base = { fonte: label, recurso, url: consultaPublica[recurso], apiUrl, fetchedAt: new Date().toISOString() };
   if (!process.env.PORTAL_TRANSPARENCIA_KEY) return { ...base, status: "PENDENTE", hits: [], erro: "Chave da API não configurada" };
+
+  const hits: any[] = [];
+  let paginasLidas = 0, registros = 0, truncado = false;
   try {
-    const r = await fetch(apiUrl, { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
-    if (!r.ok) return { ...base, status: "ERRO", http: r.status, hits: [] };
-    const arr = await r.json();
-    const hits = (Array.isArray(arr) ? arr : []).filter((x: any) => recordMatchesCnpj(x, cnpjDigits)).map((x: any) => ({
-      tipo: x.tipoSancao?.descricaoResumida || x.tipoSancao?.descricaoPortal || (typeof x.tipoSancao === "string" ? x.tipoSancao : "") || "Sanção",
-      orgao: x.orgaoSancionador?.nome || x.orgaoSancionador?.siglaUf || "",
-      dataInicio: x.dataInicioSancao || "", dataFim: x.dataFimSancao || "",
-      fundamentacao: Array.isArray(x.fundamentacao) ? x.fundamentacao.map((f: any) => f.descricao || f.descricaoResumida).filter(Boolean).join("; ") : "",
-      processo: x.numeroProcesso || "", nome: x.pessoa?.razaoSocialReceita || x.pessoa?.nome || "",
-    }));
-    return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits };
-  } catch (e: any) { return { ...base, status: "ERRO", erro: e.message, hits: [] }; }
+    for (let pagina = 1; pagina <= PT_MAX_PAGES; pagina++) {
+      const r = await limitedFetch(urlForPage(pagina), { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
+      if (!r.ok) {
+        if (paginasLidas === 0) return { ...base, status: "ERRO", http: r.status, hits: [] };
+        break; // já lemos páginas; interrompe na falha e usa o que temos
+      }
+      const arr = await r.json();
+      const lista = Array.isArray(arr) ? arr : [];
+      paginasLidas++; registros += lista.length;
+      for (const x of lista) if (recordMatchesCnpj(x, cnpjDigits)) hits.push(mapSancao(x));
+      if (lista.length < PT_PAGE_SIZE) break;          // última página
+      if (pagina === PT_MAX_PAGES) truncado = true;    // atingiu o teto sem esgotar
+    }
+    return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits, paginasLidas, registros, ...(truncado ? { truncado: true } : {}) };
+  } catch (e: any) {
+    if (hits.length) return { ...base, status: "CONSTA", hits, paginasLidas, registros, parcial: true, erro: e.message };
+    return { ...base, status: "ERRO", erro: e.message, hits: [] };
+  }
 }
 
 // ── supplier base ─────────────────────────────────────────────────────────────
@@ -169,23 +240,26 @@ export function buildReportHtml(rec: any): string {
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--ink:#3C433C;--soft:#91938C;--bg:#F8FCF8;--line:#D7DCD7;--accent:#E8D048;--ok:#1A7A3A;--bad:#C0392B}
+/* Documento de diligência: monocromático preto sobre branco (fonte e elementos todos
+   em preto). A hierarquia é dada por peso/caixa-alta, não por cor; o significado dos
+   status (Consta / Nada consta / Alerta) é dado pelo texto, não pela cor. */
+:root{--ink:#000;--soft:#000;--line:#000}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:"IBM Plex Mono",ui-monospace,monospace;color:var(--ink);background:#fff;font-size:12px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:"IBM Plex Mono",ui-monospace,monospace;color:#000;background:#fff;font-size:12px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .page{max-width:820px;margin:0 auto;padding:48px 56px}
-.eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--soft)}
-h1{font-size:22px;font-weight:600;margin:6px 0 2px;letter-spacing:-.01em}
-.sub{color:var(--soft);font-size:12px}
-.verdict{display:inline-block;margin-top:12px;padding:6px 14px;border:1.5px solid;border-radius:4px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:11px}
-.v-ok{color:var(--ok);border-color:var(--ok);background:#1a7a3a12}.v-bad{color:var(--bad);border-color:var(--bad);background:#c0392b12}.v-pend{color:#8a6d00;border-color:#caa400;background:#caa40018}
+.eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#000}
+h1{font-size:22px;font-weight:700;margin:6px 0 2px;letter-spacing:-.01em;color:#000}
+.sub{color:#000;font-size:12px}
+.verdict{display:inline-block;margin-top:12px;padding:6px 14px;border:2px solid #000;border-radius:4px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:#000;background:#fff}
+.v-ok,.v-bad,.v-pend{color:#000;border-color:#000;background:#fff}
 section{margin-top:26px}
-.sectitle{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--soft);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:10px}
-.row{display:flex;gap:10px;padding:1px 0;align-items:baseline}.k{color:var(--soft);min-width:175px;flex-shrink:0}.v{font-weight:500;word-break:break-word}.v.ok{color:var(--ok)}.v.bad{color:var(--bad)}
-.hit{border:1px solid #c0392b40;background:#c0392b08;border-radius:4px;padding:8px 10px;margin:6px 0}
-a{color:var(--ink)}
-footer{margin-top:40px;border-top:1px solid var(--line);padding-top:12px;color:var(--soft);font-size:10px;line-height:1.7}
-.brand{font-weight:600;color:var(--ink);text-transform:lowercase;letter-spacing:.02em}
-.toolbar{position:fixed;top:12px;right:16px;background:var(--ink);color:#fff;border:none;padding:8px 14px;border-radius:4px;font-family:inherit;font-size:11px;cursor:pointer}
+.sectitle{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#000;font-weight:700;border-bottom:1px solid #000;padding-bottom:6px;margin-bottom:10px}
+.row{display:flex;gap:10px;padding:1px 0;align-items:baseline}.k{color:#000;min-width:175px;flex-shrink:0}.v{font-weight:600;word-break:break-word;color:#000}.v.ok,.v.bad{color:#000}
+.hit{border:1px solid #000;background:#fff;border-radius:4px;padding:8px 10px;margin:6px 0}
+a{color:#000;text-decoration:underline}
+footer{margin-top:40px;border-top:1px solid #000;padding-top:12px;color:#000;font-size:10px;line-height:1.7}
+.brand{font-weight:700;color:#000;text-transform:uppercase;letter-spacing:.04em}
+.toolbar{position:fixed;top:12px;right:16px;background:#000;color:#fff;border:none;padding:8px 14px;border-radius:4px;font-family:inherit;font-size:11px;cursor:pointer}
 @media print{.toolbar{display:none}.page{padding:0}}
 @page{margin:16mm}
 </style></head><body>
@@ -226,7 +300,7 @@ footer{margin-top:40px;border-top:1px solid var(--line);padding-top:12px;color:v
   </section>
 
   <footer>
-    <div class="brand">casa hacker</div>
+    <div class="brand">ASSOCIAÇÃO CASA HACKER</div>
     CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
     Relatório gerado por Stack Audit™ em ${esc(new Date().toLocaleString("pt-BR"))} · documento de diligência para fins de prestação de contas.
   </footer>
@@ -277,7 +351,7 @@ export function buildReportTxt(rec: any): string {
     }
   }
   L.push("");
-  L.push("casa hacker · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org");
+  L.push("ASSOCIAÇÃO CASA HACKER · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org");
   L.push(`Gerado por Stack Audit™ em ${new Date().toLocaleString("pt-BR")}.`);
   return L.join("\n");
 }
@@ -296,6 +370,104 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
     if (c.length !== 14) { res.status(400).json({ error: "CNPJ inválido" }); return null; }
     return c;
   };
+
+  // ── execução da diligência (interativa e automática) ────────────────────────
+  const hasValidRec = (cnpj: string) => { const r = readRec(cnpj); return !!(r && isValid(r)); };
+
+  async function runDiligence(cnpj: string, opts: { checkedBy?: string; ip?: string; userAgent?: string; force?: boolean } = {}): Promise<any> {
+    const cached = readRec(cnpj);
+    if (cached && isValid(cached) && !opts.force) return { ...cached, fromCache: true };
+    const receita = await fetchReceita(cnpj);
+    const razao = receita?.razao_social || cached?.razaoSocial || "";
+    const apis: string[] = [];
+    if (receita) apis.push(receita.fonte);
+    let sancoes: any[] = [];
+    if (razao) {
+      sancoes = await Promise.all([
+        consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
+        consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
+        consultaPT("cepim", "CEPIM — Entidades sem fins lucrativos impedidas", razao, cnpj),
+        consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
+      ]);
+      apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência)");
+    }
+    const anySancao = sancoes.some((s) => s.status === "CONSTA");
+    const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
+    const erro = !receita || sancoes.some((s) => s.status === "ERRO" || s.status === "PENDENTE");
+    const verdict = anySancao || receitaInativa ? "ALERTA" : (erro && !razao ? "PENDENTE" : "NADA_CONSTA");
+    const now = new Date();
+    const rec = {
+      cnpj, razaoSocial: razao || "—", nomeFantasia: receita?.nome_fantasia || "",
+      checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
+      checkedBy: opts.checkedBy || "—", ip: opts.ip || "—",
+      receita, sancoes, verdict,
+      metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString() },
+    };
+    fs.writeFileSync(recPath(cnpj), JSON.stringify(rec, null, 2));
+    return { ...rec, fromCache: false };
+  }
+
+  // ── fila automática (novos + vencidos), processada em série no ritmo do limiter ─
+  const queue: string[] = [];
+  const queued = new Set<string>();
+  let processing: string | null = null;
+  let running = false;
+  const counters = { done: 0, failed: 0, enqueuedTotal: 0, lastError: "", lastSweep: "" };
+
+  function enqueue(cnpj: string): boolean {
+    const d = onlyDigits(cnpj);
+    if (d.length !== 14 || queued.has(d) || processing === d || hasValidRec(d)) return false;
+    queue.push(d); queued.add(d); counters.enqueuedTotal++;
+    return true;
+  }
+
+  async function worker(): Promise<void> {
+    if (running) return;
+    running = true;
+    try {
+      while (queue.length) {
+        const cnpj = queue.shift() as string;
+        queued.delete(cnpj); processing = cnpj;
+        try { await runDiligence(cnpj, { checkedBy: "automático (sistema)", ip: "sistema", force: false }); counters.done++; }
+        catch (e: any) { counters.failed++; counters.lastError = e?.message || String(e); console.warn("[Diligência] auto falhou", cnpj, e?.message || e); }
+        finally { processing = null; }
+      }
+    } finally { running = false; }
+  }
+
+  /** Enfileira todo fornecedor sem diligência válida (novo ou vencido) e dispara o worker. */
+  function sweep(): number {
+    let added = 0;
+    try { for (const s of collectSuppliers(DATA_DIR)) if (enqueue(s.cnpj)) added++; }
+    catch (e: any) { console.warn("[Diligência] sweep falhou", e?.message || e); }
+    counters.lastSweep = new Date().toISOString();
+    if (queue.length) void worker();
+    return added;
+  }
+
+  const AUTO_ON = process.env.DILIGENCIA_AUTO !== "0";
+  const SWEEP_MS = Math.max(60_000, Number(process.env.DILIGENCIA_SWEEP_MS || 5 * 60_000));
+  if (AUTO_ON) {
+    setTimeout(() => sweep(), 8_000);       // primeira varredura logo após subir
+    setInterval(() => sweep(), SWEEP_MS);   // novos + vencidos periodicamente
+  }
+
+  // dispara a diligência de todos os ainda não consultados (ou vencidos) — manual
+  app.post("/api/diligencia/run-all", requireAuth, (_req, res) => {
+    const queuedNow = sweep();
+    res.json({ queued: queuedNow, pending: queue.length, processing, running });
+  });
+
+  // progresso da fila automática/manual
+  app.get("/api/diligencia/queue", requireAuth, (_req, res) => {
+    res.json({
+      running, processing, pending: queue.length,
+      done: counters.done, failed: counters.failed, enqueuedTotal: counters.enqueuedTotal,
+      lastError: counters.lastError, lastSweep: counters.lastSweep,
+      ratePerMin: RATE_PER_MIN, auto: AUTO_ON,
+      pendingCnpjs: [processing, ...queue].filter(Boolean).slice(0, 80),
+    });
+  });
 
   app.get("/api/diligencia/suppliers", requireAuth, (_req, res) => {
     const suppliers = collectSuppliers(DATA_DIR);
@@ -322,38 +494,10 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   app.post("/api/diligencia/:cnpj/check", requireAuth, async (req: any, res) => {
     const cnpj = cnpjParam(req, res); if (!cnpj) return;
     const force = String(req.query.force || "") === "1";
-    const cached = readRec(cnpj);
-    if (cached && isValid(cached) && !force) return res.json({ ...cached, valida: true, fromCache: true });
-
-    const receita = await fetchReceita(cnpj);
-    const razao = receita?.razao_social || cached?.razaoSocial || "";
-    const apis: string[] = [];
-    if (receita) apis.push(receita.fonte);
-    let sancoes: any[] = [];
-    if (razao) {
-      sancoes = await Promise.all([
-        consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
-        consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
-        consultaPT("cepim", "CEPIM — Entidades sem fins lucrativos impedidas", razao, cnpj),
-        consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
-      ]);
-      apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência)");
-    }
-    const anySancao = sancoes.some(s => s.status === "CONSTA");
-    const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
-    const erro = !receita || sancoes.some(s => s.status === "ERRO" || s.status === "PENDENTE");
-    const verdict = anySancao || receitaInativa ? "ALERTA" : (erro && !razao ? "PENDENTE" : "NADA_CONSTA");
-
-    const now = new Date();
-    const rec = {
-      cnpj, razaoSocial: razao || "—", nomeFantasia: receita?.nome_fantasia || "",
-      checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
-      checkedBy: req.user?.email || "—", ip: reqIp(req),
-      receita, sancoes, verdict,
-      metadata: { apis, userAgent: String(req.headers["user-agent"] || ""), geradoEm: now.toISOString() },
-    };
-    fs.writeFileSync(recPath(cnpj), JSON.stringify(rec, null, 2));
-    res.json({ ...rec, valida: true, fromCache: false });
+    try {
+      const rec = await runDiligence(cnpj, { checkedBy: req.user?.email || "—", ip: reqIp(req), userAgent: String(req.headers["user-agent"] || ""), force });
+      res.json({ ...rec, valida: true });
+    } catch (e: any) { res.status(500).json({ error: e?.message || "Falha na diligência" }); }
   });
 
   // relatório HTML (impressão → PDF), alinhado ao design system

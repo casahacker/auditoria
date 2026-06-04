@@ -46,6 +46,7 @@ import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from
 import { processAudit, reprocessItems } from './services/auditService';
 import FeacApp from './feac/FeacApp';
 import DiligenciaApp from './diligencia/DiligenciaApp';
+import { Btn, ToolSidebar, ToolHeader, SidebarItem, SkipLink } from './ui/kit';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' | 'documentacao';
 
@@ -54,6 +55,14 @@ type Tool = 'launcher' | 'audit' | 'feac' | 'diligencia';
 const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', diligencia: 'diligencia' };
 const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', diligencia: 'diligencia' };
 const AUDIT_PATH_SECTIONS = ['nova', 'processando', 'resultado', 'historico', 'pesquisa', 'documentacao'];
+const AUDIT_HEADERS: Record<Section, [string, string]> = {
+  nova:         ['Configuração de', 'Nova Auditoria'],
+  processando:  ['Auditoria em', 'Execução'],
+  resultado:    ['Relatório de', 'Conciliação'],
+  historico:    ['Histórico de', 'Auditorias'],
+  pesquisa:     ['Pesquisa', 'Global'],
+  documentacao: ['', 'Documentação'],
+};
 const pathSegs = () => window.location.pathname.split('/').filter(Boolean);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1461,7 +1470,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   className="w-full bg-bg border border-line rounded px-4 py-3 text-center text-xl font-mono font-bold tracking-[0.4em] text-primary focus:outline-none focus:border-primary transition-colors uppercase"
                 />
                 {shareCodeError && <p className="text-[11px] text-error">{shareCodeError}</p>}
-                <button type="submit" disabled={shareCodeInput.length < 4} className="w-full py-3 bg-primary text-bg font-bold text-xs uppercase tracking-widest rounded hover:opacity-90 transition-all disabled:opacity-40">
+                <button type="submit" disabled={shareCodeInput.length < 4} className="w-full py-3 bg-primary text-white font-bold text-xs uppercase tracking-widest rounded hover:opacity-90 transition-all disabled:opacity-40">
                   Acessar Auditoria
                 </button>
               </form>
@@ -1850,74 +1859,37 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
     {activeTool === 'audit' && (
     <div className="flex min-h-screen pt-8">
-      {/* UX-02: Skip to main content link */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-10 focus:left-2 focus:z-[200] focus:bg-primary focus:text-white focus:px-4 focus:py-2 focus:rounded focus:text-xs focus:font-bold focus:uppercase focus:tracking-widest focus:outline-none"
-      >
-        Ir para conteúdo principal
-      </a>
+      <SkipLink />
 
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-[180px] bg-sidebar border-r border-line flex flex-col z-50">
-        <div className="pt-6 pb-8 px-5 flex flex-col gap-4">
-          <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-10 w-auto object-contain object-left invert opacity-90" />
-          <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">Stack Audit</div>
-          <button
-            onClick={() => setActiveTool('launcher')}
-            className="flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors uppercase tracking-widest"
-          >
-            <Layers size={11} /> Ferramentas
-          </button>
-        </div>
-
-        <nav className="flex-1 px-0 space-y-0">
-          {[
-            { id: 'nova', label: 'Nova análise', icon: PlusCircle },
-            { id: 'processando', label: 'Processando', icon: Loader2 },
-            { id: 'resultado', label: 'Resultado', icon: FileText },
-            { id: 'historico', label: 'Histórico', icon: History },
-            { id: 'pesquisa', label: 'Pesquisa', icon: Search },
-            { id: 'documentacao', label: 'Documentação', icon: BookOpen },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => (item.id === 'processando' || item.id === 'resultado') && !lastAuditResult ? null : setActiveSection(item.id as Section)}
-              disabled={(item.id === 'processando' || item.id === 'resultado') && !lastAuditResult}
-              className={cn(
-                'w-full flex items-center gap-3 px-5 py-3 text-[13px] transition-all duration-200 border-l-3 border-transparent',
-                activeSection === item.id ? 'bg-sidebar-active text-primary border-l-primary' : 'text-text-secondary hover:text-text hover:bg-white/5',
-                (item.id === 'processando' || item.id === 'resultado') && !lastAuditResult && 'opacity-25 cursor-not-allowed'
-              )}
-            >
-              <item.icon size={16} className={cn('shrink-0', activeSection === item.id ? 'text-primary' : 'opacity-70')} />
+      {/* Sidebar (kit compartilhado) */}
+      <ToolSidebar brand="Stack Audit" onHome={() => setActiveTool('launcher')} user={user}>
+        {([
+          { id: 'nova', label: 'Nova análise', icon: PlusCircle },
+          { id: 'processando', label: 'Processando', icon: Loader2 },
+          { id: 'resultado', label: 'Resultado', icon: FileText },
+          { id: 'historico', label: 'Histórico', icon: History },
+          { id: 'pesquisa', label: 'Pesquisa', icon: Search },
+          { id: 'documentacao', label: 'Documentação', icon: BookOpen },
+        ] as { id: Section; label: string; icon: React.ElementType }[]).map((item) => {
+          const gated = (item.id === 'processando' || item.id === 'resultado') && !lastAuditResult;
+          return (
+            <SidebarItem key={item.id} icon={item.icon} active={activeSection === item.id} disabled={gated} onClick={() => setActiveSection(item.id)}>
               {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="px-4 py-4 border-t border-line">
-          {user.photo && <img src={user.photo} alt={user.name} className="w-7 h-7 rounded-full mb-2" />}
-          <p className="text-[10px] text-text-secondary truncate">{user.email}</p>
-          <a href="/auth/logout" className="mt-2 flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors">
-            <LogOut size={11} /> Sair
-          </a>
-        </div>
-      </aside>
+            </SidebarItem>
+          );
+        })}
+      </ToolSidebar>
 
       {/* Main Content */}
-      <main id="main-content" className="ml-[180px] flex-1 min-w-[844px] flex flex-col">
-        {/* Header */}
-        <header className="px-10 py-6 border-bottom border-line flex justify-between items-center bg-bg shrink-0">
-          <h1 className="text-[20px] font-light">
-            Configuração de <span className="font-bold text-primary">Nova Auditoria</span>
-          </h1>
-          <div className="text-[11px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-bold tracking-widest">
-            Stack Audit™
-          </div>
-        </header>
+      <main id="main-content" className="ml-[216px] flex-1 min-w-[844px] flex flex-col">
+        {/* Header (kit compartilhado) */}
+        <ToolHeader
+          light={AUDIT_HEADERS[activeSection][0]} accent={AUDIT_HEADERS[activeSection][1]}
+          right={<div className="text-[11px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-bold tracking-widest">Stack Audit™</div>}
+        />
 
-        {/* Metadata strip */}
+        {/* Metadata strip — só nas telas em que os dados do contrato são relevantes */}
+        {(activeSection === 'nova' || activeSection === 'processando' || activeSection === 'resultado') && (
         <div className="grid grid-cols-4 gap-6 px-10 py-4 bg-card border-b border-line shrink-0">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] uppercase text-text-secondary tracking-widest">Organização</label>
@@ -1934,6 +1906,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <span className="font-mono text-[13px] text-primary">{metadata.contractNumber || '---'}</span>
           </div>
         </div>
+        )}
 
         {/* ── NOVA ───────────────────────────────────────────────────────────── */}
         {activeSection === 'nova' && (
@@ -1992,7 +1965,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   disabled={!canStartAudit}
                   className={cn(
                     'w-full mt-8 py-4 rounded-lg font-bold text-xs uppercase tracking-widest transition-all',
-                    canStartAudit ? 'bg-primary text-bg shadow-lg hover:scale-[1.02]' : 'bg-line text-text-secondary opacity-50 cursor-not-allowed'
+                    canStartAudit ? 'bg-primary text-white shadow-lg hover:scale-[1.02]' : 'bg-line text-text-secondary opacity-50 cursor-not-allowed'
                   )}
                 >
                   Iniciar Stack Audit™ →
@@ -2042,7 +2015,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 <div className="space-y-4">
                   <span className="text-[10px] font-mono text-error uppercase tracking-widest block">Falha no Processamento</span>
                   <p className="text-xs text-text-secondary mb-4">{processingError}</p>
-                  <button onClick={() => setActiveSection('nova')} className="px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-blue-700 transition-colors">
+                  <button onClick={() => setActiveSection('nova')} className="px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-primary-hover transition-colors">
                     Voltar e tentar novamente
                   </button>
                 </div>
@@ -2881,6 +2854,16 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
             <div className="space-y-6 max-w-4xl">
 
+              {/* 0. A suíte */}
+              <div className="bg-card border border-line rounded p-6">
+                <h2 className="text-[11px] font-bold uppercase tracking-widest text-primary mb-4 pb-3 border-b border-line">Parte de uma suíte de 3 ferramentas</h2>
+                <p className="text-[12px] text-text-secondary leading-relaxed mb-3">Esta é a <strong className="text-text">Auditoria de Prestação de Contas</strong>. Pelo botão <strong className="text-text">Ferramentas</strong> (topo da barra lateral) você acessa também o <strong className="text-text">Processador FEAC/SGPP</strong> e a <strong className="text-text">Diligência de Fornecedores</strong> — cada um com sua própria seção “Como usar”.</p>
+                <ul className="space-y-1.5 list-none text-[12px] text-text-secondary">
+                  <li className="flex gap-2"><span className="text-primary">▸</span><span>Cada página tem uma <strong className="text-text">URL própria e compartilhável</strong> — ex.: <span className="font-mono text-[11px]">/auditoria/historico</span>, <span className="font-mono text-[11px]">/feac/ajuda</span>, <span className="font-mono text-[11px]">/diligencia/&lt;cnpj&gt;</span>. Use os botões Voltar/Avançar do navegador normalmente.</span></li>
+                  <li className="flex gap-2"><span className="text-primary">▸</span><span>A <strong className="text-text">barra de acessibilidade</strong> (topo) controla tema, alto contraste (WCAG AA) e tamanho da fonte para toda a suíte.</span></li>
+                </ul>
+              </div>
+
               {/* 1. Como usar */}
               <div className="bg-card border border-line rounded p-6">
                 <h2 className="text-[11px] font-bold uppercase tracking-widest text-primary mb-4 pb-3 border-b border-line">1. Como usar a plataforma</h2>
@@ -3114,11 +3097,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 ))}
               </div>
               <div className="flex gap-4 justify-end">
-                <button onClick={() => setShowTermsModal(false)} className="px-6 py-2 border border-line text-xs font-bold uppercase tracking-widest hover:bg-white/5 transition-colors">Cancelar</button>
+                <button onClick={() => setShowTermsModal(false)} className="px-6 py-2 border border-line text-xs font-bold uppercase tracking-widest hover:bg-surface-hover transition-colors">Cancelar</button>
                 <button
                   onClick={() => { setShowTermsModal(false); startAudit(); }}
                   disabled={!termsChecked.every(Boolean)}
-                  className={cn('px-6 py-2 text-xs font-bold uppercase tracking-widest transition-all', termsChecked.every(Boolean) ? 'bg-primary text-bg hover:scale-[1.02]' : 'bg-line text-text-secondary cursor-not-allowed opacity-50')}
+                  className={cn('px-6 py-2 text-xs font-bold uppercase tracking-widest transition-all', termsChecked.every(Boolean) ? 'bg-primary text-white hover:scale-[1.02]' : 'bg-line text-text-secondary cursor-not-allowed opacity-50')}
                 >
                   Aceitar e Iniciar Auditoria
                 </button>
@@ -3173,7 +3156,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <Printer size={12} /> Imprimir
                   </button>
                 )}
-                <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-text transition-colors p-1.5 hover:bg-white/5 rounded" aria-label="Fechar">
+                <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-text transition-colors p-1.5 hover:bg-surface-hover rounded" aria-label="Fechar">
                   <X size={20} />
                 </button>
               </div>
@@ -3602,7 +3585,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
       </main>
 
-      <footer className="fixed bottom-0 left-[180px] right-0 py-3 px-6 bg-sidebar border-t border-line text-[10px] text-text-secondary text-center leading-relaxed z-40">
+      <footer className="fixed bottom-0 left-[216px] right-0 py-3 px-6 bg-sidebar border-t border-line text-[10px] text-text-secondary text-center leading-relaxed z-40">
         <p className="font-bold tracking-widest uppercase">CONFIDENCIAL - USO INTERNO &nbsp;&bull;&nbsp; &copy; 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97 &nbsp;&bull;&nbsp; R. DR. RENATO PAES DE BARROS, 618 – ITAIM BIBI, SÃO PAULO – SP, 04530-000</p>
       </footer>
 
@@ -3737,7 +3720,7 @@ function ToolPlaceholder({ title, description, onHome }: { title: string; descri
           </div>
           <h2 className="text-lg font-bold mb-2">Em desenvolvimento</h2>
           <p className="text-[13px] text-text-secondary leading-relaxed">{description}</p>
-          <button onClick={onHome} className="mt-6 px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-blue-700 transition-colors">
+          <button onClick={onHome} className="mt-6 px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-primary-hover transition-colors">
             Voltar às ferramentas
           </button>
         </div>
@@ -3978,8 +3961,8 @@ function InlineNotification({ kind, message, onClose }: { kind: 'success' | 'err
       role="alert"
     >
       <Icon size={16} className={cn('mt-0.5 shrink-0', config.iconClass)} />
-      <p className="flex-1 text-sm text-text-primary leading-snug">{message}</p>
-      <button onClick={onClose} className="shrink-0 text-text-secondary hover:text-text-primary transition-colors" aria-label="Fechar notificação">
+      <p className="flex-1 text-sm text-text leading-snug">{message}</p>
+      <button onClick={onClose} className="shrink-0 text-text-secondary hover:text-text transition-colors" aria-label="Fechar notificação">
         <X size={14} />
       </button>
     </div>
@@ -4077,7 +4060,7 @@ function EmptyState({ icon: Icon, title, description }: { icon: React.ElementTyp
       <div className="w-12 h-12 rounded-full bg-surface-hover flex items-center justify-center mb-4">
         <Icon size={22} className="text-text-secondary" />
       </div>
-      <p className="text-sm font-semibold text-text-primary mb-1">{title}</p>
+      <p className="text-sm font-semibold text-text mb-1">{title}</p>
       <p className="text-xs text-text-secondary max-w-xs">{description}</p>
     </div>
   );

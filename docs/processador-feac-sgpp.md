@@ -14,6 +14,8 @@ Guia do usuário. O Processador FEAC transforma um conjunto de notas fiscais, co
 
 Cada prestação fica **salva no servidor** e aparece no **Histórico** — você pode fechar o navegador e reabrir depois, na etapa em que parou.
 
+Cada página tem URL própria (compartilhável): `/feac` (histórico), `/feac/ajuda` (este guia, dentro do app), `/feac/nova` (nova prestação) e `/feac/<id>/preliminar` · `/feac/<id>/tratamento` · `/feac/<id>/relatorio` para uma prestação numa etapa específica.
+
 ---
 
 ## 1. Entrada de documentos

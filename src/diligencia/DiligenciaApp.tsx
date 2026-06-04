@@ -6,13 +6,15 @@
  * restrição (Portal da Transparência: CEIS/CNEP/CEPIM/Leniência) com relatório
  * auditável (PDF), base de fornecedores persistente e validade de 30 dias.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Building2, Search, Layers, LogOut, Loader2, ShieldCheck, ShieldAlert, AlertTriangle,
-  FileDown, RefreshCw, History, ExternalLink, ChevronRight, X, BookOpen,
+  Building2, Search, Loader2, ShieldCheck, ShieldAlert, AlertTriangle,
+  FileDown, RefreshCw, History, ExternalLink, ChevronRight, BookOpen,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
+import { Btn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls } from '../ui/kit';
+import type { ChipTone } from '../ui/kit';
 
 type Section = 'base' | 'resultado' | 'historico' | 'ajuda';
 
@@ -25,20 +27,33 @@ export interface DiligenciaAppProps {
   navigate?: (path: string) => void;
 }
 
-const VERDICT = {
-  NADA_CONSTA: { label: 'Nada consta', cls: 'bg-success/10 text-success border-success/30', icon: ShieldCheck },
-  ALERTA: { label: 'Alerta', cls: 'bg-error/10 text-error border-error/30', icon: ShieldAlert },
-  PENDENTE: { label: 'Pendente', cls: 'bg-warning/10 text-warning border-warning/40', icon: AlertTriangle },
-} as const;
+const pathSegs = () => window.location.pathname.split('/').filter(Boolean);
+
+const VERDICT: Record<string, { label: string; tone: ChipTone; icon: React.ElementType }> = {
+  NADA_CONSTA: { label: 'Nada consta', tone: 'success', icon: ShieldCheck },
+  ALERTA: { label: 'Alerta', tone: 'error', icon: ShieldAlert },
+  PENDENTE: { label: 'Pendente', tone: 'warning', icon: AlertTriangle },
+};
 
 function VerdictChip({ v }: { v: string }) {
-  const m = (VERDICT as any)[v] || VERDICT.PENDENTE;
-  const Icon = m.icon;
-  return <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-bold uppercase tracking-wider', m.cls)}><Icon size={13} /> {m.label}</span>;
+  const m = VERDICT[v] || VERDICT.PENDENTE;
+  return <Chip tone={m.tone} icon={m.icon}>{m.label}</Chip>;
 }
 
 const onlyDigits = (s: string) => (s || '').replace(/\D/g, '');
 const maskCnpj = (d: string) => { const x = onlyDigits(d); return x.length === 14 ? `${x.slice(0, 2)}.${x.slice(2, 5)}.${x.slice(5, 8)}/${x.slice(8, 12)}-${x.slice(12)}` : d; };
+const dilPath = (s: Section, cnpj?: string) => {
+  if (s === 'resultado') return cnpj ? `/diligencia/${cnpj}` : '/diligencia';
+  if (s === 'historico') return '/diligencia/historico';
+  if (s === 'ajuda') return '/diligencia/ajuda';
+  return '/diligencia';
+};
+const DIL_HEADERS: Record<Section, [string, string]> = {
+  base:      ['Diligência de', 'Fornecedores'],
+  resultado: ['Relatório de', 'Diligência'],
+  historico: ['Histórico de', 'Diligências'],
+  ajuda:     ['Como', 'usar'],
+};
 
 async function dl(apiFetch: DiligenciaAppProps['apiFetch'], url: string, name: string) {
   const res = await apiFetch(url);
@@ -63,13 +78,56 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
   };
   const loadHistory = async () => { try { const r = await apiFetch('/api/diligencia'); if (r.ok) setHistory(await r.json()); } catch { /* */ } };
   useEffect(() => { loadSuppliers(); loadHistory(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (initialCnpj && onlyDigits(initialCnpj).length === 14) openSaved(onlyDigits(initialCnpj)); }, [initialCnpj]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── progresso da fila de diligências (automática + "consultar todos") ────────
+  const [queue, setQueue] = useState<any>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDoneRef = useRef(-1);
   useEffect(() => {
-    const onPop = () => {
-      const s = window.location.pathname.split('/').filter(Boolean);
-      if (s[0] !== 'diligencia') return;
-      if (s[1] && onlyDigits(s[1]).length === 14) openSaved(s[1]); else setSection('base');
+    let alive = true;
+    const tick = async () => {
+      let q: any = null;
+      try { const r = await apiFetch('/api/diligencia/queue'); if (r.ok) q = await r.json(); } catch { /* */ }
+      if (!alive) return;
+      setQueue(q);
+      if (q && q.done !== lastDoneRef.current) {
+        if (lastDoneRef.current !== -1) { loadSuppliers(); loadHistory(); } // alguma diligência concluiu
+        lastDoneRef.current = q.done;
+      }
+      const active = !!q && (q.running || q.pending > 0);
+      pollRef.current = setTimeout(tick, active ? 4000 : 30000);
     };
+    tick();
+    return () => { alive = false; if (pollRef.current) clearTimeout(pollRef.current); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runAll = async () => {
+    try {
+      const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' });
+      if (!r.ok) throw new Error();
+      const j = await r.json();
+      addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} fornecedor(es) enviados para a fila de diligência.` : 'Tudo em dia — nenhuma diligência pendente.');
+      try { const q = await apiFetch('/api/diligencia/queue'); if (q.ok) setQueue(await q.json()); } catch { /* */ }
+    } catch { addToast('error', 'Falha ao iniciar as consultas.'); }
+  };
+
+  // navega entre seções dando a cada uma sua URL exata (compartilhável)
+  const goSection = (s: Section) => { setSection(s); if (s === 'historico') loadHistory(); navigate?.(dilPath(s)); };
+
+  // routing: aplica a URL atual em deep-link/reload e em back/forward
+  const applyPath = () => {
+    const seg = pathSegs();
+    if (seg[0] !== 'diligencia') return;
+    const a = seg[1];
+    if (!a) setSection('base');
+    else if (a === 'historico') setSection('historico');
+    else if (a === 'ajuda') setSection('ajuda');
+    else if (onlyDigits(a).length === 14) openSaved(a);
+    else setSection('base');
+  };
+  useEffect(() => { applyPath(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onPop = () => applyPath();
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -103,51 +161,30 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
 
   return (
     <div className="flex min-h-screen pt-8">
-      <aside className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-[212px] bg-sidebar border-r border-line flex flex-col z-50">
-        <div className="pt-6 pb-4 px-5">
-          <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-9 w-auto object-contain object-left invert opacity-90 mb-3" />
-          <div className="flex items-center justify-between">
-            <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">Diligência</div>
-            <button onClick={onHome} title="Voltar às ferramentas" className="text-text-secondary hover:text-primary transition-colors"><Layers size={15} /></button>
-          </div>
-        </div>
-        <nav className="flex-1 px-2 pt-2 space-y-0.5">
-          {navItems.map(it => (
-            <button key={it.id} onClick={() => { setSection(it.id); navigate?.('/diligencia'); }}
-              className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] transition-colors',
-                section === it.id ? 'bg-sidebar-active text-primary font-semibold' : 'text-text-secondary hover:text-text hover:bg-white/5')}>
-              <it.icon size={15} /> {it.label}
-            </button>
-          ))}
-        </nav>
-        <div className="px-4 py-4 border-t border-line">
-          {user.photo && <img src={user.photo} alt={user.name} className="w-7 h-7 rounded-full mb-2" />}
-          <p className="text-[10px] text-text-secondary truncate">{user.email}</p>
-          <a href="/auth/logout" className="mt-2 flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors"><LogOut size={11} /> Sair</a>
-        </div>
-      </aside>
+      <SkipLink />
+      <ToolSidebar brand="Diligência" onHome={onHome} user={user}>
+        {navItems.map(it => (
+          <SidebarItem key={it.id} icon={it.icon} active={section === it.id} onClick={() => goSection(it.id)}>{it.label}</SidebarItem>
+        ))}
+      </ToolSidebar>
 
-      <main id="main-content" className="ml-[212px] flex-1 min-w-[820px] flex flex-col">
-        <header className="px-10 py-6 border-b border-line flex justify-between items-center bg-bg shrink-0">
-          <h1 className="text-[20px] font-light">
-            {section === 'base' && <>Diligência de <span className="font-bold text-primary">Fornecedores</span></>}
-            {section === 'resultado' && <>Relatório de <span className="font-bold text-primary">Diligência</span></>}
-            {section === 'historico' && <>Histórico de <span className="font-bold text-primary">Diligências</span></>}
-            {section === 'ajuda' && <>Como <span className="font-bold text-primary">usar</span></>}
-          </h1>
-          {/* CNPJ search — always available */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-card border border-line rounded px-3 py-1.5">
-              <Search size={14} className="text-text-secondary" />
-              <input value={cnpjInput} onChange={e => setCnpjInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && runCheck(cnpjInput)}
-                placeholder="CNPJ a consultar" className="bg-transparent text-[13px] outline-none w-[170px]" />
+      <main id="main-content" className="ml-[216px] flex-1 min-w-[820px] flex flex-col">
+        <ToolHeader
+          light={DIL_HEADERS[section][0]} accent={DIL_HEADERS[section][1]}
+          right={
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 bg-card border border-line rounded px-3 py-1.5 focus-within:border-primary">
+                <Search size={14} className="text-text-secondary" aria-hidden />
+                <input value={cnpjInput} onChange={e => setCnpjInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && runCheck(cnpjInput)}
+                  aria-label="CNPJ a consultar" placeholder="CNPJ a consultar" className="bg-transparent text-[13px] outline-none w-[150px] sm:w-[170px]" />
+              </label>
+              <Btn onClick={() => runCheck(cnpjInput)} disabled={busy}>Consultar</Btn>
             </div>
-            <button onClick={() => runCheck(cnpjInput)} disabled={busy} className="px-4 py-2 bg-primary text-white rounded text-[11px] uppercase tracking-widest font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">Consultar</button>
-          </div>
-        </header>
+          }
+        />
 
-        <div className="flex-1 overflow-y-auto px-10 py-8 pb-24">
-          {section === 'base' && <BaseView {...{ suppliers, suppliersLoading, runCheck, openSaved }} />}
+        <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
+          {section === 'base' && <BaseView {...{ suppliers, suppliersLoading, runCheck, openSaved, queue, runAll }} />}
           {section === 'historico' && <HistoricoView {...{ history, openSaved, loadHistory }} />}
           {section === 'ajuda' && <AjudaDilig />}
           {section === 'resultado' && <ResultadoView {...{ current, busy, apiFetch, addToast, runCheck }} />}
@@ -170,68 +207,102 @@ function ChipStatus({ s }: { s: any }) {
 
 function AjudaDilig() {
   const blocks = [
-    { t: 'O que é verificado', d: 'Situação cadastral na Receita Federal (Ativa/Baixada/Inapta/Suspensa, natureza, porte, CNAE, sócios) e as listas de restrição do Portal da Transparência/CGU: CEIS (inidôneas e suspensas), CNEP (Lei Anticorrupção), CEPIM (entidades impedidas) e Acordos de Leniência.' },
-    { t: 'Como consultar', d: 'Em "Base de fornecedores", consulte qualquer fornecedor das prestações já realizadas, ou digite um CNPJ novo no campo do topo e clique em Consultar. O resultado sai em segundos.' },
-    { t: 'Lendo o resultado', d: 'O veredito é "Nada consta" (verde), "Alerta" (vermelho — há sanção ou cadastro não-ativo) ou "Pendente". Veja os detalhes da Receita, o status de cada lista e, quando "Consta", o tipo de sanção, órgão, vigência e processo.' },
-    { t: 'Validade e auditoria', d: 'Cada diligência vale 30 dias e fica registrada com data-hora, IP e solicitante. Baixe o relatório em PDF auditável e guarde junto à prestação de contas. Use "Reconsultar" para atualizar antes do vencimento.' },
-    { t: 'Fontes complementares', d: 'Lista Suja do Trabalho Escravo (MTE), IBAMA (embargos) e TCU/CNJ aparecem no relatório com link para verificação manual — o download automatizado é bloqueado pelos órgãos. Verifique-as quando o risco exigir (ex.: IBAMA para serviços ambientais).' },
+    { t: 'O que é verificado', d: 'Situação cadastral na Receita Federal (Ativa/Baixada/Inapta/Suspensa, natureza jurídica, porte, capital, CNAE principal e secundários, endereço e quadro societário) e as listas de restrição do Portal da Transparência/CGU: CEIS (inidôneas e suspensas), CNEP (Lei Anticorrupção), CEPIM (entidades sem fins lucrativos impedidas) e Acordos de Leniência.' },
+    { t: 'Como consultar', d: 'Em "Base de fornecedores", consulte qualquer fornecedor das prestações já realizadas (Auditoria + FEAC); ou digite um CNPJ novo no campo do topo (em qualquer tela) e clique em Consultar. O resultado sai em segundos e ganha uma URL própria (/diligencia/CNPJ) que pode ser compartilhada.' },
+    { t: 'Geração automática', d: 'O sistema gera as diligências sozinho, em segundo plano: sempre que surgem fornecedores novos (de novas prestações) e sempre que uma diligência vence (30 dias), eles entram numa fila e são consultados respeitando um limite de chamadas por minuto às APIs oficiais. O botão "Consultar todos os não consultados" na Base força essa fila imediatamente; o andamento aparece numa faixa de progresso.' },
+    { t: 'Lendo o resultado', d: 'O veredito é "Nada consta" (verde), "Alerta" (vermelho — há sanção em alguma lista OU o cadastro não está Ativo) ou "Pendente" (não foi possível concluir as verificações). Veja os dados completos da Receita, o status de cada lista e, quando "Consta", o tipo de sanção, órgão, vigência, processo e fundamentação.' },
+    { t: 'Como filtramos por CNPJ', d: 'O filtro por CNPJ da API do Portal da Transparência é inoperante (devolve a lista inteira). Por isso consultamos cada lista pela razão social do fornecedor (obtida na Receita) e filtramos os resultados pelo CNPJ exato — varrendo todas as páginas da resposta, para não perder uma sanção que esteja além da primeira página. Na prática, a verificação combina nome + CNPJ.' },
+    { t: 'Validade e auditoria', d: 'Cada diligência vale 30 dias e fica registrada com data-hora, IP e solicitante. Exporte o relatório em PDF (documento monocromático, pronto para arquivo) ou os dados em TXT e guarde junto à prestação de contas. Use "Reconsultar" para forçar uma nova consulta antes do vencimento.' },
+    { t: 'Fontes complementares', d: 'Lista Suja do Trabalho Escravo (MTE), IBAMA (embargos) e TCU/CNJ têm o download automatizado bloqueado pelos órgãos — verifique-as manualmente quando o risco exigir (ex.: IBAMA para serviços ambientais).' },
   ];
   return (
     <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary">A Diligência verifica um fornecedor por CNPJ em fontes oficiais e gera um relatório auditável e exportável. Faça a diligência antes de contratar e antes de pagar fornecedores relevantes.</p>
+      <p className="text-[13px] text-text-secondary leading-relaxed">A <b className="text-text">Diligência de Fornecedores</b> verifica um fornecedor por CNPJ em fontes oficiais e gera um relatório auditável e exportável. Faça a diligência <b className="text-text">antes de contratar</b> e <b className="text-text">antes de pagar</b> fornecedores relevantes.</p>
       <div className="space-y-3">
         {blocks.map((b, i) => (
-          <div key={i} className="bg-card border border-line rounded-lg p-4">
+          <Card key={i} className="p-4">
             <div className="text-[13px] font-bold text-primary mb-1">{b.t}</div>
             <div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div>
-          </div>
+          </Card>
         ))}
       </div>
     </div>
   );
 }
 
-function BaseView({ suppliers, suppliersLoading, runCheck, openSaved }: any) {
+function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, runAll }: any) {
+  const pendingSet = new Set<string>(((queue?.pendingCnpjs as string[]) || []).map(onlyDigits));
+  const processingCnpj = onlyDigits(queue?.processing || '');
+  const active = !!queue && (queue.running || queue.pending > 0);
+  const unconsulted = suppliers.filter((s: any) => !s.diligencia || !s.diligencia.valida).length;
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-      <p className="text-[13px] text-text-secondary max-w-3xl">
-        Fornecedores extraídos de todas as prestações de contas já realizadas (Auditoria + FEAC). Consulte qualquer um
-        deles ou digite um novo CNPJ no campo acima. A diligência verifica a situação na Receita Federal e as listas de
-        restrição (CEIS, CNEP, CEPIM e Acordos de Leniência) e vale por 30 dias.
-      </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <p className="text-[13px] text-text-secondary max-w-2xl">
+          Fornecedores extraídos de todas as prestações de contas já realizadas (Auditoria + FEAC). As diligências de
+          fornecedores <b className="text-text">novos</b> e <b className="text-text">vencidos</b> são geradas
+          automaticamente em segundo plano (no limite de {queue?.ratePerMin || 100} consultas/min). Você também pode
+          forçar agora, ou consultar um CNPJ avulso no campo do topo. Cada diligência vale 30 dias.
+        </p>
+        <Btn variant="secondary" onClick={runAll} disabled={unconsulted === 0} className="shrink-0">
+          <RefreshCw size={14} aria-hidden /> Consultar todos os não consultados{unconsulted ? ` (${unconsulted})` : ''}
+        </Btn>
+      </div>
+
+      {active && (
+        <Card className="p-3 flex items-center gap-3 border-primary/40">
+          <Loader2 size={16} className="animate-spin text-primary shrink-0" aria-hidden />
+          <div className="text-[12px]">
+            <span className="font-semibold text-text">Consultando fornecedores em segundo plano…</span>{' '}
+            <span className="text-text-secondary">
+              {queue.done} concluída(s) · {queue.pending} na fila
+              {queue.processing ? ` · agora: ${maskCnpj(queue.processing)}` : ''}
+              {queue.failed ? ` · ${queue.failed} com erro` : ''} · limite {queue.ratePerMin}/min
+            </span>
+          </div>
+        </Card>
+      )}
+
       {suppliersLoading ? (
-        <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" /> Carregando base…</div>
+        <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando base…</div>
       ) : !suppliers.length ? (
-        <div className="bg-card border border-line rounded-lg p-10 text-center text-[13px] text-text-secondary">
-          <Building2 size={28} className="mx-auto mb-3 opacity-60" />
-          Nenhum fornecedor com CNPJ na base ainda. Digite um CNPJ no campo acima para consultar.
-        </div>
+        <EmptyState icon={Building2} title="Nenhum fornecedor com CNPJ na base ainda"
+          description="A base é montada a partir das prestações de contas. Digite um CNPJ no campo acima para consultar um fornecedor novo." />
       ) : (
-        <div className="bg-card border border-line rounded-lg overflow-hidden">
+        <Card className="overflow-hidden">
           <table className="w-full text-[12px]">
-            <thead className="bg-sidebar text-text-secondary"><tr className="text-left">
-              <th className="px-4 py-2.5 font-semibold">Fornecedor</th>
-              <th className="px-4 py-2.5 font-semibold">CNPJ</th>
-              <th className="px-4 py-2.5 font-semibold">Origem</th>
-              <th className="px-4 py-2.5 font-semibold">Diligência</th>
-              <th className="px-4 py-2.5 font-semibold text-right">Ação</th>
+            <thead className={tableHeadCls}><tr>
+              <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th>
+              <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
+              <th scope="col" className="px-4 py-2.5 font-semibold">Origem</th>
+              <th scope="col" className="px-4 py-2.5 font-semibold">Diligência</th>
+              <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
             </tr></thead>
             <tbody>
-              {suppliers.map((s: any) => (
+              {suppliers.map((s: any) => {
+                const d = onlyDigits(s.cnpj);
+                return (
                 <tr key={s.cnpj} className="border-t border-line hover:bg-primary/5">
                   <td className="px-4 py-2.5 max-w-[280px] truncate">{s.nome || '—'}</td>
                   <td className="px-4 py-2.5 font-mono whitespace-nowrap">{s.cnpjFormatado}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{(s.origens || []).join(', ')}</td>
                   <td className="px-4 py-2.5"><ChipStatus s={s.diligencia} /></td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    {s.diligencia?.valida && <button onClick={() => openSaved(s.cnpj)} className="text-primary hover:underline mr-3">Ver</button>}
-                    <button onClick={() => runCheck(s.cnpj, !!s.diligencia?.valida)} className="text-primary hover:underline">{s.diligencia ? 'Reconsultar' : 'Consultar'}</button>
+                    {processingCnpj === d ? (
+                      <span className="inline-flex items-center gap-1 text-primary text-[11px]"><Loader2 size={12} className="animate-spin" aria-hidden /> consultando…</span>
+                    ) : pendingSet.has(d) ? (
+                      <span className="text-text-secondary text-[11px]">na fila…</span>
+                    ) : (<>
+                      {s.diligencia?.valida && <button onClick={() => openSaved(s.cnpj)} className="text-primary hover:underline mr-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Ver</button>}
+                      <button onClick={() => runCheck(s.cnpj, !!s.diligencia?.valida)} className="text-primary hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{s.diligencia ? 'Reconsultar' : 'Consultar'}</button>
+                    </>)}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </div>
   );
@@ -241,14 +312,14 @@ function HistoricoView({ history, openSaved }: any) {
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
       {!history.length ? (
-        <div className="bg-card border border-line rounded-lg p-10 text-center text-[13px] text-text-secondary">Nenhuma diligência realizada ainda.</div>
+        <EmptyState icon={History} title="Nenhuma diligência realizada ainda" description="Consulte um fornecedor na Base ou digite um CNPJ no campo do topo." />
       ) : (
-        <div className="bg-card border border-line rounded-lg overflow-hidden">
+        <Card className="overflow-hidden">
           <table className="w-full text-[12px]">
-            <thead className="bg-sidebar text-text-secondary"><tr className="text-left">
-              <th className="px-4 py-2.5 font-semibold">Fornecedor</th><th className="px-4 py-2.5 font-semibold">CNPJ</th>
-              <th className="px-4 py-2.5 font-semibold">Resultado</th><th className="px-4 py-2.5 font-semibold">Consulta</th>
-              <th className="px-4 py-2.5 font-semibold text-right">Ação</th>
+            <thead className={tableHeadCls}><tr>
+              <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th><th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
+              <th scope="col" className="px-4 py-2.5 font-semibold">Resultado</th><th scope="col" className="px-4 py-2.5 font-semibold">Consulta</th>
+              <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
             </tr></thead>
             <tbody>
               {history.map((h: any) => (
@@ -257,12 +328,12 @@ function HistoricoView({ history, openSaved }: any) {
                   <td className="px-4 py-2.5 font-mono whitespace-nowrap">{maskCnpj(h.cnpj)}</td>
                   <td className="px-4 py-2.5"><VerdictChip v={h.verdict} /></td>
                   <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR')} {h.valida ? '' : '· vencida'}</td>
-                  <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" /></td>
+                  <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" aria-hidden /></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </div>
   );
@@ -274,7 +345,7 @@ const KVr = ({ k, v, cls }: { k: string; v: any; cls?: string }) => (
 );
 
 function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
-  if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" /> Consultando Receita Federal e listas de restrição…</div>;
+  if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Consultando Receita Federal e listas de restrição…</div>;
   if (!current) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor ou informe um CNPJ.</div>;
   const r = current;
   const rf = r.receita || {};
@@ -283,7 +354,7 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
   const downloadTxt = async () => { try { await dl(apiFetch, `/api/diligencia/${r.cnpj}/txt`, `diligencia_${r.cnpj}.txt`); } catch (e: any) { addToast('error', e.message); } };
   return (
     <div className="space-y-5 animate-in fade-in duration-300 max-w-4xl">
-      <div className="bg-card border border-line rounded-lg p-5">
+      <Card className="p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="text-[16px] font-bold">{r.razaoSocial || '—'}</div>
@@ -292,14 +363,14 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
           <VerdictChip v={r.verdict} />
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button onClick={openReport} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded text-[11px] uppercase tracking-widest font-bold hover:bg-blue-700 transition-colors"><FileDown size={14} /> Exportar PDF</button>
-          <button onClick={downloadTxt} className="flex items-center gap-2 px-4 py-2 border border-line rounded text-[11px] uppercase tracking-widest text-text-secondary hover:text-primary hover:border-primary transition-colors"><FileDown size={14} /> Baixar dados (TXT)</button>
-          <button onClick={() => runCheck(r.cnpj, true)} disabled={busy} className="flex items-center gap-2 px-4 py-2 border border-line rounded text-[11px] uppercase tracking-widest text-text-secondary hover:text-primary hover:border-primary transition-colors disabled:opacity-50"><RefreshCw size={14} /> Reconsultar</button>
+          <Btn onClick={openReport}><FileDown size={14} aria-hidden /> Exportar PDF</Btn>
+          <Btn variant="secondary" onClick={downloadTxt}><FileDown size={14} aria-hidden /> Baixar dados (TXT)</Btn>
+          <Btn variant="secondary" onClick={() => runCheck(r.cnpj, true)} disabled={busy}><RefreshCw size={14} aria-hidden /> Reconsultar</Btn>
         </div>
-      </div>
+      </Card>
 
       {/* Dados da consulta (auditável) */}
-      <div className="bg-card border border-line rounded-lg p-5">
+      <Card className="p-5">
         <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3">Dados da consulta (auditável)</div>
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
           <KVr k="Data/hora" v={new Date(r.checkedAt).toLocaleString('pt-BR')} />
@@ -319,11 +390,11 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Receita Federal — completo */}
-      <div className="bg-card border border-line rounded-lg p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><Building2 size={13} /> Receita Federal — cadastro</div>
+      <Card className="p-5">
+        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><Building2 size={13} aria-hidden /> Receita Federal — cadastro</div>
         {r.receita ? (
           <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
             <KVr k="Situação" v={`${rf.situacao_cadastral || '—'}${rf.data_situacao ? ` (desde ${rf.data_situacao})` : ''}`} cls={/ATIVA/i.test(rf.situacao_cadastral || '') ? 'text-success' : 'text-error'} />
@@ -342,11 +413,11 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
             {rf.qsa?.length > 0 && <div className="sm:col-span-2"><KVr k="Quadro societário" v={rf.qsa.map((s: any) => `${s.nome}${s.qual ? ` (${s.qual})` : ''}`).join('; ')} /></div>}
           </div>
         ) : <div className="text-[12px] text-error">Não foi possível obter os dados cadastrais.</div>}
-      </div>
+      </Card>
 
       {/* Listas de restrição */}
-      <div className="bg-card border border-line rounded-lg p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><ShieldAlert size={13} /> Listas de restrição — Portal da Transparência (CGU)</div>
+      <Card className="p-5">
+        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><ShieldAlert size={13} aria-hidden /> Listas de restrição — Portal da Transparência (CGU)</div>
         <div className="space-y-3">
           {(r.sancoes || []).map((s: any, i: number) => (
             <div key={i} className="border-b border-line pb-3 last:border-0 last:pb-0">
@@ -362,11 +433,11 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
                   {h.fundamentacao && <div className="text-text-secondary mt-0.5">{h.fundamentacao}</div>}
                 </div>
               ))}
-              {s.url && <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline inline-flex items-center gap-1 mt-1"><ExternalLink size={10} /> consulta pública</a>}
+              {s.url && <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline inline-flex items-center gap-1 mt-1"><ExternalLink size={10} aria-hidden /> consulta pública</a>}
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -14,9 +14,18 @@ Cada ferramenta também tem uma seção **"Como usar"** dentro do próprio app.
 
 ## URLs
 
-Cada página tem um caminho próprio no navegador (compartilhável):
+Cada página tem um caminho próprio no navegador (deep-link compartilhável; voltar/avançar do navegador funcionam):
 
-- `/` — launcher
-- `/auditoria` — Auditoria de Prestação de Contas
-- `/feac` — Processador FEAC (e `/feac/<id>` abre uma prestação específica)
-- `/diligencia` — Diligência (e `/diligencia/<cnpj>` abre a diligência de um fornecedor)
+| Caminho | Página |
+|---|---|
+| `/` | Launcher (seleção de ferramenta) |
+| `/auditoria/<seção>` | Auditoria — `nova`, `processando`, `resultado`, `historico`, `pesquisa`, `documentacao` |
+| `/feac` · `/feac/ajuda` · `/feac/nova` | FEAC — histórico, como usar, nova prestação |
+| `/feac/<id>/<preliminar\|tratamento\|relatorio>` | FEAC — uma prestação numa etapa específica |
+| `/diligencia` · `/diligencia/historico` · `/diligencia/ajuda` | Diligência — base, histórico, como usar |
+| `/diligencia/<cnpj>` | Diligência — resultado de um fornecedor |
+| `/share/<token>` | Link público (somente leitura) de uma auditoria |
+
+## Acessibilidade e design
+
+Toda a suíte segue o design system **IBM Carbon** (IBM Plex, paleta Carbon Gray 10 + Casa Hacker), com componentes compartilhados (barra lateral, cabeçalho, botões, chips, cartões e modais). A **barra de acessibilidade** fixa no topo controla tema (claro/escuro), **alto contraste (WCAG AA)** e tamanho da fonte para todas as ferramentas.

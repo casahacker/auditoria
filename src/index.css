@@ -3,6 +3,7 @@
 
 @theme {
   --color-primary: #0f62fe;
+  --color-primary-hover: #0353e9;
   --color-bg: #f4f4f4;
   --color-card: #ffffff;
   --color-sidebar: #ffffff;
@@ -24,6 +25,12 @@
   body {
     @apply bg-bg text-text font-sans antialiased;
   }
+  /* Anel de foco Carbon, consistente em toda a suíte. :where() mantém especificidade 0
+     para que componentes possam sobrescrever (ex.: ring interno na barra lateral). */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -41,6 +48,7 @@
 
 /* ── Dark mode ───────────────────────────────────────────────────────────────── */
 [data-theme="dark"] {
+  --color-primary-hover: #4589ff;
   --color-bg: #161616;
   --color-card: #262626;
   --color-sidebar: #262626;
@@ -62,6 +70,7 @@
   --color-text: #ffffff !important;
   --color-text-secondary: #e0e0e0 !important;
   --color-primary: #ffff00 !important;
+  --color-primary-hover: #ffff66 !important;
   --color-success: #00ff00 !important;
   --color-error: #ff6666 !important;
   --color-warning: #ffff00 !important;

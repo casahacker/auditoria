@@ -16,7 +16,7 @@ Guia do usuário. A Diligência verifica, a partir de um **CNPJ**, a situação 
 | **CEPIM** (CGU) | Entidades sem fins lucrativos impedidas | Portal da Transparência |
 | **Acordos de Leniência** (CGU) | Acordos firmados | Portal da Transparência |
 
-As listas do Portal da Transparência são consultadas por **razão social** e os resultados são filtrados pelo **CNPJ exato** do fornecedor (a API oficial não filtra por CNPJ de forma confiável; este método garante precisão).
+As listas do Portal da Transparência são consultadas por **razão social** (obtida na Receita) e os resultados são filtrados pelo **CNPJ exato** do fornecedor — percorrendo **todas as páginas** da resposta (15 registros por página), para não perder uma sanção que esteja além da primeira página. O filtro por CNPJ da API oficial é inoperante (devolve a lista inteira), então este método de **nome + CNPJ** é o que garante precisão.
 
 **Fontes complementares** (Lista Suja do Trabalho Escravo / MTE, IBAMA — autuações e embargos, TCU — consulta consolidada de PJ) são listadas no relatório com **link para verificação manual**, pois o download automatizado é bloqueado pelos órgãos.
 
@@ -49,13 +49,24 @@ Em seguida:
 - **Listas de restrição**: status de cada lista; quando "Consta", exibe tipo de sanção, órgão, vigência, processo e fundamentação. Há link para a consulta pública oficial.
 - **Fontes complementares**: links para verificação manual.
 
-Clique em **Baixar relatório (PDF)** para o documento auditável (inclui os metadados da consulta). Use **Reconsultar** para forçar uma nova consulta antes do vencimento.
+Clique em **Exportar PDF** para abrir o relatório auditável (documento **monocromático preto**, com os metadados da consulta) — a janela já chama a impressão do navegador; escolha *Salvar como PDF*. **Baixar dados (TXT)** exporta os mesmos dados em texto. Use **Reconsultar** para forçar uma nova consulta antes do vencimento.
+
+> O resultado de cada fornecedor tem URL própria: `/diligencia/<cnpj>` (compartilhável). As telas Base, Histórico e "Como usar" também: `/diligencia`, `/diligencia/historico`, `/diligencia/ajuda`.
 
 ---
 
+## Geração automática
+
+O sistema gera as diligências **sozinho, em segundo plano**:
+
+- **Fornecedores novos** (que aparecem ao salvar novas prestações na Auditoria/FEAC) e **diligências vencidas** (30 dias) entram numa **fila** e são consultados automaticamente.
+- Tudo respeita um **limite de chamadas por minuto** às APIs oficiais (env `DILIGENCIA_RATE_PER_MIN`, padrão **100**), para não estourar a cota do Portal da Transparência. Em caso de `429`, o sistema recua e tenta de novo.
+- Uma **varredura periódica** (env `DILIGENCIA_SWEEP_MS`, padrão 5 min) e uma na inicialização cuidam de novos/vencidos sem intervenção. Para desligar a automação: `DILIGENCIA_AUTO=0`.
+- Na **Base de fornecedores**, o botão **"Consultar todos os não consultados"** força a fila imediatamente; uma faixa mostra o progresso (concluídas / na fila / em consulta) e as linhas indicam *na fila…* / *consultando…*.
+
 ## Validade e histórico
 
-- Cada diligência **vale por 30 dias**. Dentro desse prazo, abrir o fornecedor mostra o resultado salvo (sem nova consulta). Após o vencimento, o status indica **"vencida"** — clique em **Consultar/Reconsultar** para atualizar.
+- Cada diligência **vale por 30 dias**. Dentro desse prazo, abrir o fornecedor mostra o resultado salvo (sem nova consulta). Após o vencimento, o status indica **"vencida"** — a automação reconsulta sozinha, ou clique em **Consultar/Reconsultar**.
 - O menu **Histórico** lista todas as diligências realizadas, com veredito, data e validade. Tudo fica **persistido no servidor**.
 
 ---

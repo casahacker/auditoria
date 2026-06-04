@@ -3,201 +3,181 @@
 [![Node.js](https://img.shields.io/badge/node-22+-339933.svg)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/react-19-61DAFB.svg)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.8-3178C6.svg)](https://www.typescriptlang.org/)
-[![Azure AI](https://img.shields.io/badge/Azure%20AI-Document%20Intelligence-0078D4.svg)](https://learn.microsoft.com/azure/ai-services/document-intelligence/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Casa Hacker](https://img.shields.io/badge/by-Casa%20Hacker-purple.svg)](https://casahacker.org)
+[![Design](https://img.shields.io/badge/design-IBM%20Carbon-0f62fe.svg)](https://carbondesignsystem.com/)
+[![Casa Hacker](https://img.shields.io/badge/by-Casa%20Hacker-32fa96.svg)](https://casahacker.org)
 
-**Plataforma de auditoria financeira inteligente para organizações de impacto social.**
+**Suíte de auditoria e prestação de contas para organizações de impacto social.**
 
-O **Stack Audit™** extrai, classifica e reconcilia automaticamente documentos financeiros — notas fiscais, comprovantes de pagamento, boletos e recibos de aplicativos como Uber e 99 — usando **IA generativa (DeepSeek-V3)** e **Azure AI Document Intelligence**. Transforma pilhas de PDFs em um Relatório de Conciliação (RAPC) estruturado, com parecer automático e execução orçamentária por rubrica.
+O **Stack Audit™** é uma plataforma da **Associação Casa Hacker** com **três ferramentas** sob um único launcher, compartilhando autenticação, design system (IBM Carbon) e base de fornecedores:
 
-## Por que o Stack Audit™?
+| # | Ferramenta | Para que serve |
+|---|---|---|
+| **A** | **Auditoria de Prestação de Contas** | Concilia notas fiscais, comprovantes e orçamento por rubrica com IA (DeepSeek + Azure Document Intelligence) e emite o parecer final (RAPC). |
+| **B** | **Processador FEAC / SGPP** | Concilia lançamentos × documentos, **trata** os PDFs (mescla, carimbo de margem, conversão **PDF/A-2b**), gera a **Declaração de Rateio** e o Relatório de Prestação de Contas para a Fundação FEAC. |
+| **C** | **Diligência de Fornecedores** | Consulta um CNPJ na **Receita Federal** e nas **listas de restrição** do Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Acordos de Leniência), com relatório auditável e validade de 30 dias. |
 
-Organizações da sociedade civil lidam com grande volume de documentos financeiros para prestação de contas. A conciliação manual é lenta, propensa a erros e desvia energia de atividades-fim.
+> Produção: `https://stack-audit.casahacker.org` · login Google OAuth restrito ao domínio `@casahacker.org`.
 
-O Stack Audit™ resolve isso ao:
+---
 
-- **Extrair campos com precisão** de NFS-e, boletos e recibos via Azure AI Document Intelligence
-- **Analisar e classificar** cada lançamento com IA generativa (DeepSeek-V3)
-- **Conciliar automaticamente** pagamentos com seus documentos fiscais
-- **Gerar relatórios** prontos para apresentação com parecer final (Aprovado / Com Ressalvas / Diligência)
-- **Controlar a execução orçamentária** comparando planejado × executado por rubrica
+## Ferramentas
 
-## Funcionalidades
+### A — Auditoria de Prestação de Contas (RAPC)
+- Upload de 2 CSVs (orçamento aprovado + prestação de contas) e 2 PDFs (notas fiscais + comprovantes).
+- Extração por **Azure AI Document Intelligence** (opcional) com fallback local (`pdftotext` + Tesseract OCR), análise e conciliação com **DeepSeek-V3**.
+- Tabela RAPC interativa (busca, filtro por status, agrupamento, marcação para revisão, anotações com auto-save).
+- Parecer automático: **Aprovado**, **Aprovado com Ressalvas** ou **Diligência**.
+- Execução orçamentária por rubrica (Planejado × Executado), reauditoria seletiva, histórico e **link público compartilhável** com código de acesso.
+- Exportação CSV/XLSX.
 
-### Extração e análise
-- Upload de NFS-e, boletos e comprovantes de pagamento (PDF, JPG, PNG)
-- Extração de dados por Azure AI Document Intelligence
-- Análise e classificação por IA (DeepSeek-V3) com contexto de contrato
-- Conciliação automática por valor, data, CNPJ/CPF e número de documento
+### B — Processador de Prestação de Contas FEAC / SGPP
+Fluxo em 4 etapas, cada prestação persistida no servidor:
+1. **Entrada de documentos** — notas fiscais, comprovantes e extrato (PDF) + a planilha de fluxo de caixa (`.xlsx`, aba `Dados`) + identificação do projeto/contrato (SGPP) e período.
+2. **Relatório preliminar** — conciliação determinística (valor + CNPJ + nome + data, com reforço de IA para casos ambíguos), com situação por lançamento, toggle de **Rateio**, consulta de CNPJ, observação gerada e export/import JSON.
+3. **Tratamento** — para cada lançamento: mescla (NF + comprovante) → **carimbo** na margem de todas as páginas → conversão **PDF/A-2b** (Ghostscript) → Declaração de Rateio (pdf-lib) → fluxo de caixa atualizado.
+4. **Prestação de contas** — relatório de 13 colunas + downloads (ZIP, CSV, `.xlsx`, Declaração de Rateio, PDF por lançamento).
 
-### Relatório de Conciliação (RAPC)
-- Tabela interativa com busca por código/descrição e filtro por status
-- Status por lançamento: Conciliado, Ressalva ou Pendente
-- Parecer final automático: **Aprovado**, **Aprovado com Ressalvas** ou **Diligência**
-- Dashboard de métricas: total de itens, conciliados, pendências e valor auditado
+### C — Diligência de Fornecedores
+- Consulta por **CNPJ**: cadastro completo na Receita (BrasilAPI → fallback ReceitaWS) + listas de restrição da CGU.
+- As listas do Portal da Transparência são consultadas **por razão social** e filtradas pelo **CNPJ exato** — varrendo todas as páginas da resposta (o filtro por CNPJ da API oficial é inoperante). Na prática a verificação combina **nome + CNPJ**.
+- Veredito **Nada consta / Alerta / Pendente**, registro auditável (data-hora, IP, solicitante, APIs), **validade de 30 dias** (cache) e base de fornecedores agregada da Auditoria + FEAC.
+- **Geração automática:** fornecedores novos e diligências vencidas entram numa fila e são consultados em segundo plano, respeitando um teto de **chamadas/minuto** às APIs oficiais (com recuo em `429`). Botão **"Consultar todos os não consultados"** + faixa de progresso na Base.
+- Exportação: relatório **PDF** (documento monocromático preto, pronto para arquivo, via impressão do navegador) e dados em **TXT**.
 
-### Execução Orçamentária por Rubrica
-- Gráfico Planejado × Executado por linha do orçamento
-- Leitura direta do CSV de prestação de contas (coluna "Saída (-)") e orçamento aprovado (coluna "VALOR TOTAL")
-- Alerta visual quando a execução excede o limite da rubrica
-- Correspondência automática por normalização de texto
+---
 
-### Exportação
-- **CSV** — tabela RAPC completa
-- **XLSX** — workbook com 3 abas: RAPC, Resumo de métricas e Execução Orçamentária
+## Roteamento (URLs compartilháveis)
 
-### Reauditoria e anotações
-- **Reauditoria seletiva** — reprocessa apenas itens Pendente/Ressalva, preservando os já Conciliados
-- **Reanálise individual** — clique em qualquer lançamento e solicite nova análise à IA com contexto adicional
-- **Anotações do auditor** — campo livre por lançamento com auto-save (debounce 800ms)
+Cada página tem um caminho próprio no navegador (deep-link + voltar/avançar):
 
-### Histórico e compartilhamento
-- Histórico completo de auditorias salvas no servidor
-- **Link público compartilhável** com código de acesso alfanumérico (6 caracteres) para consulta sem login
-- Consulta CNPJ na Receita Federal integrada ao modal de lançamento
-- Lançamentos relacionados por CNPJ/CPF cruzados com outras auditorias
+| Caminho | Página |
+|---|---|
+| `/` | Launcher |
+| `/auditoria/<seção>` | Auditoria (`nova`, `processando`, `resultado`, `historico`, `pesquisa`, `documentacao`) |
+| `/feac` · `/feac/ajuda` · `/feac/nova` | FEAC — histórico, como usar, nova prestação |
+| `/feac/<id>/<preliminar\|tratamento\|relatorio>` | FEAC — uma prestação numa etapa específica |
+| `/diligencia` · `/diligencia/historico` · `/diligencia/ajuda` | Diligência — base, histórico, como usar |
+| `/diligencia/<cnpj>` | Diligência — resultado de um fornecedor |
+| `/share/<token>` | Link público (somente leitura) de uma auditoria |
 
-### Autenticação
-- Login com Google OAuth 2.0
-- Sessões persistentes via `session-file-store`
-- Cada auditoria é associada ao usuário criador
+O servidor faz fallback de SPA para qualquer rota, então recarregar ou compartilhar um deep-link funciona.
+
+---
 
 ## Tecnologias
 
 | Camada | Tecnologia |
 |--------|-----------|
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4 |
-| Backend | Express 4, TypeScript (tsx runtime) |
-| IA | DeepSeek-V3 via OpenAI SDK |
-| OCR/Extração | Azure AI Document Intelligence |
-| Exportação | SheetJS (xlsx), PapaParse |
-| Autenticação | Passport.js + Google OAuth 2.0 |
+| Design system | **IBM Carbon** (IBM Plex Sans/Mono, paleta Carbon Gray 10 + Casa Hacker) — kit compartilhado em `src/ui/kit.tsx` |
+| Backend | Express 4, TypeScript (runtime `tsx`) |
+| IA | DeepSeek-V3 (via OpenAI SDK) |
+| OCR / Extração | Azure AI Document Intelligence (opcional) · `pdftotext` + Tesseract (fallback) |
+| PDF | `pdf-lib` + `@pdf-lib/fontkit` (carimbo, rateio) · **Ghostscript** (PDF/A-2b) · `poppler-utils` (merge/split) |
+| Empacotamento | `archiver` (ZIP) · SheetJS `xlsx` |
+| Dados públicos | BrasilAPI / ReceitaWS (Receita) · Portal da Transparência / CGU |
+| Autenticação | Passport.js + Google OAuth 2.0 (sessões em `session-file-store`) |
 | Deploy | Podman + podman-compose (RHEL 10) |
+
+### Acessibilidade
+Barra fixa de acessibilidade (tema claro/escuro, **alto contraste WCAG AA**, tamanho de fonte), foco visível consistente (anel Carbon), skip-link, modais com *focus trap* + `Esc`, e rótulos ARIA nos controles. Validação de a11y/visual roda na CI.
+
+---
+
+## Estrutura do projeto
+
+```text
+stack-audit/
+├── src/
+│   ├── App.tsx                  # Launcher + Auditoria (Tool A) + roteamento de tools
+│   ├── ui/kit.tsx               # Kit de UI compartilhado (Carbon): Btn, Chip, Card,
+│   │                            #   ToolSidebar, ToolHeader, Modal, SkipLink, …
+│   ├── feac/                    # Tool B — Processador FEAC/SGPP
+│   │   ├── FeacApp.tsx
+│   │   └── feacTypes.ts
+│   ├── diligencia/              # Tool C — Diligência de Fornecedores
+│   │   └── DiligenciaApp.tsx
+│   ├── services/auditService.ts
+│   ├── types.ts
+│   └── index.css                # Tokens do design system (Tailwind @theme)
+├── server.ts                    # API REST (Express) — Auditoria + registro dos módulos
+├── feacRoutes.ts                # API /api/feac (registerFeacRoutes)
+├── diligenciaRoutes.ts          # API /api/diligencia (registerDiligenciaRoutes)
+├── assets/                      # Fontes IBM Plex, sRGB.icc, logos do rateio
+├── docs/                        # Guias do usuário (ver docs/README.md)
+├── Dockerfile
+├── compose.yaml
+└── vite.config.ts
+```
+
+> O estágio final do `Dockerfile` copia explicitamente `server.ts feacRoutes.ts diligenciaRoutes.ts` + `assets`. **Todo novo arquivo de backend na raiz precisa de um `COPY`.** Arquivos sob `src/` são empacotados pelo Vite.
+
+---
 
 ## Requisitos
 
 - **Node.js 22+**
-- Conta no **Microsoft Azure** com o recurso **Azure AI Document Intelligence** criado
-- Chave de API **DeepSeek** (plataforma DeepSeek)
-- Credenciais **Google OAuth 2.0** (Google Cloud Console)
-
-## Instalação
-
-```bash
-git clone https://github.com/casahacker/stack-audit.git
-cd stack-audit
-npm install
-```
+- **Ghostscript**, **poppler-utils** e **tesseract-ocr** (incluídos na imagem Podman) — necessários para o tratamento de PDFs do FEAC.
+- Chave **DeepSeek**; (opcional) **Azure AI Document Intelligence**; **Google OAuth 2.0**; (opcional) token do **Portal da Transparência**.
 
 ## Variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto:
+Copie `.env.example` para `.env` e preencha. Resumo:
 
 ```ini
-# IA
-DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...                 # IA da auditoria/FEAC
+GOOGLE_CLIENT_ID=...                    # Login Google
+GOOGLE_CLIENT_SECRET=...
+SESSION_SECRET=...                      # openssl rand -hex 32
+APP_URL=https://stack-audit.example.org # base do callback OAuth (sem barra final)
 
-# Azure AI Document Intelligence
-AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=https://seu-endpoint.cognitiveservices.azure.com/
-AZURE_DOCUMENT_INTELLIGENCE_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Google OAuth
-GOOGLE_CLIENT_ID=xxxxxxxxxx.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=GOCSPX-...
-GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
-
-# Sessão
-SESSION_SECRET=sua-chave-secreta-aqui
-
-# Ambiente
-NODE_ENV=development
+# Opcionais
+AZURE_DI_ENDPOINT=                      # extração via Azure DI
+AZURE_DI_KEY=
+EXTRACTION_ENGINE=local                 # local | azure
+PORTAL_TRANSPARENCIA_KEY=               # listas de restrição da Diligência (header chave-api-dados)
+DILIGENCIA_RATE_PER_MIN=100             # teto de chamadas/min às APIs externas da Diligência
+DILIGENCIA_SWEEP_MS=300000              # varredura de novos/vencidos (5 min; mín 60000)
+DILIGENCIA_AUTO=1                       # "0" desliga a geração automática
 ```
 
-## Executando
-
-### Desenvolvimento
+## Desenvolvimento
 
 ```bash
-# Frontend (Vite dev server com HMR)
-npm run dev
-
-# Backend (Express + TypeScript via tsx)
-npx tsx server.ts
+npm install
+npx tsx server.ts        # API Express (porta 3000)
+npm run dev              # Frontend Vite (HMR)
+npm run lint             # tsc --noEmit (deve ficar 0)
+npm run build            # build de produção (Vite)
 ```
 
-### Produção (Podman)
+## Produção (Podman)
 
 ```bash
-podman build --no-cache -t stack-audit .
-podman-compose down && podman-compose up -d
+# build (TMPDIR em /data porque /var é pequeno; formato docker p/ compatibilidade)
+sudo TMPDIR=/data/podman-tmp/tmp BUILDAH_FORMAT=docker podman-compose build
+sudo systemctl stop stack-audit && sudo podman rm -f stack-audit && sudo systemctl start stack-audit
+# saúde: https://stack-audit.casahacker.org/api/health
 ```
 
-## Estrutura do projeto
+Porta interna `127.0.0.1:18088 → 3000`, volume `/data/stack-audit/data → /app/data`, rede `10.89.11.0/24`, memória 1G (o tratamento PDF/A do FEAC é mais pesado que a auditoria).
 
-```plaintext
-stack-audit/
-├── src/
-│   ├── App.tsx                  # Interface principal (React)
-│   ├── types.ts                 # Tipos TypeScript compartilhados
-│   └── services/
-│       └── auditService.ts      # Lógica de análise com IA
-├── server.ts                    # API REST (Express)
-├── public/                      # Assets estáticos
-├── Dockerfile
-├── docker-compose.yml
-├── vite.config.ts
-└── package.json
-```
+---
 
-## Fluxo de uso
+## Documentação
 
-1. **Login** com conta Google
-2. **Preencha os dados** do contrato (organização, número do contrato)
-3. **Faça upload** dos documentos:
-   - PDF de notas fiscais (NFS-e)
-   - CSV da prestação de contas (PC)
-   - CSV do orçamento aprovado (opcional, para execução orçamentária)
-4. **Aguarde a análise** — o progresso é exibido em tempo real
-5. **Revise o RAPC** — filtre, busque e clique em lançamentos para ver detalhes
-6. **Exporte** em CSV ou XLSX
-7. **Compartilhe** o link público com código de acesso para a organização auditada
-
-## Exemplos de saída
-
-### Parecer final
-
-| Situação | Parecer |
-|---------|---------|
-| 100% dos itens conciliados | ✅ **Aprovado** |
-| Ressalvas presentes, sem pendências | ⚠️ **Aprovado com Ressalvas** |
-| Itens pendentes de documentação | 🔴 **Diligência** |
-
-### RAPC — tabela de conciliação
-
-| # | Descrição | Entidade | CNPJ/CPF | Valor | Status |
-|---|-----------|----------|----------|-------|--------|
-| 1 | Consultoria de comunicação | Agência XYZ | 12.345.678/0001-99 | R$ 4.715,00 | ✅ Conciliado |
-| 2 | Transporte — reunião regional | Maria Silva | ***.494.721-** | R$ 74,82 | ⚠️ Ressalva |
-| 3 | Locação de espaço — março | Coworking ABC | 98.765.432/0001-11 | R$ 2.800,00 | 🔴 Pendente |
-
-## Contribuindo
-
-Contribuições são muito bem-vindas! Para sugerir melhorias ou relatar bugs, abra uma [issue](https://github.com/casahacker/stack-audit/issues).
-
-Áreas prioritárias:
-- Exportação em PDF (layout para apresentação)
-- Comparativo entre auditorias do mesmo contrato
-- Notificação por e-mail ao finalizar auditoria
-- Painel de uso e estatísticas por usuário
+- **`docs/README.md`** — índice dos guias do usuário.
+- **`docs/processador-feac-sgpp.md`** — guia do Processador FEAC/SGPP.
+- **`docs/diligencia-fornecedores.md`** — guia da Diligência de Fornecedores.
+- Cada ferramenta também tem uma seção **"Como usar"** dentro do próprio app.
 
 ## Licença
 
-Este projeto é distribuído sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+Distribuído sob a licença Apache-2.0. Veja [LICENSE](LICENSE).
 
 ## ❤️ Agradecimentos
 
-- **Casa Hacker** — idealizadora e mantenedora do projeto
-- **DeepSeek** — modelo de linguagem para análise inteligente
-- **Microsoft Azure** — pelos créditos de API e suporte técnico
-- **Comunidade open source** — que torna possível ferramentas como essa
+- **Casa Hacker** — idealizadora e mantenedora.
+- **DeepSeek** e **Microsoft Azure** — IA e extração de documentos.
+- **BrasilAPI**, **Receita Federal** e **Portal da Transparência / CGU** — dados públicos.
+- **Comunidade open source**.
