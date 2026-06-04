@@ -28,11 +28,9 @@ services:
       - DILIGENCIA_SWEEP_MS=${DILIGENCIA_SWEEP_MS:-300000}
       - DILIGENCIA_AUTO=${DILIGENCIA_AUTO:-1}
       - DILIGENCIA_FORCE_REFRESH=${DILIGENCIA_FORCE_REFRESH:-0}
-      # KYS/KYG — assinatura via Documenso (template + formValues)
+      # KYS/KYG — assinatura via Documenso (createDocument via S3, PDF pré-preenchido)
       - DOCUMENSO_URL=${DOCUMENSO_URL:-https://documenso.casahacker.org}
       - DOCUMENSO_API_TOKEN=${DOCUMENSO_API_TOKEN:-}
-      - DOCUMENSO_KYS_TEMPLATE_ID=${DOCUMENSO_KYS_TEMPLATE_ID:-}
-      - DOCUMENSO_KYG_TEMPLATE_ID=${DOCUMENSO_KYG_TEMPLATE_ID:-}
     deploy:
       resources:
         limits:

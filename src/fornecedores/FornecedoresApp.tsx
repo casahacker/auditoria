@@ -128,6 +128,10 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
   const reloadProfile = async () => { if (!dDoc) return; try { const r = await apiFetch(`/api/fornecedores/${dDoc}`); if (r.ok) setProfile(await r.json()); } catch { /* */ } };
   const consultarTopo = (cnpj: string) => { const d = onlyDigits(cnpj); if (d.length !== 14) { addToast('error', 'Informe um CNPJ válido (14 dígitos).'); return; } setSection('detalhe'); setDDoc(d); setProfile(null); navigate?.(toPath('detalhe', d)); reconsultarDiligencia(d); };
   const runAll = async () => { try { const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' }); const j = await r.json(); addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} na fila de diligência.` : 'Tudo em dia.'); } catch { addToast('error', 'Falha ao iniciar.'); } };
+  const runAllForce = async () => {
+    if (!window.confirm('Reconsultar TODA a base ignorando o cache de 30 dias? Reconsulta todas as listas de restrição de cada fornecedor — pode levar vários minutos (roda em segundo plano).')) return;
+    try { const r = await apiFetch('/api/diligencia/run-all-force', { method: 'POST' }); const j = await r.json(); addToast('info', `${j.queued || 0} fornecedores na fila de reconsulta forçada.`); } catch { addToast('error', 'Falha ao iniciar a reconsulta.'); }
+  };
   const refreshAllApis = async () => {
     if (!window.confirm('Atualizar os dados cadastrais de TODOS os fornecedores a partir das APIs (Receita Federal + CEP)?\n\nRoda em segundo plano e pode levar vários minutos. Campos editados manualmente são preservados.')) return;
     try {
@@ -177,7 +181,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
           </div>
         } />
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
-          {section === 'base' && <CockpitBase rows={rows} loading={loading} openFornecedor={openFornecedor} queue={queue} runAll={runAll}
+          {section === 'base' && <CockpitBase rows={rows} loading={loading} openFornecedor={openFornecedor} queue={queue} runAll={runAll} runAllForce={runAllForce}
             onImport={() => setImportOpen(true)} onConvites={() => setConvites({ open: true })} mass={mass} onRefreshAll={refreshAllApis} />}
           {section === 'historico' && <HistoricoView history={history} openFornecedor={openFornecedor} />}
           {section === 'ajuda' && <AjudaFornecedores />}
@@ -222,7 +226,7 @@ function SortTh({ label, k, sort, setSort, className }: { label: string; k: Sort
   );
 }
 
-function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, onConvites, mass, onRefreshAll }: any) {
+function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce, onImport, onConvites, mass, onRefreshAll }: any) {
   const [q, setQ] = useState(''); const [df, setDf] = useState('all'); const [kf, setKf] = useState('all'); const [tf, setTf] = useState('all'); const [ef, setEf] = useState('all'); const [origem, setOrigem] = useState('all');
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: 'nome', dir: 1 });
   const qd = onlyDigits(q);
@@ -270,6 +274,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
           <Btn variant="secondary" onClick={onConvites}><Link2 size={14} aria-hidden /> Convites</Btn>
           <Btn variant="secondary" onClick={onImport}><Upload size={14} aria-hidden /> Importar CNPJs</Btn>
           <Btn variant="secondary" onClick={runAll} disabled={stats.semDilig === 0}><RefreshCw size={14} aria-hidden /> Consultar não consultados{stats.semDilig ? ` (${stats.semDilig})` : ''}</Btn>
+          <Btn variant="ghost" onClick={runAllForce}><RefreshCw size={14} aria-hidden /> Reconsultar tudo (forçado)</Btn>
           <Btn variant="secondary" onClick={onRefreshAll} disabled={!!mass?.running}><DownloadCloud size={14} aria-hidden /> Atualizar tudo das APIs</Btn>
         </div>
       </div>
