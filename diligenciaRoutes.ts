@@ -219,6 +219,49 @@ export async function consultaPT(recurso: string, label: string, razaoSocial: st
 
 // ── supplier base ─────────────────────────────────────────────────────────────
 
+/**
+ * Diligência completa de um CNPJ (Receita+CEP + listas de restrição CGU) com cache de
+ * 30 dias e persistência em DATA_DIR/diligencia/{cnpj}.json. Em escopo de módulo p/ ser
+ * reusada pelo cockpit de fornecedores (kycRoutes) além das próprias rotas de diligência.
+ */
+export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { checkedBy?: string; ip?: string; userAgent?: string; force?: boolean } = {}): Promise<any> {
+  const DIL_DIR = path.join(DATA_DIR, "diligencia");
+  fs.mkdirSync(DIL_DIR, { recursive: true });
+  const recPath = path.join(DIL_DIR, `${cnpj}.json`);
+  const readRec = (): any => { try { return JSON.parse(fs.readFileSync(recPath, "utf-8")); } catch { return null; } };
+  const isValid = (rec: any) => rec && rec.validUntil && new Date(rec.validUntil).getTime() > Date.now();
+  const cached = readRec();
+  if (cached && isValid(cached) && !opts.force) return { ...cached, fromCache: true };
+  const receita = await fetchReceita(cnpj);
+  const razao = receita?.razao_social || cached?.razaoSocial || "";
+  const apis: string[] = [];
+  if (receita) apis.push(receita.fonte);
+  let sancoes: any[] = [];
+  if (razao) {
+    sancoes = await Promise.all([
+      consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
+      consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
+      consultaPT("cepim", "CEPIM — Entidades sem fins lucrativos impedidas", razao, cnpj),
+      consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
+    ]);
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência)");
+  }
+  const anySancao = sancoes.some((s) => s.status === "CONSTA");
+  const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
+  const erro = !receita || sancoes.some((s) => s.status === "ERRO" || s.status === "PENDENTE");
+  const verdict = anySancao || receitaInativa ? "ALERTA" : (erro && !razao ? "PENDENTE" : "NADA_CONSTA");
+  const now = new Date();
+  const rec = {
+    cnpj, razaoSocial: razao || "—", nomeFantasia: receita?.nome_fantasia || "",
+    checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
+    checkedBy: opts.checkedBy || "—", ip: opts.ip || "—",
+    receita, sancoes, verdict,
+    metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString() },
+  };
+  fs.writeFileSync(recPath, JSON.stringify(rec, null, 2));
+  return { ...rec, fromCache: false };
+}
+
 export function collectSuppliers(DATA_DIR: string): any[] {
   const map = new Map<string, any>();
   const add = (taxId: string, nome: string, origem: string) => {
@@ -413,38 +456,7 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   // ── execução da diligência (interativa e automática) ────────────────────────
   const hasValidRec = (cnpj: string) => { const r = readRec(cnpj); return !!(r && isValid(r)); };
 
-  async function runDiligence(cnpj: string, opts: { checkedBy?: string; ip?: string; userAgent?: string; force?: boolean } = {}): Promise<any> {
-    const cached = readRec(cnpj);
-    if (cached && isValid(cached) && !opts.force) return { ...cached, fromCache: true };
-    const receita = await fetchReceita(cnpj);
-    const razao = receita?.razao_social || cached?.razaoSocial || "";
-    const apis: string[] = [];
-    if (receita) apis.push(receita.fonte);
-    let sancoes: any[] = [];
-    if (razao) {
-      sancoes = await Promise.all([
-        consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
-        consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
-        consultaPT("cepim", "CEPIM — Entidades sem fins lucrativos impedidas", razao, cnpj),
-        consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
-      ]);
-      apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência)");
-    }
-    const anySancao = sancoes.some((s) => s.status === "CONSTA");
-    const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
-    const erro = !receita || sancoes.some((s) => s.status === "ERRO" || s.status === "PENDENTE");
-    const verdict = anySancao || receitaInativa ? "ALERTA" : (erro && !razao ? "PENDENTE" : "NADA_CONSTA");
-    const now = new Date();
-    const rec = {
-      cnpj, razaoSocial: razao || "—", nomeFantasia: receita?.nome_fantasia || "",
-      checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
-      checkedBy: opts.checkedBy || "—", ip: opts.ip || "—",
-      receita, sancoes, verdict,
-      metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString() },
-    };
-    fs.writeFileSync(recPath(cnpj), JSON.stringify(rec, null, 2));
-    return { ...rec, fromCache: false };
-  }
+  // runDiligence vive em escopo de módulo (export) p/ reuso pelo cockpit — chamado abaixo com (DATA_DIR, cnpj, opts).
 
   // ── fila automática (novos + vencidos), processada em série no ritmo do limiter ─
   const queue: string[] = [];
@@ -467,7 +479,7 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
       while (queue.length) {
         const cnpj = queue.shift() as string;
         queued.delete(cnpj); processing = cnpj;
-        try { await runDiligence(cnpj, { checkedBy: "automático (sistema)", ip: "sistema", force: false }); counters.done++; }
+        try { await runDiligence(DATA_DIR, cnpj, { checkedBy: "automático (sistema)", ip: "sistema", force: false }); counters.done++; }
         catch (e: any) { counters.failed++; counters.lastError = e?.message || String(e); console.warn("[Diligência] auto falhou", cnpj, e?.message || e); }
         finally { processing = null; }
       }
@@ -560,7 +572,7 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
     const cnpj = cnpjParam(req, res); if (!cnpj) return;
     const force = String(req.query.force || "") === "1";
     try {
-      const rec = await runDiligence(cnpj, { checkedBy: req.user?.email || "—", ip: reqIp(req), userAgent: String(req.headers["user-agent"] || ""), force });
+      const rec = await runDiligence(DATA_DIR, cnpj, { checkedBy: req.user?.email || "—", ip: reqIp(req), userAgent: String(req.headers["user-agent"] || ""), force });
       res.json({ ...rec, valida: true });
     } catch (e: any) { res.status(500).json({ error: e?.message || "Falha na diligência" }); }
   });

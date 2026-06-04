@@ -21,7 +21,7 @@ import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT, collectSuppliers } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, collectSuppliers, runDiligence } from "./diligenciaRoutes";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
 } from "./src/kyc/kycTypes";
@@ -477,6 +477,82 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       row.kyc = { id: rec.id, type: rec.type, status: rec.status, elegivel: rec.elegibilidade?.elegivel, fiscalYear: rec.fiscalYear, valida: rec.status === "assinado" && isFiscalValid(rec), signedAt: rec.signedAt };
     }
     res.json([...rows.values()].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")));
+  });
+
+  // ── perfil consolidado, persistente e editável (cadastrais + diligência + KYS/KYG) ──
+  const FORN_DIR = path.join(DATA_DIR, "fornecedores");
+  fs.mkdirSync(FORN_DIR, { recursive: true });
+  const CADASTRO_FIELDS = ["razaoSocial", "nomeFantasia", "situacaoCadastral", "dataSituacao", "naturezaJuridica", "porte", "abertura", "capitalSocial", "cnaePrincipal", "cep", "logradouro", "numero", "complemento", "bairro", "municipio", "uf", "telefone", "email", "banco", "agencia", "conta", "chavePix", "observacoes"];
+  const cadPath = (doc: string) => path.join(FORN_DIR, `${doc}.json`);
+  const readCad = (doc: string): any => { try { return JSON.parse(fs.readFileSync(cadPath(doc), "utf-8")); } catch { return null; } };
+  const writeCad = (doc: string, rec: any) => fs.writeFileSync(cadPath(doc), JSON.stringify(rec, null, 2));
+  const readDilRec = (doc: string): any => { try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, "diligencia", `${doc}.json`), "utf-8")); } catch { return null; } };
+  const latestKyc = (doc: string): KycRecord | null => { let best: KycRecord | null = null; for (const rec of listRecs()) { if (recDoc(rec) !== doc) continue; if (!best || String(rec.createdAt) > String(best.createdAt)) best = rec; } return best; };
+  // campos derivados das APIs (Receita+CEP) e do KYS/KYG mais recente
+  const apiFields = (doc: string): { fields: Record<string, string>; fontes: any; qsa: any[]; dil: any; kyc: KycRecord | null } => {
+    const dil = readDilRec(doc); const r = dil?.receita || {};
+    const kyc = latestKyc(doc); const kd: any = kyc?.kys || kyc?.kyg || {}; const kEnd = kd.endereco || {}; const kB = kd.banco || {};
+    const fields: Record<string, string> = {
+      razaoSocial: r.razao_social || kyc?.kys?.razaoSocial || kyc?.kyg?.nome || "",
+      nomeFantasia: r.nome_fantasia || kd.nomeFantasia || "",
+      situacaoCadastral: r.situacao_cadastral || "", dataSituacao: r.data_situacao || "",
+      naturezaJuridica: r.natureza_juridica || "", porte: r.porte || "", abertura: r.abertura || "", capitalSocial: r.capital_social || "", cnaePrincipal: r.cnae_principal || "",
+      cep: r.cep || kEnd.cep || "", logradouro: r.logradouro || kEnd.logradouro || "", numero: r.numero || kEnd.numero || "", complemento: r.complemento || kEnd.complemento || "",
+      bairro: r.bairro || kEnd.bairro || "", municipio: r.municipio || kEnd.municipio || "", uf: r.uf || kEnd.uf || "",
+      telefone: r.telefone || kd.telefone || "", email: r.email || kd.email || "",
+      banco: kB.banco || "", agencia: kB.agencia || "", conta: kB.conta || "", chavePix: kB.chavePix || "", observacoes: kd.observacoes || "",
+    };
+    const fontes = { receita: r.fonte ? { fonte: r.fonte, apiUrl: r.apiUrl, fetchedAt: r.fetchedAt } : null, cep: r.cepFonte ? { fonte: r.cepFonte, apiUrl: r.cepApiUrl, fetchedAt: r.cepFetchedAt } : null };
+    return { fields, fontes, qsa: r.qsa || [], dil, kyc };
+  };
+  const consolidate = (doc: string) => {
+    const { fields: api, fontes, qsa, dil, kyc } = apiFields(doc);
+    const had = readCad(doc);
+    const stored = had || { doc, tipo: doc.length === 14 ? "pj" : "pf", fields: {}, manual: {}, updatedAt: null, updatedBy: null };
+    const merged: Record<string, string> = {};
+    for (const k of CADASTRO_FIELDS) merged[k] = stored.manual?.[k] ? (stored.fields?.[k] ?? "") : (api[k] || stored.fields?.[k] || "");
+    if (!had) writeCad(doc, { ...stored, fields: merged, fontes, updatedAt: new Date().toISOString() }); // semeia na 1ª abertura
+    return { cadastro: merged, manual: stored.manual || {}, fontes, qsa, dil, kyc };
+  };
+  const profileResponse = (doc: string) => {
+    const { cadastro, manual, fontes, qsa, dil, kyc } = consolidate(doc);
+    const { documensoToken: _t, ...kycSafe } = (kyc || {}) as any;
+    return { doc, docFmt: fmtCnpj(doc), tipo: doc.length === 14 ? "pj" : "pf", cadastro, manual, fontes, qsa, diligencia: dil, kyc: kyc ? { ...kycSafe, valida: kyc.status === "assinado" && isFiscalValid(kyc) } : null };
+  };
+  const docParam = (req: any, res: any): string | null => {
+    const d = onlyDigits(sanitizeSegment(String(req.params.doc || "")) || "");
+    if (d.length !== 14 && d.length !== 11) { res.status(400).json({ error: "Documento inválido (CNPJ ou CPF)" }); return null; }
+    return d;
+  };
+
+  app.get("/api/fornecedores/:doc", requireAuth, (req: any, res) => {
+    const doc = docParam(req, res); if (!doc) return;
+    res.json(profileResponse(doc));
+  });
+
+  // puxa de TODAS as APIs (Receita+CEP + listas de restrição) e atualiza os campos não-manuais
+  app.post("/api/fornecedores/:doc/refresh", requireAuth, async (req: any, res) => {
+    const doc = docParam(req, res); if (!doc) return;
+    if (doc.length === 14) { try { await runDiligence(DATA_DIR, doc, { checkedBy: req.user?.email || "—", ip: reqIp(req), force: true }); } catch (e: any) { console.warn("[Fornecedor] refresh diligência:", e?.message); } }
+    const { fields: api, fontes } = apiFields(doc);
+    const stored = readCad(doc) || { doc, tipo: doc.length === 14 ? "pj" : "pf", fields: {}, manual: {} };
+    const fields: Record<string, string> = { ...stored.fields };
+    for (const k of CADASTRO_FIELDS) if (!stored.manual?.[k]) fields[k] = api[k] || fields[k] || "";
+    writeCad(doc, { ...stored, doc, tipo: doc.length === 14 ? "pj" : "pf", fields, fontes, updatedAt: new Date().toISOString(), updatedBy: req.user?.email });
+    res.json(profileResponse(doc));
+  });
+
+  // edição manual dos dados cadastrais (marca os campos como manuais → não são sobrescritos no refresh)
+  app.patch("/api/fornecedores/:doc", requireAuth, (req: any, res) => {
+    const doc = docParam(req, res); if (!doc) return;
+    const patch = (req.body && req.body.fields) || {};
+    consolidate(doc); // garante semeadura
+    const stored = readCad(doc) || { doc, tipo: doc.length === 14 ? "pj" : "pf", fields: {}, manual: {} };
+    stored.fields = { ...stored.fields }; stored.manual = { ...stored.manual };
+    for (const k of CADASTRO_FIELDS) if (k in patch) { stored.fields[k] = String(patch[k] ?? ""); stored.manual[k] = true; }
+    stored.updatedAt = new Date().toISOString(); stored.updatedBy = req.user?.email;
+    writeCad(doc, stored);
+    res.json(profileResponse(doc));
   });
 
   app.get("/api/kyc/invites", requireAuth, (_req, res) => {

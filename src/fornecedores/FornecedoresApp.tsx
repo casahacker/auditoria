@@ -6,20 +6,20 @@
  *
  * Uma só visão por fornecedor (CNPJ/CPF): situação de Diligência (Receita + listas de
  * restrição) e de Conformidade KYS/KYG (cadastro verificado + assinatura) lado a lado.
- * A diferença entre fornecedores é apenas ter ou não KYS/KYG assinado. Reaproveita os
- * detalhes da Diligência (ResultadoView) e do KYS/KYG (DetailView) e os convites.
+ * A diferença entre fornecedores é apenas ter ou não KYS/KYG assinado. O perfil traz os
+ * dados consolidados (de todas as APIs) numa única tela, persistentes e editáveis, mais
+ * a diligência e o KYS/KYG (reusa DetailView do KYS/KYG e os convites).
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2, BookOpen, Link2, Loader2, Search, RefreshCw, ChevronRight, ChevronLeft,
   ShieldCheck, ShieldAlert, AlertTriangle, Upload, FileUp, History, BadgeCheck,
-  ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature,
+  ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature, Pencil, Check,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
 import { Btn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput, Modal } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
-import { ResultadoView } from '../diligencia/DiligenciaApp';
 import { ConvitesView, DetailView as KycDetailView } from '../kyc/KycApp';
 import { onlyDigits, maskDoc, KYC_STATUS_LABEL } from '../kyc/kycTypes';
 import type { KycStatus } from '../kyc/kycTypes';
@@ -66,8 +66,8 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
   const [cnpjInput, setCnpjInput] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [convites, setConvites] = useState<{ open: boolean; cnpj?: string }>({ open: false });
-  // detalhe
-  const [dDoc, setDDoc] = useState(''); const [dDil, setDDil] = useState<any>(null); const [dKyc, setDKyc] = useState<any>(null); const [dBusy, setDBusy] = useState(false);
+  // detalhe (perfil consolidado: cadastrais + diligência + KYS/KYG)
+  const [dDoc, setDDoc] = useState(''); const [profile, setProfile] = useState<any>(null); const [dBusy, setDBusy] = useState(false);
 
   const loadRows = async () => { setLoading(true); try { const r = await apiFetch('/api/fornecedores'); if (r.ok) setRows(await r.json()); } catch { /* */ } finally { setLoading(false); } };
   const loadHistory = async () => { try { const r = await apiFetch('/api/diligencia'); if (r.ok) setHistory(await r.json()); } catch { /* */ } };
@@ -85,31 +85,22 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
     tick(); return () => { alive = false; clearTimeout(t); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openFornecedor = async (doc: string, kycId?: string) => {
+  const openFornecedor = async (doc: string) => {
     const d = onlyDigits(doc);
-    setSection('detalhe'); setDDoc(d); setDDil(null); setDKyc(null); setDBusy(true); navigate?.(toPath('detalhe', d));
-    try {
-      const row = rows.find((r) => r.doc === d); const kid = kycId || row?.kyc?.id;
-      const tasks: Promise<void>[] = [];
-      if (d.length === 14) tasks.push(apiFetch(`/api/diligencia/${d}`).then(async (r) => { if (r.ok) setDDil(await r.json()); }).catch(() => {}));
-      if (kid) tasks.push(apiFetch(`/api/kyc/${kid}`).then(async (r) => { if (r.ok) setDKyc(await r.json()); }).catch(() => {}));
-      await Promise.all(tasks);
-    } finally { setDBusy(false); }
+    setSection('detalhe'); setDDoc(d); setProfile(null); setDBusy(true); navigate?.(toPath('detalhe', d));
+    try { const r = await apiFetch(`/api/fornecedores/${d}`); if (r.ok) setProfile(await r.json()); } catch { /* */ } finally { setDBusy(false); }
   };
-
-  const runCheck = async (cnpj: string, force = false) => {
-    const d = onlyDigits(cnpj);
-    if (d.length !== 14) { addToast('error', 'Informe um CNPJ válido (14 dígitos).'); return; }
-    if (section !== 'detalhe') { setSection('detalhe'); setDDoc(d); setDDil(null); setDKyc(null); navigate?.(toPath('detalhe', d)); }
-    setDBusy(true);
-    try {
-      const r = await apiFetch(`/api/diligencia/${d}/check${force ? '?force=1' : ''}`, { method: 'POST' });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({} as any))).error || 'Falha na diligência');
-      const rec = await r.json(); setDDil(rec);
-      addToast(rec.verdict === 'ALERTA' ? 'error' : 'success', rec.verdict === 'ALERTA' ? 'Diligência concluída — ALERTA.' : 'Diligência concluída — nada consta.');
-      loadRows();
-    } catch (e: any) { addToast('error', e.message); } finally { setDBusy(false); }
+  const refreshProfile = async (doc: string) => {
+    const d = onlyDigits(doc); setDBusy(true);
+    try { const r = await apiFetch(`/api/fornecedores/${d}/refresh`, { method: 'POST' }); if (!r.ok) throw new Error(); setProfile(await r.json()); addToast('success', 'Dados atualizados das APIs.'); loadRows(); }
+    catch { addToast('error', 'Falha ao atualizar das APIs.'); } finally { setDBusy(false); }
   };
+  const saveCadastro = async (doc: string, fields: any): Promise<boolean> => {
+    try { const r = await apiFetch(`/api/fornecedores/${onlyDigits(doc)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) }); if (!r.ok) throw new Error(); setProfile(await r.json()); addToast('success', 'Cadastro salvo.'); loadRows(); return true; }
+    catch { addToast('error', 'Falha ao salvar o cadastro.'); return false; }
+  };
+  const reloadProfile = async () => { if (!dDoc) return; try { const r = await apiFetch(`/api/fornecedores/${dDoc}`); if (r.ok) setProfile(await r.json()); } catch { /* */ } };
+  const consultarTopo = (cnpj: string) => { const d = onlyDigits(cnpj); if (d.length !== 14) { addToast('error', 'Informe um CNPJ válido (14 dígitos).'); return; } setSection('detalhe'); setDDoc(d); setProfile(null); navigate?.(toPath('detalhe', d)); refreshProfile(d); };
   const runAll = async () => { try { const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' }); const j = await r.json(); addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} na fila de diligência.` : 'Tudo em dia.'); } catch { addToast('error', 'Falha ao iniciar.'); } };
   const doImport = async (text: string): Promise<boolean> => {
     try { const r = await apiFetch('/api/diligencia/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
@@ -144,10 +135,10 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2 bg-card border border-line rounded px-3 py-1.5 focus-within:border-primary">
               <Search size={14} className="text-text-secondary" aria-hidden />
-              <input value={cnpjInput} onChange={(e) => setCnpjInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && runCheck(cnpjInput)}
+              <input value={cnpjInput} onChange={(e) => setCnpjInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && consultarTopo(cnpjInput)}
                 aria-label="CNPJ a consultar" placeholder="CNPJ a consultar" className="bg-transparent text-[13px] outline-none w-[150px] sm:w-[170px]" />
             </label>
-            <Btn onClick={() => runCheck(cnpjInput)} disabled={dBusy}>Consultar</Btn>
+            <Btn onClick={() => consultarTopo(cnpjInput)} disabled={dBusy}>Consultar</Btn>
           </div>
         } />
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
@@ -155,8 +146,8 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
             onImport={() => setImportOpen(true)} onConvites={() => setConvites({ open: true })} />}
           {section === 'historico' && <HistoricoView history={history} openFornecedor={openFornecedor} />}
           {section === 'ajuda' && <AjudaFornecedores />}
-          {section === 'detalhe' && <FichaFornecedor doc={dDoc} dil={dDil} kyc={dKyc} busy={dBusy} apiFetch={apiFetch} addToast={addToast}
-            runCheck={runCheck} reloadKyc={() => dKyc && apiFetch(`/api/kyc/${dKyc.id}`).then((r) => r.ok && r.json().then(setDKyc))}
+          {section === 'detalhe' && <FichaFornecedor doc={dDoc} profile={profile} busy={dBusy} apiFetch={apiFetch} addToast={addToast}
+            onRefresh={() => refreshProfile(dDoc)} onSave={(fields: any) => saveCadastro(dDoc, fields)} reloadKyc={reloadProfile}
             onBack={() => goSection('base')} onInvite={() => setConvites({ open: true, cnpj: dDoc.length === 14 ? dDoc : undefined })} />}
         </div>
       </main>
@@ -314,76 +305,131 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
 }
 
 // ── Ficha do Fornecedor (header de status + abas acessíveis) ─────────────────────
-function FichaFornecedor({ doc, dil, kyc, busy, apiFetch, addToast, runCheck, reloadKyc, onBack, onInvite }: any) {
-  const nome = dil?.razaoSocial || kyc?.kys?.razaoSocial || kyc?.kyg?.nome || '—';
-  const [tab, setTab] = useState<'diligencia' | 'kyc'>('diligencia');
-  const tablistRef = useRef<HTMLDivElement>(null);
-  const tabs: { id: 'diligencia' | 'kyc'; label: string; icon: React.ElementType }[] = [
-    { id: 'diligencia', label: 'Diligência', icon: ShieldCheck },
-    { id: 'kyc', label: 'KYS / KYG', icon: BadgeCheck },
-  ];
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const i = tabs.findIndex((t) => t.id === tab);
-    const ni = e.key === 'ArrowRight' ? (i + 1) % tabs.length : (i - 1 + tabs.length) % tabs.length;
-    setTab(tabs[ni].id);
-    (tablistRef.current?.querySelectorAll<HTMLButtonElement>('[role=tab]')[ni])?.focus();
-  };
+const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: boolean }[] }[] = [
+  { title: 'Identificação', fields: [
+    { k: 'razaoSocial', label: 'Razão social', full: true }, { k: 'nomeFantasia', label: 'Nome fantasia', full: true },
+    { k: 'situacaoCadastral', label: 'Situação cadastral' }, { k: 'dataSituacao', label: 'Situação desde' },
+    { k: 'naturezaJuridica', label: 'Natureza jurídica', full: true }, { k: 'porte', label: 'Porte' }, { k: 'abertura', label: 'Abertura' },
+    { k: 'capitalSocial', label: 'Capital social' }, { k: 'cnaePrincipal', label: 'CNAE principal', full: true },
+  ] },
+  { title: 'Endereço', fields: [
+    { k: 'cep', label: 'CEP' }, { k: 'logradouro', label: 'Logradouro', full: true }, { k: 'numero', label: 'Número' },
+    { k: 'complemento', label: 'Complemento' }, { k: 'bairro', label: 'Bairro' }, { k: 'municipio', label: 'Município' }, { k: 'uf', label: 'UF' },
+  ] },
+  { title: 'Contato', fields: [{ k: 'telefone', label: 'Telefone' }, { k: 'email', label: 'E-mail' }] },
+  { title: 'Dados bancários', fields: [{ k: 'banco', label: 'Banco' }, { k: 'agencia', label: 'Agência' }, { k: 'conta', label: 'Conta' }, { k: 'chavePix', label: 'Chave PIX' }] },
+];
+const sancaoLabel = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
+
+function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, onSave, reloadKyc, onBack, onInvite }: any) {
+  const [edit, setEdit] = useState(false);
+  const [form, setForm] = useState<any>({});
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setEdit(false); }, [profile?.doc]); // sai do modo edição ao trocar de fornecedor
+
+  if (busy && !profile) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando perfil…</div>;
+  if (!profile) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor na base.</div>;
+  const c = profile.cadastro || {}; const dil = profile.diligencia; const kyc = profile.kyc; const manual = profile.manual || {}; const fontes = profile.fontes || {};
+  const nome = c.razaoSocial || '—';
+  const startEdit = () => { setForm({ ...c }); setEdit(true); };
+  const save = async () => { setSaving(true); const ok = await onSave(form); setSaving(false); if (ok) setEdit(false); };
 
   return (
     <div className="space-y-5 max-w-4xl animate-in fade-in duration-300">
       <button onClick={onBack} className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-primary uppercase tracking-wider rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronLeft size={13} aria-hidden /> Fornecedores</button>
 
-      {/* header de identidade + status num relance */}
+      {/* header: identidade + status num relance */}
       <Card className="p-5">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h2 className="text-[20px] font-bold leading-tight">{nome}</h2>
-            <div className="font-mono text-[13px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
-          </div>
-        </div>
+        <h2 className="text-[20px] font-bold leading-tight">{nome}</h2>
+        <div className="font-mono text-[13px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
         <div className="grid sm:grid-cols-3 gap-3 mt-4">
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5">
-            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}
-          </div>
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5">
-            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}
-            {kyc && <span className="block text-[10px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}
-          </div>
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5">
-            <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Elegibilidade</div>{eligChip(kyc)}
-          </div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}{kyc && <span className="block text-[10px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}</div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Elegibilidade</div>{eligChip(kyc)}</div>
         </div>
       </Card>
 
-      {/* abas acessíveis */}
-      <div>
-        <div ref={tablistRef} role="tablist" aria-label="Seções da ficha" onKeyDown={onKey} className="flex gap-1 border-b border-line">
-          {tabs.map((t) => {
-            const sel = tab === t.id; const Icon = t.icon;
-            return (
-              <button key={t.id} role="tab" id={`tab-${t.id}`} aria-selected={sel} aria-controls={`panel-${t.id}`} tabIndex={sel ? 0 : -1}
-                onClick={() => setTab(t.id)}
-                className={cn('inline-flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-bold uppercase tracking-wider border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
-                  sel ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text')}>
-                <Icon size={14} aria-hidden /> {t.label}
-              </button>
-            );
-          })}
+      {/* dados cadastrais consolidados (editável) */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div className="text-[13px] font-bold flex items-center gap-1.5"><Building2 size={15} className="text-primary" aria-hidden /> Dados cadastrais</div>
+          <div className="flex items-center gap-2">
+            <Btn variant="secondary" size="sm" onClick={onRefresh} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} Atualizar das APIs</Btn>
+            {edit ? (<>
+              <Btn variant="ghost" size="sm" onClick={() => setEdit(false)}>Cancelar</Btn>
+              <Btn size="sm" onClick={save} disabled={saving}>{saving ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Check size={13} aria-hidden />} Salvar</Btn>
+            </>) : <Btn variant="secondary" size="sm" onClick={startEdit}><Pencil size={13} aria-hidden /> Editar</Btn>}
+          </div>
         </div>
-
-        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0} className="pt-5 focus-visible:outline-none">
-          {tab === 'diligencia' ? (
-            dil ? <ResultadoView current={dil} busy={busy} apiFetch={apiFetch} addToast={addToast} runCheck={runCheck} />
-              : busy ? <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Consultando…</div>
-              : doc.length === 14 ? <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Consulte a Receita Federal e as listas de restrição." action={<Btn onClick={() => runCheck(doc)}><RefreshCw size={14} aria-hidden /> Consultar agora</Btn>} />
-              : <Card className="p-4 text-[12px] text-text-secondary">A diligência automática (Receita + listas) aplica-se a CNPJ. Este registro é pessoa física (CPF).</Card>
-          ) : (
-            kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} />
-              : <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade. O KYS/KYG é exigido para contratações específicas." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} aria-hidden /> Gerar convite KYS/KYG</Btn>} />
+        <div className="space-y-4">
+          {CAD_GROUPS.map((g) => (
+            <div key={g.title}>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">{g.title}</div>
+              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                {g.fields.map((f) => (
+                  <div key={f.k} className={f.full ? 'sm:col-span-2' : ''}>
+                    {edit ? (
+                      <label className="block">
+                        <span className="text-[10px] uppercase tracking-wider text-text-secondary">{f.label}{manual[f.k] && <span className="text-primary"> · manual</span>}</span>
+                        <input value={form[f.k] || ''} onChange={(e) => setForm({ ...form, [f.k]: e.target.value })}
+                          className="mt-1 w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[12px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
+                      </label>
+                    ) : (
+                      <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{f.label}</span>
+                        <span className="font-medium break-words">{c[f.k] || '—'}{manual[f.k] && <span className="ml-1.5 text-[9px] uppercase tracking-wider text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</span></div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">Observações</div>
+            {edit ? <textarea value={form.observacoes || ''} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={3} className="w-full bg-bg border border-line rounded px-3 py-2 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
+              : <div className="text-[12px] text-text">{c.observacoes || '—'}</div>}
+          </div>
+          {profile.qsa?.length > 0 && (
+            <div><div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">Quadro societário (Receita)</div>
+              <div className="text-[12px] text-text-secondary">{profile.qsa.map((s: any) => `${s.nome}${s.qual ? ` (${s.qual})` : ''}`).join('; ')}</div></div>
           )}
         </div>
+        {(fontes.receita || fontes.cep) && (
+          <div className="mt-4 pt-3 border-t border-line text-[10px] text-text-secondary leading-relaxed">
+            Fontes: {fontes.receita && <span>{fontes.receita.fonte}{fontes.receita.fetchedAt ? ` (${new Date(fontes.receita.fetchedAt).toLocaleDateString('pt-BR')})` : ''}</span>}{fontes.cep && <span> · {fontes.cep.fonte}</span>}. Campos marcados como <b>manual</b> não são sobrescritos ao atualizar das APIs.
+          </div>
+        )}
+      </Card>
+
+      {/* restrições / diligência */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="text-[13px] font-bold flex items-center gap-1.5"><ShieldCheck size={15} className="text-primary" aria-hidden /> Diligência — listas de restrição</div>
+          <div className="flex items-center gap-2">
+            {dil && <Btn variant="ghost" size="sm" onClick={() => window.open(`/api/diligencia/${doc}/report.html`, '_blank')}>Relatório (PDF)</Btn>}
+            {doc.length === 14 && <Btn variant="secondary" size="sm" onClick={onRefresh} disabled={busy}><RefreshCw size={13} aria-hidden /> Reconsultar</Btn>}
+          </div>
+        </div>
+        {dil ? (
+          <div className="space-y-2.5">
+            <div>{dilChip(dil)}{dil.checkedAt && <span className="text-[10px] text-text-secondary ml-2">consultada em {new Date(dil.checkedAt).toLocaleString('pt-BR')}</span>}</div>
+            {(dil.sancoes || []).map((s: any, i: number) => (
+              <div key={i} className="border-b border-line pb-2 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-semibold">{s.fonte}</span>
+                  <span className={cn('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border', s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{sancaoLabel(s)}</span></div>
+                {(s.hits || []).map((h: any, j: number) => <div key={j} className="mt-1 text-[11px] bg-error/5 border border-error/20 rounded px-2 py-1.5"><div className="font-semibold text-error">{h.tipo}</div><div className="text-text-secondary">{h.orgao} · vigência {h.dataInicio || '?'}–{h.dataFim || '?'} · processo {h.processo || '—'}</div></div>)}
+              </div>
+            ))}
+          </div>
+        ) : busy ? <div className="flex items-center gap-2 text-text-secondary text-[12px]"><Loader2 size={14} className="animate-spin" aria-hidden /> Consultando…</div>
+          : doc.length === 14 ? <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Consulte a Receita Federal e as listas de restrição." action={<Btn onClick={onRefresh}><RefreshCw size={14} aria-hidden /> Consultar agora</Btn>} />
+          : <div className="text-[12px] text-text-secondary">A diligência (Receita + listas de restrição) aplica-se a CNPJ. Este registro é pessoa física (CPF).</div>}
+      </Card>
+
+      {/* KYS / KYG */}
+      <div>
+        <div className="text-[13px] font-bold flex items-center gap-1.5 mb-3"><BadgeCheck size={15} className="text-primary" aria-hidden /> Conformidade KYS / KYG</div>
+        {kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} />
+          : <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade (exigida para contratações específicas)." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} aria-hidden /> Gerar convite KYS/KYG</Btn>} />}
       </div>
     </div>
   );
