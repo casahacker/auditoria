@@ -11,6 +11,8 @@ services:
     restart: on-failure:3
     security_opt:
       - "no-new-privileges:true"
+    extra_hosts:
+      - "s3.casahacker.org:10.89.0.1"   # alcança o AIStor (s3.casahacker.org) via nginx do host — anti-hairpin
     environment:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
@@ -40,7 +42,7 @@ services:
           cpus: '0.25'
           memory: 256M
     volumes:
-      - /data/auditoria/data:/app/data
+      - /data/auditoria/data:/app/data:z
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s

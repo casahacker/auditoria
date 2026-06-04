@@ -22,6 +22,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "node:crypto";
 import { fetchReceita, consultaPT, collectSuppliers, runDiligence, lookupCep } from "./diligenciaRoutes";
+import { generateKycPdf } from "./kycPdf";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
 } from "./src/kyc/kycTypes";
@@ -151,7 +152,9 @@ const TEMPLATE_ID: Record<KycType, string> = {
   kys: process.env.DOCUMENSO_KYS_TEMPLATE_ID || "",
   kyg: process.env.DOCUMENSO_KYG_TEMPLATE_ID || "",
 };
-const documensoReady = (t: KycType) => !!(DOCUMENSO_TOKEN && TEMPLATE_ID[t]);
+// Com S3 ligado no Documenso, criamos o documento por API (PDF pré-preenchido) — sem template.
+// Basta o token; vale para KYS e KYG (KYG deixa de depender de um template criado na UI).
+const documensoReady = (_t: KycType) => !!DOCUMENSO_TOKEN;
 
 async function dso(method: string, urlPath: string, body?: any): Promise<any> {
   const r = await fetch(`${DOCUMENSO_URL}/api/v1${urlPath}`, {
@@ -167,43 +170,52 @@ async function dso(method: string, urlPath: string, body?: any): Promise<any> {
 }
 
 /**
- * Cria o documento a partir do template, envia e devolve o token do SIGNATÁRIO p/ o modal.
+ * Gera o termo JÁ PRÉ-PREENCHIDO (kycPdf), sobe ao Documenso via API (S3) e devolve o token do
+ * SIGNATÁRIO p/ o modal embutido. O fornecedor apenas ASSINA — não redigita nada.
  *
- * Os templates de conformidade têm DOIS placeholders, mapeados por ÍNDICE no create-document:
- *   [0] = CC      → solicitante Casa Hacker (recebe cópia)
- *   [1] = SIGNER  → o fornecedor (quem assina)
- * Por isso enviamos os DOIS recipients na ordem do template (antes só mandávamos um, que caía
- * no slot CC e deixava o SIGNER como "Direct link recipient" do template — o signatário errado).
- *
- * NÃO enviamos `formValues`: a instância patchada do Documenso (sem S3) REJEITA esse campo
- * (responde HTTP "Unauthorized"). Os campos do termo são preenchidos pelo próprio signatário
- * no formulário nativo do Documenso (o template já traz todos os campos).
+ * Fluxo (requer S3 ligado no Documenso — ver reference_aistor_s3):
+ *   1. generateKycPdf(rec) → PDF preenchido + posição do campo de assinatura;
+ *   2. POST /documents (createDocument) → uploadUrl presigned + documentId + recipients
+ *      [0]=CC (solicitante Casa Hacker), [1]=SIGNER (fornecedor);
+ *   3. PUT do PDF na presigned URL (S3);
+ *   4. POST /documents/{id}/fields → campo SIGNATURE no SIGNER, na posição reservada;
+ *   5. POST /documents/{id}/send → habilita a assinatura (cópia ao CC).
  */
 async function createSignature(rec: KycRecord, signer: { name: string; email: string }): Promise<{ documentId: number; token: string }> {
-  const templateId = TEMPLATE_ID[rec.type];
   const title = `${rec.type.toUpperCase()} — ${signer.name} (${rec.fiscalYear})`;
   const ccName = rec.requester?.nome || "Associação Casa Hacker";
   const ccEmail = rec.requester?.email && isEmail(rec.requester.email) ? rec.requester.email : "juridico@casahacker.org";
-  const gen = await dso("POST", `/templates/${templateId}/create-document`, {
+
+  const { pdf, signature } = await generateKycPdf(rec);
+
+  const gen = await dso("POST", `/documents`, {
     title,
     externalId: rec.id,
     recipients: [
-      { name: ccName, email: ccEmail },           // índice 0 → placeholder CC
-      { name: signer.name, email: signer.email },  // índice 1 → placeholder SIGNER
+      { name: ccName, email: ccEmail, role: "CC" },          // [0] cópia ao solicitante
+      { name: signer.name, email: signer.email, role: "SIGNER" }, // [1] assina
     ],
     meta: { subject: `Conformidade ${rec.type.toUpperCase()} — Casa Hacker`, message: "Documento de conformidade para assinatura eletrônica." },
   });
   const documentId: number = gen.documentId;
+  const uploadUrl: string = gen.uploadUrl;
   const recps: any[] = gen.recipients || [];
   const signerRec = recps.find((r) => r.role === "SIGNER") || recps[recps.length - 1];
   const token: string = signerRec?.token;
-  if (!documentId || !token) throw new Error("Documenso não retornou documentId/token do signatário");
-  // O campo SIGNATURE do signatário precisa existir NO TEMPLATE (criado pela UI do Documenso),
-  // que é inherdado aqui. NÃO dá p/ criar via API: o POST /documents/{id}/fields grava fieldMeta
-  // null e o /send valida fieldMeta != null → 400 ("Signers must have at least one signature field").
-  // envia (sai do rascunho → habilita a assinatura; e-mail de cópia ao CC)
-  try { await dso("POST", `/documents/${documentId}/send`, { sendEmail: true }); }
-  catch (e: any) { console.warn("[KYC] falha no send (pode já ter sido enviado):", e.message); }
+  const signerRecipientId: number = signerRec?.recipientId;
+  if (!documentId || !uploadUrl || !token || !signerRecipientId) throw new Error("Documenso não retornou documentId/uploadUrl/token");
+
+  const up = await fetch(uploadUrl, {
+    method: "PUT", headers: { "Content-Type": "application/pdf" }, body: pdf, signal: AbortSignal.timeout(60000),
+  });
+  if (!up.ok) throw new Error(`Falha no upload do PDF ao S3 (${up.status})`);
+
+  await dso("POST", `/documents/${documentId}/fields`, {
+    recipientId: signerRecipientId, type: "SIGNATURE",
+    pageNumber: signature.page, pageX: signature.x, pageY: signature.y,
+    pageWidth: signature.width, pageHeight: signature.height,
+  });
+  await dso("POST", `/documents/${documentId}/send`, { sendEmail: true });
   return { documentId, token };
 }
 

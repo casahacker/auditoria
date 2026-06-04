@@ -13,7 +13,8 @@ RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-por ghosts
 COPY package.json ./
 RUN npm install
 COPY --from=builder /app/dist ./dist
-COPY server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts ./
+COPY server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts kycPdf.ts ./
+COPY src/kyc/kycTypes.ts ./src/kyc/kycTypes.ts
 COPY assets ./assets
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
