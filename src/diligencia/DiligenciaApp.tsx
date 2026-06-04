@@ -268,52 +268,83 @@ function HistoricoView({ history, openSaved }: any) {
   );
 }
 
+const ST_LABEL = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
+const KVr = ({ k, v, cls }: { k: string; v: any; cls?: string }) => (
+  <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{k}</span><span className={cn('font-medium break-words', cls)}>{v || '—'}</span></div>
+);
+
 function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
   if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" /> Consultando Receita Federal e listas de restrição…</div>;
   if (!current) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor ou informe um CNPJ.</div>;
   const r = current;
-  const rf = r.receita;
-  const download = async () => { try { await dl(apiFetch, `/api/diligencia/${r.cnpj}/pdf`, `diligencia_${r.cnpj}.pdf`); } catch (e: any) { addToast('error', e.message); } };
+  const rf = r.receita || {};
+  const ender = [rf.logradouro, rf.numero, rf.complemento, rf.bairro].filter(Boolean).join(', ');
+  const openReport = () => window.open(`/api/diligencia/${r.cnpj}/report.html`, '_blank');
+  const downloadTxt = async () => { try { await dl(apiFetch, `/api/diligencia/${r.cnpj}/txt`, `diligencia_${r.cnpj}.txt`); } catch (e: any) { addToast('error', e.message); } };
   return (
     <div className="space-y-5 animate-in fade-in duration-300 max-w-4xl">
       <div className="bg-card border border-line rounded-lg p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="text-[16px] font-bold">{r.razaoSocial || '—'}</div>
-            <div className="text-[12px] text-text-secondary font-mono">{maskCnpj(r.cnpj)}</div>
+            <div className="text-[12px] text-text-secondary font-mono">{maskCnpj(r.cnpj)}{rf.nome_fantasia ? ` · ${rf.nome_fantasia}` : ''}</div>
           </div>
           <VerdictChip v={r.verdict} />
         </div>
-        <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1 text-[11px] text-text-secondary">
-          <div>Consulta: <b className="text-text">{new Date(r.checkedAt).toLocaleString('pt-BR')}</b></div>
-          <div>Validade: <b className={r.valida ? 'text-text' : 'text-warning'}>{new Date(r.validUntil).toLocaleDateString('pt-BR')}{r.valida ? '' : ' (vencida)'}</b></div>
-          <div>Solicitante: <b className="text-text">{r.checkedBy}</b></div>
-          <div>IP: <b className="text-text">{r.ip}</b></div>
-        </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button onClick={download} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded text-[11px] uppercase tracking-widest font-bold hover:bg-blue-700 transition-colors"><FileDown size={14} /> Baixar relatório (PDF)</button>
+          <button onClick={openReport} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded text-[11px] uppercase tracking-widest font-bold hover:bg-blue-700 transition-colors"><FileDown size={14} /> Exportar PDF</button>
+          <button onClick={downloadTxt} className="flex items-center gap-2 px-4 py-2 border border-line rounded text-[11px] uppercase tracking-widest text-text-secondary hover:text-primary hover:border-primary transition-colors"><FileDown size={14} /> Baixar dados (TXT)</button>
           <button onClick={() => runCheck(r.cnpj, true)} disabled={busy} className="flex items-center gap-2 px-4 py-2 border border-line rounded text-[11px] uppercase tracking-widest text-text-secondary hover:text-primary hover:border-primary transition-colors disabled:opacity-50"><RefreshCw size={14} /> Reconsultar</button>
         </div>
       </div>
 
-      {/* Receita */}
+      {/* Dados da consulta (auditável) */}
       <div className="bg-card border border-line rounded-lg p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-2 flex items-center gap-1.5"><Building2 size={13} /> Receita Federal</div>
-        {rf ? (
-          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[12px]">
-            <div>Situação cadastral: <b className={/ATIVA/i.test(rf.situacao_cadastral || '') ? 'text-success' : 'text-error'}>{rf.situacao_cadastral || '—'}</b></div>
-            <div>Natureza: <b>{rf.natureza_juridica || '—'}</b></div>
-            <div>Porte: <b>{rf.porte || '—'}</b></div>
-            <div>Abertura: <b>{rf.abertura || '—'}</b></div>
-            <div className="sm:col-span-2">CNAE: <b>{rf.cnae_principal || '—'}</b></div>
-            <div className="sm:col-span-2">Município: <b>{rf.municipio || '—'}/{rf.uf || '—'}</b></div>
-            {rf.qsa?.length > 0 && <div className="sm:col-span-2 text-text-secondary">Sócios: {rf.qsa.map((s: any) => `${s.nome} (${s.qual})`).join('; ')}</div>}
-            <div className="sm:col-span-2 text-[10px] text-text-secondary mt-1">Fonte: {rf.fonte} · {new Date(rf.fetchedAt).toLocaleString('pt-BR')}</div>
+        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3">Dados da consulta (auditável)</div>
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
+          <KVr k="Data/hora" v={new Date(r.checkedAt).toLocaleString('pt-BR')} />
+          <KVr k="Validade" v={`${new Date(r.validUntil).toLocaleDateString('pt-BR')}${r.valida ? '' : ' (vencida)'}`} cls={r.valida ? '' : 'text-warning'} />
+          <KVr k="Solicitante" v={r.checkedBy} />
+          <KVr k="IP de origem" v={r.ip} />
+        </div>
+        <div className="mt-3 pt-3 border-t border-line space-y-1">
+          <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Fontes consultadas</div>
+          {rf.fonte && <div className="text-[11px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.fonte}:</span> <span>{rf.fetchedAt ? new Date(rf.fetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.apiUrl && <a href={rf.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.apiUrl}</a>}</div>}
+          {(r.sancoes || []).map((s: any, i: number) => (
+            <div key={i} className="text-[11px] flex flex-wrap gap-x-2">
+              <span className="text-text-secondary">{s.fonte}:</span>
+              <span className={s.status === 'CONSTA' ? 'text-error font-semibold' : s.status === 'NADA_CONSTA' ? 'text-success' : 'text-warning'}>{ST_LABEL(s)}</span>
+              <span className="text-text-secondary">{s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('pt-BR') : ''}</span>
+              {s.apiUrl && <a href={s.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{s.apiUrl}</a>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Receita Federal — completo */}
+      <div className="bg-card border border-line rounded-lg p-5">
+        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><Building2 size={13} /> Receita Federal — cadastro</div>
+        {r.receita ? (
+          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
+            <KVr k="Situação" v={`${rf.situacao_cadastral || '—'}${rf.data_situacao ? ` (desde ${rf.data_situacao})` : ''}`} cls={/ATIVA/i.test(rf.situacao_cadastral || '') ? 'text-success' : 'text-error'} />
+            {rf.motivo_situacao && <KVr k="Motivo" v={rf.motivo_situacao} />}
+            <KVr k="Natureza" v={rf.natureza_juridica} />
+            <KVr k="Porte" v={rf.porte} />
+            <KVr k="Abertura" v={rf.abertura} />
+            <KVr k="Capital social" v={rf.capital_social} />
+            <div className="sm:col-span-2"><KVr k="CNAE principal" v={rf.cnae_principal} /></div>
+            {rf.cnaes_secundarios?.length > 0 && <div className="sm:col-span-2"><KVr k="CNAEs secundários" v={rf.cnaes_secundarios.join(' · ')} /></div>}
+            <div className="sm:col-span-2"><KVr k="Endereço" v={ender} /></div>
+            <KVr k="Município / UF" v={`${rf.municipio || '—'} / ${rf.uf || '—'}`} />
+            <KVr k="CEP" v={rf.cep} />
+            <KVr k="Telefone" v={rf.telefone} />
+            <KVr k="E-mail" v={rf.email} />
+            {rf.qsa?.length > 0 && <div className="sm:col-span-2"><KVr k="Quadro societário" v={rf.qsa.map((s: any) => `${s.nome}${s.qual ? ` (${s.qual})` : ''}`).join('; ')} /></div>}
           </div>
         ) : <div className="text-[12px] text-error">Não foi possível obter os dados cadastrais.</div>}
       </div>
 
-      {/* Sanções */}
+      {/* Listas de restrição */}
       <div className="bg-card border border-line rounded-lg p-5">
         <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-3 flex items-center gap-1.5"><ShieldAlert size={13} /> Listas de restrição — Portal da Transparência (CGU)</div>
         <div className="space-y-3">
@@ -322,9 +353,7 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12px] font-semibold">{s.fonte}</span>
                 <span className={cn('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border',
-                  s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>
-                  {s.status === 'CONSTA' ? `Consta (${s.hits.length})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status}
-                </span>
+                  s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{ST_LABEL(s)}</span>
               </div>
               {(s.hits || []).map((h: any, j: number) => (
                 <div key={j} className="mt-1.5 text-[11px] bg-error/5 border border-error/20 rounded px-2 py-1.5">
@@ -338,21 +367,6 @@ function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: any) {
           ))}
         </div>
       </div>
-
-      {/* Fontes complementares */}
-      <div className="bg-card border border-line rounded-lg p-5">
-        <div className="text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-2">Fontes complementares (verificação manual)</div>
-        <ul className="space-y-1.5 text-[11px]">
-          {(r.fontesComplementares || []).map((f: any, i: number) => (
-            <li key={i}>
-              <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1"><ExternalLink size={10} /> {f.fonte}</a>
-              <span className="text-text-secondary"> — {f.obs}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="text-[10px] text-text-secondary">APIs/fontes: {(r.metadata?.apis || []).join('  ·  ')}</div>
     </div>
   );
 }
