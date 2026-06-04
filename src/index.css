@@ -14,7 +14,10 @@
   --color-surface: #ffffff;
   --color-surface-hover: #f4f4f4;
   --color-success: #198038;
-  --color-warning: #f1c21b;
+  /* Amarelo Carbon (#f1c21b) reprova em contraste como TEXTO sobre fundo claro
+     (~1.6:1). Usamos um âmbar escuro (≥4.5:1, WCAG AA) p/ texto/ícones/bordas no
+     tema claro; o dark mode reabre o amarelo vivo abaixo. */
+  --color-warning: #8d6a00;
   --color-error: #da1e28;
 
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -58,6 +61,8 @@
   --color-text-secondary: #a8a8a8;
   --color-surface: #262626;
   --color-surface-hover: #393939;
+  /* No escuro o amarelo vivo tem ótimo contraste (≈9:1) e lê melhor que o âmbar do claro */
+  --color-warning: #f1c21b;
 }
 
 /* ── High contrast (WCAG AA) — overrides dark mode ──────────────────────────── */
@@ -109,4 +114,18 @@
 }
 .toast-slide-in {
   animation: toast-slide-in 0.25s ease-out forwards;
+}
+
+/* ── Movimento reduzido (WCAG 2.3.3) ─────────────────────────────────────────────
+   Respeita quem pediu menos animação no sistema operacional: spinners, pulsos,
+   skeleton e slide-in ficam estáticos; transições viram instantâneas. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

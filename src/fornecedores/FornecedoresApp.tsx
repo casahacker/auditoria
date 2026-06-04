@@ -14,11 +14,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2, BookOpen, Link2, Loader2, Search, RefreshCw, ChevronRight, ChevronLeft,
   ShieldCheck, ShieldAlert, AlertTriangle, Upload, FileUp, History, BadgeCheck,
-  ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature, Pencil, Check, Printer,
+  ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature, Pencil, Check, Printer, DownloadCloud,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
-import { Btn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput, Modal } from '../ui/kit';
+import { Btn, IconBtn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput, Modal } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
 import { ConvitesView, DetailView as KycDetailView } from '../kyc/KycApp';
 import { onlyDigits, maskDoc, KYC_STATUS_LABEL } from '../kyc/kycTypes';
@@ -62,7 +62,7 @@ const FAIXA: Record<string, { tone: ChipTone; label: string; short: string }> = 
   acima_2sm: { tone: 'success', label: 'Elegível — contratos a partir de 2 salários mínimos', short: '2 SM+' },
   pendente: { tone: 'neutral', label: 'Pendente — diligência não concluída', short: 'Pendente' },
 };
-const faixaChip = (f?: string, full?: boolean) => { const m = FAIXA[f || 'pendente'] || FAIXA.pendente; return <Chip tone={m.tone} size="sm">{full ? m.label : m.short}</Chip>; };
+const faixaChip = (f?: string, full?: boolean) => { const m = FAIXA[f || 'pendente'] || FAIXA.pendente; return <Chip tone={m.tone} size="sm" className={full ? 'whitespace-normal text-left leading-snug' : undefined}>{full ? m.label : m.short}</Chip>; };
 
 export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navigate, initialDoc }: FornecedoresAppProps) {
   const [section, setSection] = useState<Section>('base');
@@ -91,6 +91,20 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
     tick(); return () => { alive = false; clearTimeout(t); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // progresso da atualização em massa das APIs (Receita+CEP) — recarrega a base ao concluir
+  const [mass, setMass] = useState<any>(null); const massWas = useRef(false);
+  useEffect(() => {
+    let alive = true; let t: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      let m: any = null; try { const r = await apiFetch('/api/fornecedores/refresh-all/status'); if (r.ok) m = await r.json(); } catch { /* */ }
+      if (!alive) return; setMass(m);
+      if (m?.running) massWas.current = true;
+      else if (massWas.current) { massWas.current = false; loadRows(); addToast('success', `Atualização das APIs concluída: ${m?.done ?? 0} ok${m?.fail ? `, ${m.fail} erro(s)` : ''}.`); }
+      t = setTimeout(tick, m?.running ? 5000 : 45000);
+    };
+    tick(); return () => { alive = false; clearTimeout(t); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openFornecedor = async (doc: string) => {
     const d = onlyDigits(doc);
     setSection('detalhe'); setDDoc(d); setProfile(null); setDBusy(true); navigate?.(toPath('detalhe', d));
@@ -114,6 +128,15 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
   const reloadProfile = async () => { if (!dDoc) return; try { const r = await apiFetch(`/api/fornecedores/${dDoc}`); if (r.ok) setProfile(await r.json()); } catch { /* */ } };
   const consultarTopo = (cnpj: string) => { const d = onlyDigits(cnpj); if (d.length !== 14) { addToast('error', 'Informe um CNPJ válido (14 dígitos).'); return; } setSection('detalhe'); setDDoc(d); setProfile(null); navigate?.(toPath('detalhe', d)); reconsultarDiligencia(d); };
   const runAll = async () => { try { const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' }); const j = await r.json(); addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} na fila de diligência.` : 'Tudo em dia.'); } catch { addToast('error', 'Falha ao iniciar.'); } };
+  const refreshAllApis = async () => {
+    if (!window.confirm('Atualizar os dados cadastrais de TODOS os fornecedores a partir das APIs (Receita Federal + CEP)?\n\nRoda em segundo plano e pode levar vários minutos. Campos editados manualmente são preservados.')) return;
+    try {
+      const r = await apiFetch('/api/fornecedores/refresh-all', { method: 'POST' }); const j = await r.json();
+      if (j.alreadyRunning) addToast('info', 'Já há uma atualização em massa em andamento.');
+      else { addToast('info', `Atualização iniciada (${j.total} fornecedor[es]). Acompanhe a barra de progresso.`); massWas.current = true; }
+      setMass(j);
+    } catch { addToast('error', 'Falha ao iniciar a atualização.'); }
+  };
   const doImport = async (text: string): Promise<boolean> => {
     try { const r = await apiFetch('/api/diligencia/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
       const j = await r.json().catch(() => ({})); if (!r.ok) { addToast('error', j.error || 'Falha ao importar.'); return false; }
@@ -155,7 +178,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
         } />
         <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 pb-24">
           {section === 'base' && <CockpitBase rows={rows} loading={loading} openFornecedor={openFornecedor} queue={queue} runAll={runAll}
-            onImport={() => setImportOpen(true)} onConvites={() => setConvites({ open: true })} />}
+            onImport={() => setImportOpen(true)} onConvites={() => setConvites({ open: true })} mass={mass} onRefreshAll={refreshAllApis} />}
           {section === 'historico' && <HistoricoView history={history} openFornecedor={openFornecedor} />}
           {section === 'ajuda' && <AjudaFornecedores />}
           {section === 'detalhe' && <FichaFornecedor doc={dDoc} profile={profile} busy={dBusy} apiFetch={apiFetch} addToast={addToast}
@@ -199,7 +222,7 @@ function SortTh({ label, k, sort, setSort, className }: { label: string; k: Sort
   );
 }
 
-function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, onConvites }: any) {
+function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, onConvites, mass, onRefreshAll }: any) {
   const [q, setQ] = useState(''); const [df, setDf] = useState('all'); const [kf, setKf] = useState('all'); const [tf, setTf] = useState('all'); const [ef, setEf] = useState('all'); const [origem, setOrigem] = useState('all');
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: 'nome', dir: 1 });
   const qd = onlyDigits(q);
@@ -243,10 +266,11 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
           <b className="text-text"> KYS/KYG</b> (cadastro verificado + assinatura). O KYS/KYG é exigido apenas para contratações específicas.
           Diligências de novos/vencidos rodam automaticamente.
         </p>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
           <Btn variant="secondary" onClick={onConvites}><Link2 size={14} aria-hidden /> Convites</Btn>
           <Btn variant="secondary" onClick={onImport}><Upload size={14} aria-hidden /> Importar CNPJs</Btn>
           <Btn variant="secondary" onClick={runAll} disabled={stats.semDilig === 0}><RefreshCw size={14} aria-hidden /> Consultar não consultados{stats.semDilig ? ` (${stats.semDilig})` : ''}</Btn>
+          <Btn variant="secondary" onClick={onRefreshAll} disabled={!!mass?.running}><DownloadCloud size={14} aria-hidden /> Atualizar tudo das APIs</Btn>
         </div>
       </div>
 
@@ -260,15 +284,25 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
       </div>
 
       {active && (
-        <Card className="p-3 flex items-center gap-3 border-primary/40">
+        <Card role="status" aria-live="polite" className="p-3 flex items-center gap-3 border-primary/40">
           <Loader2 size={16} className="animate-spin text-primary shrink-0" aria-hidden />
           <div className="text-[12px]"><span className="font-semibold text-text">Consultando em segundo plano…</span>{' '}
             <span className="text-text-secondary">{queue.done} concluída(s) · {queue.pending} na fila{queue.failed ? ` · ${queue.failed} erro(s)` : ''} · limite {queue.ratePerMin}/min</span></div>
         </Card>
       )}
 
+      {mass?.running && (
+        <Card role="status" aria-live="polite" className="p-3 flex items-center gap-3 border-primary/40">
+          <DownloadCloud size={16} className="animate-pulse text-primary shrink-0" aria-hidden />
+          <div className="text-[12px] flex-1"><span className="font-semibold text-text">Atualizando cadastros das APIs (Receita + CEP)…</span>{' '}
+            <span className="text-text-secondary">{mass.done}/{mass.total} concluído(s){mass.fail ? ` · ${mass.fail} erro(s)` : ''}</span>
+            <div className="mt-1.5 h-1 w-full rounded-full bg-line overflow-hidden"><div className="h-full bg-primary transition-all" style={{ width: `${mass.total ? Math.round((mass.done / mass.total) * 100) : 0}%` }} /></div>
+          </div>
+        </Card>
+      )}
+
       {loading ? (
-        <div className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
+        <div role="status" className="flex items-center gap-2 text-text-secondary text-[13px]"><Loader2 size={16} className="animate-spin" aria-hidden /> Carregando…</div>
       ) : !rows.length ? (
         <EmptyState icon={Building2} title="Nenhum fornecedor ainda" description="A base vem das prestações de contas (Auditoria + FEAC), da importação de CNPJs e dos KYS/KYG. Consulte um CNPJ no campo acima." />
       ) : (
@@ -286,6 +320,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
           {!sorted.length ? <EmptyState icon={Search} title="Nenhum fornecedor com esses filtros" description="Ajuste a busca ou os filtros." /> : (
             <Card className="overflow-hidden">
               <table className="w-full text-[12px]">
+                <caption className="sr-only">Fornecedores com situação de diligência, KYS/KYG e faixa de elegibilidade. Use o botão no fim de cada linha para abrir a ficha.</caption>
                 <thead className={tableHeadCls}><tr>
                   <SortTh label="Fornecedor" k="nome" sort={sort} setSort={setSort} />
                   <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ / CPF</th>
@@ -298,13 +333,15 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
                 <tbody>
                   {sorted.map((r: any) => (
                     <tr key={r.doc} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openFornecedor(r.doc)}>
-                      <td className="px-4 py-2.5 max-w-[240px] truncate font-medium">{r.nome || '—'}</td>
+                      <td className="px-4 py-2.5 max-w-[240px] truncate font-medium uppercase">{r.nome || '—'}</td>
                       <td className="px-4 py-2.5 font-mono whitespace-nowrap">{r.docFmt}</td>
                       <td className="px-4 py-2.5 text-text-secondary">{(r.origens || []).join(', ')}</td>
                       <td className="px-4 py-2.5">{dilChip(r.diligencia)}</td>
                       <td className="px-4 py-2.5">{kycChip(r.kyc)}</td>
                       <td className="px-4 py-2.5">{faixaChip(r.faixa)}</td>
-                      <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" aria-hidden /></td>
+                      <td className="px-4 py-2.5 text-right">
+                        <IconBtn label={`Abrir ficha de ${r.nome || r.docFmt}`} onClick={(e) => { e.stopPropagation(); openFornecedor(r.doc); }}><ChevronRight size={16} aria-hidden /></IconBtn>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -346,10 +383,13 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
   const [saving, setSaving] = useState(false);
   const [banks, setBanks] = useState<{ code: string; name: string }[]>([]);
   const [cepBusy, setCepBusy] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { setEdit(false); }, [profile?.doc]); // sai do modo edição ao trocar de fornecedor
   useEffect(() => { fetch('/api/public/kyc/banks').then((r) => r.ok ? r.json() : []).then((b) => setBanks(Array.isArray(b) ? b : [])).catch(() => {}); }, []);
+  // foco vai ao título ao abrir/trocar a ficha (navegação SPA acessível)
+  useEffect(() => { if (profile) headingRef.current?.focus(); }, [profile?.doc]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (busy && !profile) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando perfil…</div>;
+  if (busy && !profile) return <div role="status" className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando perfil…</div>;
   if (!profile) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor na base.</div>;
   const c = profile.cadastro || {}; const dil = profile.diligencia; const kyc = profile.kyc; const manual = profile.manual || {}; const fontes = profile.fontes || {};
   const nome = c.razaoSocial || '—';
@@ -381,7 +421,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
 
       {/* header: identidade + status num relance */}
       <Card className="p-5">
-        <h2 className="text-[20px] font-bold leading-tight">{nome}</h2>
+        <h2 ref={headingRef} tabIndex={-1} className="text-[20px] font-bold leading-tight outline-none">{nome}</h2>
         <div className="font-mono text-[13px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
         <div className="grid sm:grid-cols-3 gap-3 mt-4">
           <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
@@ -466,7 +506,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
               </div>
             ))}
           </div>
-        ) : busy ? <div className="flex items-center gap-2 text-text-secondary text-[12px]"><Loader2 size={14} className="animate-spin" aria-hidden /> Consultando…</div>
+        ) : busy ? <div role="status" className="flex items-center gap-2 text-text-secondary text-[12px]"><Loader2 size={14} className="animate-spin" aria-hidden /> Consultando…</div>
           : doc.length === 14 ? <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Consulte a Receita Federal e as listas de restrição (pode levar alguns segundos)." action={<Btn onClick={onReconsultar}><RefreshCw size={14} aria-hidden /> Consultar agora</Btn>} />
           : <div className="text-[12px] text-text-secondary">A diligência (Receita + listas de restrição) aplica-se a CNPJ. Este registro é pessoa física (CPF).</div>}
       </Card>
@@ -491,9 +531,11 @@ function HistoricoView({ history, openFornecedor }: any) {
           <SearchInput value={q} onChange={setQ} placeholder="Buscar por nome ou CNPJ" className="w-full sm:w-[260px]" />
           <Card className="overflow-hidden">
             <table className="w-full text-[12px]">
+              <caption className="sr-only">Histórico de diligências realizadas. Use o botão no fim de cada linha para abrir a ficha do fornecedor.</caption>
               <thead className={tableHeadCls}><tr>
                 <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th><th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
                 <th scope="col" className="px-4 py-2.5 font-semibold">Resultado</th><th scope="col" className="px-4 py-2.5 font-semibold">Consulta</th>
+                <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
               </tr></thead>
               <tbody>
                 {filtered.map((h: any) => (
@@ -502,6 +544,9 @@ function HistoricoView({ history, openFornecedor }: any) {
                     <td className="px-4 py-2.5 font-mono whitespace-nowrap">{maskDoc(h.cnpj)}</td>
                     <td className="px-4 py-2.5">{h.verdict ? <Chip tone={DIL[h.verdict]?.tone} icon={DIL[h.verdict]?.icon} size="sm">{DIL[h.verdict]?.label || h.verdict}</Chip> : '—'}</td>
                     <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR')}{h.valida ? '' : ' · vencida'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <IconBtn label={`Abrir ficha de ${h.razaoSocial || maskDoc(h.cnpj)}`} onClick={(e) => { e.stopPropagation(); openFornecedor(h.cnpj); }}><ChevronRight size={16} aria-hidden /></IconBtn>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -538,10 +583,11 @@ function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (te
 function AjudaFornecedores() {
   const blocks = [
     { t: 'O que é o cockpit', d: 'Reúne, por fornecedor (CNPJ/CPF), a Diligência (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) e o KYS/KYG (cadastro verificado + assinatura eletrônica) numa só visão. A base lista todos os fornecedores das prestações de contas (Auditoria + FEAC), dos CNPJs importados e dos KYS/KYG preenchidos.' },
-    { t: 'Painel e filtros', d: 'Os cartões no topo (Alertas, Sem diligência válida, KYS/KYG assinado, Inelegíveis) filtram a base com um clique. Há ainda filtros por diligência, KYS/KYG, tipo (PJ/PF), elegibilidade e origem, busca por nome/CNPJ/CPF e ordenação clicando nos cabeçalhos.' },
+    { t: 'Painel e filtros', d: 'Os cartões no topo (Fornecedores, Elegível 2 SM+, Elegível até 2 SM, Inelegíveis, Pendentes) filtram a base com um clique. Há ainda filtros por diligência, KYS/KYG, tipo (PJ/PF), elegibilidade e origem, busca por nome/CNPJ/CPF e ordenação clicando nos cabeçalhos. Cada linha tem um botão para abrir a ficha (acessível por teclado).' },
     { t: 'Diligência', d: 'Consulta automática por CNPJ na Receita (situação cadastral, endereço com CEP, quadro societário) e nas listas de restrição. Roda sozinha para novos e vencidos (validade 30 dias) e pode ser forçada no botão "Consultar não consultados" ou no campo do topo.' },
+    { t: 'Atualizar tudo das APIs', d: 'O botão "Atualizar tudo das APIs" recarrega de uma vez os dados cadastrais (Receita Federal + CEP) de toda a base — a lista e as fichas. Roda em segundo plano, com barra de progresso, e preserva os campos editados manualmente (marcados como "manual"). É a atualização cadastral leve; as listas de restrição continuam pelo fluxo de diligência.' },
     { t: 'KYS / KYG', d: 'Fichas de conformidade preenchidas pelo próprio fornecedor numa página pública (/kys, /kyg) e assinadas via Documenso, exigidas apenas para contratações específicas. Use o botão "Convites" para gerar links rastreáveis. A elegibilidade indica quem está sem restrições + respostas adequadas + impostos/previdência em dia.' },
-    { t: 'Ficha do fornecedor', d: 'Abra qualquer fornecedor para ver, num só lugar, o status no topo e as abas Diligência (cadastro da Receita + listas) e KYS/KYG (respostas, trilha de conformidade e PDF assinado), com as ações de reconsultar e gerar convite.' },
+    { t: 'Ficha do fornecedor', d: 'Abra qualquer fornecedor para ver, numa só tela, o status no topo, os dados cadastrais consolidados e editáveis (Receita + CEP), a diligência (listas de restrição) e o KYS/KYG (respostas, trilha de conformidade e PDF assinado), com as ações Atualizar das APIs, Reconsultar, Imprimir / PDF e gerar convite.' },
   ];
   return (
     <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">

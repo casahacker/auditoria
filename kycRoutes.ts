@@ -686,6 +686,59 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     res.json(profileResponse(doc));
   });
 
+  // ── atualização EM MASSA dos dados das APIs (Receita + CEP) ──────────────────────
+  // Aplica a TODA a base a mesma lógica do refresh individual: atualiza o bloco 'receita'
+  // do registro de diligência (alimenta a LISTA) e re-semeia o perfil consolidado, mantendo
+  // os campos marcados como manuais (alimenta as FICHAS). Roda em segundo plano e em série —
+  // fetchReceita já passa pelo limitador global de chamadas (DILIGENCIA_RATE_PER_MIN). O
+  // progresso fica em GET /api/fornecedores/refresh-all/status.
+  const mass = { running: false, total: 0, done: 0, fail: 0, startedAt: "", startedBy: "", finishedAt: "", lastError: "" };
+  const writeDilReceita = (doc: string, receita: any) => {
+    const dir = path.join(DATA_DIR, "diligencia"); fs.mkdirSync(dir, { recursive: true });
+    const p = path.join(dir, `${doc}.json`);
+    let dil: any; try { dil = JSON.parse(fs.readFileSync(p, "utf-8")); }
+    catch { dil = { cnpj: doc, sancoes: [], verdict: "PENDENTE", checkedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 30 * 86400000).toISOString(), checkedBy: "atualização em massa", ip: "sistema" }; }
+    dil.receita = receita;
+    dil.razaoSocial = receita.razao_social || dil.razaoSocial || "—";
+    dil.nomeFantasia = receita.nome_fantasia || dil.nomeFantasia || "";
+    const inativa = !/ATIVA/i.test(receita.situacao_cadastral || "");
+    const anySancao = (dil.sancoes || []).some((x: any) => x.status === "CONSTA");
+    dil.verdict = (anySancao || inativa) ? "ALERTA" : ((dil.sancoes || []).length ? "NADA_CONSTA" : "PENDENTE");
+    fs.writeFileSync(p, JSON.stringify(dil, null, 2));
+  };
+  async function refreshAllFromApis(startedBy: string): Promise<void> {
+    if (mass.running) return;
+    const docs = Array.from(new Set(collectSuppliers(DATA_DIR).map((s: any) => onlyDigits(s.cnpj)).filter((d: string) => d.length === 14)));
+    Object.assign(mass, { running: true, total: docs.length, done: 0, fail: 0, startedAt: new Date().toISOString(), startedBy, finishedAt: "", lastError: "" });
+    console.log(`[Fornecedores] atualização em massa das APIs iniciada por ${startedBy} (${docs.length} CNPJs)`);
+    try {
+      for (const doc of docs) {
+        try {
+          const receita = await fetchReceita(doc);
+          if (receita) writeDilReceita(doc, receita);
+          reseedCadastro(doc, "atualização em massa");
+          mass.done++;
+        } catch (e: any) { mass.fail++; mass.lastError = e?.message || String(e); }
+      }
+    } finally {
+      mass.running = false; mass.finishedAt = new Date().toISOString();
+      console.log(`[Fornecedores] atualização em massa concluída: ${mass.done} ok, ${mass.fail} erro(s)`);
+    }
+  }
+
+  // Registradas ANTES de qualquer rota futura com ':doc' que pudesse capturar "refresh-all".
+  app.post("/api/fornecedores/refresh-all", requireAuth, (req: any, res) => {
+    if (mass.running) return res.json({ started: false, alreadyRunning: true, ...mass });
+    void refreshAllFromApis(req.user?.email || "—");
+    res.json({ started: true, ...mass });
+  });
+  app.get("/api/fornecedores/refresh-all/status", requireAuth, (_req, res) => res.json({ ...mass }));
+
+  // atualização cadastral em massa (uma vez) no startup quando DILIGENCIA_FORCE_REFRESH=1
+  if (process.env.DILIGENCIA_FORCE_REFRESH === "1") {
+    setTimeout(() => { void refreshAllFromApis("DILIGENCIA_FORCE_REFRESH (startup)"); }, 20_000);
+  }
+
   // edição manual dos dados cadastrais (marca os campos como manuais → não são sobrescritos no refresh)
   app.patch("/api/fornecedores/:doc", requireAuth, (req: any, res) => {
     const doc = docParam(req, res); if (!doc) return;

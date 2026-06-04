@@ -1793,7 +1793,8 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
     <>
     {/* ── UX-07: Accessibility bar — fixed top strip ───────────────────────── */}
     <div
-      role="navigation"
+      role="toolbar"
+      aria-orientation="horizontal"
       aria-label="Barra de acessibilidade"
       className="fixed top-0 left-0 right-0 h-8 z-[110] flex items-center px-4 gap-4 bg-[#21272a] text-white border-b border-white/10 text-[11px] select-none"
     >
@@ -1803,6 +1804,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       </span>
       <span className="w-px h-4 bg-white/20 shrink-0" />
       {/* Theme */}
+      <div role="group" aria-label="Tema" className="flex items-center gap-4 shrink-0">
       <span className="text-white/40 uppercase tracking-wider shrink-0">Tema</span>
       <button
         onClick={() => { setA11yHighContrast(false); setA11yTheme('light'); }}
@@ -1820,6 +1822,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       >
         <Moon size={11} /> Escuro
       </button>
+      </div>
       <span className="w-px h-4 bg-white/20 shrink-0" />
       {/* High contrast */}
       <button
@@ -1832,6 +1835,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       </button>
       <span className="w-px h-4 bg-white/20 shrink-0" />
       {/* Font size */}
+      <div role="group" aria-label="Tamanho da fonte" className="flex items-center gap-4 shrink-0">
       <span className="text-white/40 uppercase tracking-wider shrink-0">Fonte</span>
       {([['small', 'A−'], ['normal', 'A'], ['large', 'A+']] as const).map(([size, label]) => (
         <button
@@ -1844,6 +1848,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
           {label}
         </button>
       ))}
+      </div>
     </div>
 
     {activeTool === 'launcher' && (
