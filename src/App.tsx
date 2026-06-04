@@ -39,13 +39,33 @@ import {
   Layers,
   Keyboard,
   Clock,
+  BadgeCheck,
 } from 'lucide-react';
 import { cn, formatCurrency, truncateFileName } from './lib/utils';
 import Papa from 'papaparse';
 import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from './types';
 import { processAudit, reprocessItems } from './services/auditService';
+import FeacApp from './feac/FeacApp';
+import DiligenciaApp from './diligencia/DiligenciaApp';
+import KycApp from './kyc/KycApp';
+import { Btn, ToolSidebar, ToolHeader, SidebarItem, SkipLink } from './ui/kit';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' | 'documentacao';
+
+// ── Multi-tool suite: top-level tool selector (sits above the audit's Section) ──
+type Tool = 'launcher' | 'audit' | 'feac' | 'diligencia' | 'kyc';
+const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', diligencia: 'diligencia', kyc: 'conformidade' };
+const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', diligencia: 'diligencia', conformidade: 'kyc' };
+const AUDIT_PATH_SECTIONS = ['nova', 'processando', 'resultado', 'historico', 'pesquisa', 'documentacao'];
+const AUDIT_HEADERS: Record<Section, [string, string]> = {
+  nova:         ['Configuração de', 'Nova Auditoria'],
+  processando:  ['Auditoria em', 'Execução'],
+  resultado:    ['Relatório de', 'Conciliação'],
+  historico:    ['Histórico de', 'Auditorias'],
+  pesquisa:     ['Pesquisa', 'Global'],
+  documentacao: ['', 'Documentação'],
+};
+const pathSegs = () => window.location.pathname.split('/').filter(Boolean);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -304,6 +324,38 @@ export default function App() {
 
   const [activeSection, setActiveSection] = useState<Section>('nova');
 
+  // ── Multi-tool suite + URL routing (tool/section ↔ browser path) ────────────
+  const [activeTool, setActiveTool] = useState<Tool>(() => SHARE_TOKEN ? 'launcher' : (PATH_TO_TOOL[pathSegs()[0]] || 'launcher'));
+  const [feacInitialId] = useState(() => { const s = pathSegs(); return s[0] === 'feac' && s[1] && s[1] !== 'nova' ? s[1] : ''; });
+  const [diligInitialCnpj] = useState(() => { const s = pathSegs(); return s[0] === 'diligencia' ? (s[1] || '') : ''; });
+  const routeFirst = useRef(true);
+  const routePop = useRef(false);
+  const navigate = useCallback((p: string) => { if (window.location.pathname !== p) window.history.pushState({}, '', p); }, []);
+  // initial audit section from the path (e.g. /auditoria/historico)
+  useEffect(() => { const s = pathSegs(); if (s[0] === 'auditoria' && AUDIT_PATH_SECTIONS.includes(s[1])) setActiveSection(s[1] as Section); }, []);
+  // push URL when tool/section changes (skip the first render and popstate-driven changes)
+  useEffect(() => {
+    if (routeFirst.current) { routeFirst.current = false; return; }
+    if (routePop.current) { routePop.current = false; return; }
+    let p = '/';
+    if (activeTool === 'audit') p = '/auditoria/' + activeSection;
+    else if (activeTool === 'feac') p = '/feac';
+    else if (activeTool === 'diligencia') p = '/diligencia';
+    else if (activeTool === 'kyc') p = '/conformidade';
+    navigate(p);
+  }, [activeTool, activeSection, navigate]);
+  // back/forward
+  useEffect(() => {
+    const onPop = () => {
+      routePop.current = true;
+      const s = pathSegs();
+      setActiveTool(PATH_TO_TOOL[s[0]] || 'launcher');
+      if (s[0] === 'auditoria' && AUDIT_PATH_SECTIONS.includes(s[1])) setActiveSection(s[1] as Section);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   // ── Pesquisa global ───────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -522,6 +574,7 @@ const [a11yTheme, setA11yTheme] = useState<A11yTheme>(() => {
               if (audit.sourceFiles) loadAuditFiles(audit.id, audit.sourceFiles);
             }
             setSelectedItem(data.item);
+            setActiveTool('audit');
             setActiveSection('resultado');
           });
       })
@@ -544,7 +597,7 @@ const [a11yTheme, setA11yTheme] = useState<A11yTheme>(() => {
         setLastAuditResult(audit);
         if (audit.sourceFiles) loadAuditFiles(audit.id, audit.sourceFiles);
         const item = audit.items?.find((it: AuditItem) => String(it.id) === String(itemParam));
-        if (item) { setSelectedItem(item); setActiveSection('resultado'); }
+        if (item) { setSelectedItem(item); setActiveTool('audit'); setActiveSection('resultado'); }
       })
       .catch(() => {});
   }, [user, apiFetch, loadAuditFiles]);
@@ -1420,7 +1473,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   className="w-full bg-bg border border-line rounded px-4 py-3 text-center text-xl font-mono font-bold tracking-[0.4em] text-primary focus:outline-none focus:border-primary transition-colors uppercase"
                 />
                 {shareCodeError && <p className="text-[11px] text-error">{shareCodeError}</p>}
-                <button type="submit" disabled={shareCodeInput.length < 4} className="w-full py-3 bg-primary text-bg font-bold text-xs uppercase tracking-widest rounded hover:opacity-90 transition-all disabled:opacity-40">
+                <button type="submit" disabled={shareCodeInput.length < 4} className="w-full py-3 bg-primary text-white font-bold text-xs uppercase tracking-widest rounded hover:opacity-90 transition-all disabled:opacity-40">
                   Acessar Auditoria
                 </button>
               </form>
@@ -1795,69 +1848,55 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       ))}
     </div>
 
+    {activeTool === 'launcher' && (
+      <LauncherView user={user} onPick={setActiveTool} />
+    )}
+
+    {activeTool === 'diligencia' && (
+      <DiligenciaApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialCnpj={diligInitialCnpj} />
+    )}
+
+    {activeTool === 'kyc' && (
+      <KycApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} />
+    )}
+
+    {activeTool === 'feac' && (
+      <FeacApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialRecordId={feacInitialId} />
+    )}
+
+    {activeTool === 'audit' && (
     <div className="flex min-h-screen pt-8">
-      {/* UX-02: Skip to main content link */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-10 focus:left-2 focus:z-[200] focus:bg-primary focus:text-white focus:px-4 focus:py-2 focus:rounded focus:text-xs focus:font-bold focus:uppercase focus:tracking-widest focus:outline-none"
-      >
-        Ir para conteúdo principal
-      </a>
+      <SkipLink />
 
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-[180px] bg-sidebar border-r border-line flex flex-col z-50">
-        <div className="pt-6 pb-8 px-5 flex flex-col gap-4">
-          <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-10 w-auto object-contain object-left invert opacity-90" />
-          <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">Stack Audit</div>
-        </div>
-
-        <nav className="flex-1 px-0 space-y-0">
-          {[
-            { id: 'nova', label: 'Nova análise', icon: PlusCircle },
-            { id: 'processando', label: 'Processando', icon: Loader2 },
-            { id: 'resultado', label: 'Resultado', icon: FileText },
-            { id: 'historico', label: 'Histórico', icon: History },
-            { id: 'pesquisa', label: 'Pesquisa', icon: Search },
-            { id: 'documentacao', label: 'Documentação', icon: BookOpen },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => (item.id === 'processando' || item.id === 'resultado') && !lastAuditResult ? null : setActiveSection(item.id as Section)}
-              disabled={(item.id === 'processando' || item.id === 'resultado') && !lastAuditResult}
-              className={cn(
-                'w-full flex items-center gap-3 px-5 py-3 text-[13px] transition-all duration-200 border-l-3 border-transparent',
-                activeSection === item.id ? 'bg-sidebar-active text-primary border-l-primary' : 'text-text-secondary hover:text-text hover:bg-white/5',
-                (item.id === 'processando' || item.id === 'resultado') && !lastAuditResult && 'opacity-25 cursor-not-allowed'
-              )}
-            >
-              <item.icon size={16} className={cn('shrink-0', activeSection === item.id ? 'text-primary' : 'opacity-70')} />
+      {/* Sidebar (kit compartilhado) */}
+      <ToolSidebar brand="Stack Audit" onHome={() => setActiveTool('launcher')} user={user}>
+        {([
+          { id: 'nova', label: 'Nova análise', icon: PlusCircle },
+          { id: 'processando', label: 'Processando', icon: Loader2 },
+          { id: 'resultado', label: 'Resultado', icon: FileText },
+          { id: 'historico', label: 'Histórico', icon: History },
+          { id: 'pesquisa', label: 'Pesquisa', icon: Search },
+          { id: 'documentacao', label: 'Documentação', icon: BookOpen },
+        ] as { id: Section; label: string; icon: React.ElementType }[]).map((item) => {
+          const gated = (item.id === 'processando' || item.id === 'resultado') && !lastAuditResult;
+          return (
+            <SidebarItem key={item.id} icon={item.icon} active={activeSection === item.id} disabled={gated} onClick={() => setActiveSection(item.id)}>
               {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="px-4 py-4 border-t border-line">
-          {user.photo && <img src={user.photo} alt={user.name} className="w-7 h-7 rounded-full mb-2" />}
-          <p className="text-[10px] text-text-secondary truncate">{user.email}</p>
-          <a href="/auth/logout" className="mt-2 flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors">
-            <LogOut size={11} /> Sair
-          </a>
-        </div>
-      </aside>
+            </SidebarItem>
+          );
+        })}
+      </ToolSidebar>
 
       {/* Main Content */}
-      <main id="main-content" className="ml-[180px] flex-1 min-w-[844px] flex flex-col">
-        {/* Header */}
-        <header className="px-10 py-6 border-bottom border-line flex justify-between items-center bg-bg shrink-0">
-          <h1 className="text-[20px] font-light">
-            Configuração de <span className="font-bold text-primary">Nova Auditoria</span>
-          </h1>
-          <div className="text-[11px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-bold tracking-widest">
-            Stack Audit™
-          </div>
-        </header>
+      <main id="main-content" className="ml-[216px] flex-1 min-w-[844px] flex flex-col">
+        {/* Header (kit compartilhado) */}
+        <ToolHeader
+          light={AUDIT_HEADERS[activeSection][0]} accent={AUDIT_HEADERS[activeSection][1]}
+          right={<div className="text-[11px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-bold tracking-widest">Stack Audit™</div>}
+        />
 
-        {/* Metadata strip */}
+        {/* Metadata strip — só nas telas em que os dados do contrato são relevantes */}
+        {(activeSection === 'nova' || activeSection === 'processando' || activeSection === 'resultado') && (
         <div className="grid grid-cols-4 gap-6 px-10 py-4 bg-card border-b border-line shrink-0">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] uppercase text-text-secondary tracking-widest">Organização</label>
@@ -1874,6 +1913,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <span className="font-mono text-[13px] text-primary">{metadata.contractNumber || '---'}</span>
           </div>
         </div>
+        )}
 
         {/* ── NOVA ───────────────────────────────────────────────────────────── */}
         {activeSection === 'nova' && (
@@ -1932,7 +1972,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   disabled={!canStartAudit}
                   className={cn(
                     'w-full mt-8 py-4 rounded-lg font-bold text-xs uppercase tracking-widest transition-all',
-                    canStartAudit ? 'bg-primary text-bg shadow-lg hover:scale-[1.02]' : 'bg-line text-text-secondary opacity-50 cursor-not-allowed'
+                    canStartAudit ? 'bg-primary text-white shadow-lg hover:scale-[1.02]' : 'bg-line text-text-secondary opacity-50 cursor-not-allowed'
                   )}
                 >
                   Iniciar Stack Audit™ →
@@ -1982,7 +2022,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 <div className="space-y-4">
                   <span className="text-[10px] font-mono text-error uppercase tracking-widest block">Falha no Processamento</span>
                   <p className="text-xs text-text-secondary mb-4">{processingError}</p>
-                  <button onClick={() => setActiveSection('nova')} className="px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-blue-700 transition-colors">
+                  <button onClick={() => setActiveSection('nova')} className="px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-primary-hover transition-colors">
                     Voltar e tentar novamente
                   </button>
                 </div>
@@ -2057,7 +2097,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                             apiFetch(`/api/audits/${lastAuditResult.id}`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ shareExpiresAt: val === 'none' ? null : new Date(Date.now() + Number(val) * 86400000).toISOString() }),
+                              body: JSON.stringify({ shareExpiresAt: new Date(Date.now() + Number(val) * 86400000).toISOString() }),
                             }).catch(() => {});
                           }
                         }}
@@ -2821,6 +2861,16 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
             <div className="space-y-6 max-w-4xl">
 
+              {/* 0. A suíte */}
+              <div className="bg-card border border-line rounded p-6">
+                <h2 className="text-[11px] font-bold uppercase tracking-widest text-primary mb-4 pb-3 border-b border-line">Parte de uma suíte de 3 ferramentas</h2>
+                <p className="text-[12px] text-text-secondary leading-relaxed mb-3">Esta é a <strong className="text-text">Auditoria de Prestação de Contas</strong>. Pelo botão <strong className="text-text">Ferramentas</strong> (topo da barra lateral) você acessa também o <strong className="text-text">Processador FEAC/SGPP</strong> e a <strong className="text-text">Diligência de Fornecedores</strong> — cada um com sua própria seção “Como usar”.</p>
+                <ul className="space-y-1.5 list-none text-[12px] text-text-secondary">
+                  <li className="flex gap-2"><span className="text-primary">▸</span><span>Cada página tem uma <strong className="text-text">URL própria e compartilhável</strong> — ex.: <span className="font-mono text-[11px]">/auditoria/historico</span>, <span className="font-mono text-[11px]">/feac/ajuda</span>, <span className="font-mono text-[11px]">/diligencia/&lt;cnpj&gt;</span>. Use os botões Voltar/Avançar do navegador normalmente.</span></li>
+                  <li className="flex gap-2"><span className="text-primary">▸</span><span>A <strong className="text-text">barra de acessibilidade</strong> (topo) controla tema, alto contraste (WCAG AA) e tamanho da fonte para toda a suíte.</span></li>
+                </ul>
+              </div>
+
               {/* 1. Como usar */}
               <div className="bg-card border border-line rounded p-6">
                 <h2 className="text-[11px] font-bold uppercase tracking-widest text-primary mb-4 pb-3 border-b border-line">1. Como usar a plataforma</h2>
@@ -3054,11 +3104,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 ))}
               </div>
               <div className="flex gap-4 justify-end">
-                <button onClick={() => setShowTermsModal(false)} className="px-6 py-2 border border-line text-xs font-bold uppercase tracking-widest hover:bg-white/5 transition-colors">Cancelar</button>
+                <button onClick={() => setShowTermsModal(false)} className="px-6 py-2 border border-line text-xs font-bold uppercase tracking-widest hover:bg-surface-hover transition-colors">Cancelar</button>
                 <button
                   onClick={() => { setShowTermsModal(false); startAudit(); }}
                   disabled={!termsChecked.every(Boolean)}
-                  className={cn('px-6 py-2 text-xs font-bold uppercase tracking-widest transition-all', termsChecked.every(Boolean) ? 'bg-primary text-bg hover:scale-[1.02]' : 'bg-line text-text-secondary cursor-not-allowed opacity-50')}
+                  className={cn('px-6 py-2 text-xs font-bold uppercase tracking-widest transition-all', termsChecked.every(Boolean) ? 'bg-primary text-white hover:scale-[1.02]' : 'bg-line text-text-secondary cursor-not-allowed opacity-50')}
                 >
                   Aceitar e Iniciar Auditoria
                 </button>
@@ -3113,7 +3163,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <Printer size={12} /> Imprimir
                   </button>
                 )}
-                <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-text transition-colors p-1.5 hover:bg-white/5 rounded" aria-label="Fechar">
+                <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-text transition-colors p-1.5 hover:bg-surface-hover rounded" aria-label="Fechar">
                   <X size={20} />
                 </button>
               </div>
@@ -3542,11 +3592,14 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
       </main>
 
-      <footer className="fixed bottom-0 left-[180px] right-0 py-3 px-6 bg-sidebar border-t border-line text-[10px] text-text-secondary text-center leading-relaxed z-40">
+      <footer className="fixed bottom-0 left-[216px] right-0 py-3 px-6 bg-sidebar border-t border-line text-[10px] text-text-secondary text-center leading-relaxed z-40">
         <p className="font-bold tracking-widest uppercase">CONFIDENCIAL - USO INTERNO &nbsp;&bull;&nbsp; &copy; 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97 &nbsp;&bull;&nbsp; R. DR. RENATO PAES DE BARROS, 618 – ITAIM BIBI, SÃO PAULO – SP, 04530-000</p>
       </footer>
 
-      {/* ── UX-01: Toast notification region ──────────────────────────────── */}
+    </div>
+    )}
+
+      {/* ── UX-01: Toast notification region (global — visible across all tools) ── */}
       <div role="status" aria-live="polite" aria-label="Notificações" className="fixed bottom-16 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
         {toasts.map(toast => (
           <InlineNotification
@@ -3557,13 +3610,139 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
           />
         ))}
       </div>
-
-    </div>
     </>
   );
 }
 
 // ── Helper Components ─────────────────────────────────────────────────────────
+
+function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => void }) {
+  const tools: Array<{ id: Tool; title: string; subtitle: string; description: string; icon: React.ElementType; enabled: boolean }> = [
+    {
+      id: 'audit',
+      title: 'Auditoria de Prestação de Contas',
+      subtitle: 'Contratos de Doação com Encargos',
+      description: 'Conciliação automática de notas fiscais, comprovantes e orçamento por rubrica, com IA (DeepSeek + Azure DI) e parecer final (RAPC).',
+      icon: FileText,
+      enabled: true,
+    },
+    {
+      id: 'feac',
+      title: 'Processador de Prestação de Contas',
+      subtitle: 'SGPP — Fundação FEAC',
+      description: 'Auditoria de lançamentos, tratamento de documentos (mesclagem, carimbo de margem, PDF/A-2b), declaração de rateio e empacotamento para a FEAC.',
+      icon: NotebookPen,
+      enabled: true,
+    },
+    {
+      id: 'diligencia',
+      title: 'Diligência de Fornecedores',
+      subtitle: 'CNPJ + listas de restrição',
+      description: 'Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS/CNEP/CEPIM/Leniência) com relatório auditável e validade de 30 dias.',
+      icon: Building2,
+      enabled: true,
+    },
+    {
+      id: 'kyc',
+      title: 'Conformidade KYS / KYG',
+      subtitle: 'Cadastro verificado + assinatura',
+      description: 'Ficha de conformidade preenchida pelo próprio fornecedor (KYS) ou organização/liderança (KYG) numa página pública, com verificação por APIs em tempo real e assinatura eletrônica via Documenso. Validade por ano fiscal.',
+      icon: BadgeCheck,
+      enabled: true,
+    },
+  ];
+
+  return (
+    <div className="min-h-screen pt-8 bg-bg text-text flex flex-col">
+      <header className="px-6 sm:px-10 py-5 border-b border-line flex items-center justify-between bg-sidebar">
+        <div className="flex items-center gap-4">
+          <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-9 w-auto object-contain invert opacity-90" />
+          <div className="text-primary font-extrabold text-[11px] tracking-widest uppercase">Stack Audit™</div>
+          <span className="text-text-secondary text-[11px] font-mono hidden sm:inline">· Suíte de Ferramentas</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {user.photo && <img src={user.photo} alt={user.name} className="w-7 h-7 rounded-full" />}
+          <span className="text-[10px] text-text-secondary truncate max-w-[180px] hidden sm:inline">{user.email}</span>
+          <a href="/auth/logout" className="flex items-center gap-1.5 text-[10px] text-text-secondary hover:text-primary transition-colors uppercase tracking-widest">
+            <LogOut size={11} /> Sair
+          </a>
+        </div>
+      </header>
+
+      <main id="main-content" className="flex-1 px-6 sm:px-10 py-12 sm:py-16 max-w-6xl mx-auto w-full">
+        <div className="mb-10">
+          <h1 className="text-2xl sm:text-[28px] font-light">Selecione uma <span className="font-bold text-primary">ferramenta</span></h1>
+          <p className="text-[13px] text-text-secondary mt-2 max-w-2xl">
+            Plataforma de auditoria e prestação de contas para organizações de impacto social.
+          </p>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {tools.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => t.enabled && onPick(t.id)}
+                disabled={!t.enabled}
+                aria-label={t.title}
+                className={cn(
+                  'group text-left bg-card border border-line rounded-xl p-6 flex flex-col gap-4 transition-all duration-200',
+                  t.enabled ? 'hover:border-primary hover:shadow-lg cursor-pointer' : 'opacity-55 cursor-not-allowed'
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-sidebar-active text-primary">
+                    <Icon size={24} />
+                  </div>
+                  {t.enabled ? (
+                    <ChevronRight size={18} className="text-text-secondary group-hover:text-primary transition-colors" />
+                  ) : (
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary border border-line rounded px-2 py-1">Em breve</span>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-[15px] font-bold leading-snug">{t.title}</h2>
+                  <p className="text-[11px] text-primary font-semibold uppercase tracking-wider mt-0.5">{t.subtitle}</p>
+                </div>
+                <p className="text-[12px] text-text-secondary leading-relaxed">{t.description}</p>
+              </button>
+            );
+          })}
+        </div>
+      </main>
+
+      <footer className="py-4 px-6 border-t border-line text-[10px] text-text-secondary text-center leading-relaxed">
+        <p className="font-bold tracking-widest uppercase">CONFIDENCIAL — USO INTERNO &nbsp;&bull;&nbsp; © 2026 ASSOCIAÇÃO CASA HACKER &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97</p>
+      </footer>
+    </div>
+  );
+}
+
+function ToolPlaceholder({ title, description, onHome }: { title: string; description: string; onHome: () => void }) {
+  return (
+    <div className="min-h-screen pt-8 bg-bg text-text flex flex-col">
+      <header className="px-10 py-6 border-b border-line flex justify-between items-center bg-bg shrink-0">
+        <h1 className="text-[20px] font-light">{title}</h1>
+        <button onClick={onHome} className="flex items-center gap-1.5 text-[11px] text-text-secondary hover:text-primary transition-colors uppercase tracking-widest">
+          <Layers size={13} /> Ferramentas
+        </button>
+      </header>
+      <main className="flex-1 flex items-center justify-center px-6 py-16">
+        <div className="max-w-lg w-full bg-card border border-line rounded-xl p-10 text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-sidebar-active text-primary mb-5">
+            <Building2 size={26} />
+          </div>
+          <h2 className="text-lg font-bold mb-2">Em desenvolvimento</h2>
+          <p className="text-[13px] text-text-secondary leading-relaxed">{description}</p>
+          <button onClick={onHome} className="mt-6 px-4 py-2 bg-primary text-white text-[10px] uppercase tracking-widest rounded hover:bg-primary-hover transition-colors">
+            Voltar às ferramentas
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}
 
 function BudgetLineChart({ lines }: { lines: BudgetLine[] }) {
   if (!lines.length) return null;
@@ -3797,8 +3976,8 @@ function InlineNotification({ kind, message, onClose }: { kind: 'success' | 'err
       role="alert"
     >
       <Icon size={16} className={cn('mt-0.5 shrink-0', config.iconClass)} />
-      <p className="flex-1 text-sm text-text-primary leading-snug">{message}</p>
-      <button onClick={onClose} className="shrink-0 text-text-secondary hover:text-text-primary transition-colors" aria-label="Fechar notificação">
+      <p className="flex-1 text-sm text-text leading-snug">{message}</p>
+      <button onClick={onClose} className="shrink-0 text-text-secondary hover:text-text transition-colors" aria-label="Fechar notificação">
         <X size={14} />
       </button>
     </div>
@@ -3896,7 +4075,7 @@ function EmptyState({ icon: Icon, title, description }: { icon: React.ElementTyp
       <div className="w-12 h-12 rounded-full bg-surface-hover flex items-center justify-center mb-4">
         <Icon size={22} className="text-text-secondary" />
       </div>
-      <p className="text-sm font-semibold text-text-primary mb-1">{title}</p>
+      <p className="text-sm font-semibold text-text mb-1">{title}</p>
       <p className="text-xs text-text-secondary max-w-xs">{description}</p>
     </div>
   );

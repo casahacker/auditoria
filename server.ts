@@ -15,6 +15,9 @@ import OpenAI from "openai";
 import { jsonrepair } from "jsonrepair";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
+import { registerFeacRoutes } from "./feacRoutes";
+import { registerDiligenciaRoutes } from "./diligenciaRoutes";
+import { registerKycRoutes } from "./kycRoutes";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -260,7 +263,7 @@ app.get("/api/cnpj/:cnpj", cnpjLimiter, requireAuth, async (req, res) => {
 
   try {
     const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`, {
-      headers: { "Accept": "application/json" },
+      headers: { "Accept": "application/json", "User-Agent": "StackAudit/1.0 (+https://stack-audit.casahacker.org)" },
       signal: AbortSignal.timeout(10000),
     });
     if (r.ok) {
@@ -300,7 +303,7 @@ app.get("/api/cnpj/:cnpj", cnpjLimiter, requireAuth, async (req, res) => {
 
   try {
     const r2 = await fetch(`https://www.receitaws.com.br/v1/cnpj/${digits}`, {
-      headers: { "Accept": "application/json" },
+      headers: { "Accept": "application/json", "User-Agent": "StackAudit/1.0 (+https://stack-audit.casahacker.org)" },
       signal: AbortSignal.timeout(10000),
     });
     if (!r2.ok) {
@@ -1337,6 +1340,25 @@ app.get("/api/share/:token", (req, res) => {
 
   res.status(404).json({ error: "Auditoria não encontrada ou link inválido" });
 });
+
+// ── FEAC / SGPP — Processador de Prestação de Contas (Tool B) ─────────────────
+// Registered before the SPA catch-all so /api/feac/* resolves to JSON, not index.html.
+registerFeacRoutes(app, {
+  DATA_DIR,
+  requireAuth,
+  sanitizeSegment,
+  extractTextFromFile,
+  parseJsonSafe,
+  slugify,
+  aiClient,
+  execFileAsync,
+});
+
+// ── Diligência de Fornecedores (Tool C) ───────────────────────────────────────
+registerDiligenciaRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
+
+// ── KYS / KYG — Conformidade de Fornecedores e Organizações (Tool D) ───────────
+registerKycRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
 
 // ── Serve React SPA ───────────────────────────────────────────────────────────
 

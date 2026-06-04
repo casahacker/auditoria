@@ -9,6 +9,8 @@ services:
     image: localhost/stack-audit:latest
     container_name: stack-audit
     restart: on-failure:3
+    security_opt:
+      - "no-new-privileges:true"
     environment:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
@@ -19,14 +21,23 @@ services:
       - AZURE_DI_KEY=${AZURE_DI_KEY:-}
       - EXTRACTION_ENGINE=${EXTRACTION_ENGINE:-local}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - PORTAL_TRANSPARENCIA_KEY=${PORTAL_TRANSPARENCIA_KEY:-}
+      - DILIGENCIA_RATE_PER_MIN=${DILIGENCIA_RATE_PER_MIN:-100}
+      - DILIGENCIA_SWEEP_MS=${DILIGENCIA_SWEEP_MS:-300000}
+      - DILIGENCIA_AUTO=${DILIGENCIA_AUTO:-1}
+      # KYS/KYG — assinatura via Documenso (template + formValues)
+      - DOCUMENSO_URL=${DOCUMENSO_URL:-https://documenso.casahacker.org}
+      - DOCUMENSO_API_TOKEN=${DOCUMENSO_API_TOKEN:-}
+      - DOCUMENSO_KYS_TEMPLATE_ID=${DOCUMENSO_KYS_TEMPLATE_ID:-}
+      - DOCUMENSO_KYG_TEMPLATE_ID=${DOCUMENSO_KYG_TEMPLATE_ID:-}
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 1024M   # FEAC treatment (Ghostscript PDF/A + pdf-lib) is heavier than the audit-only baseline
         reservations:
           cpus: '0.25'
-          memory: 128M
+          memory: 256M
     volumes:
       - /data/stack-audit/data:/app/data
     healthcheck:
