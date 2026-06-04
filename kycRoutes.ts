@@ -21,7 +21,7 @@ import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT, collectSuppliers, runDiligence } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, collectSuppliers, runDiligence, lookupCep } from "./diligenciaRoutes";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
 } from "./src/kyc/kycTypes";
@@ -67,25 +67,32 @@ function isValidCnpj(value: string): boolean {
 
 // ── BrasilAPI: CEP + bancos (cache em memória) ──────────────────────────────────
 let banksCache: { at: number; data: any[] } | null = null;
+// fallback estático (principais instituições) caso a API de bancos falhe
+const BANKS_FALLBACK = [
+  { code: "001", name: "Banco do Brasil" }, { code: "104", name: "Caixa Econômica Federal" }, { code: "237", name: "Bradesco" },
+  { code: "341", name: "Itaú Unibanco" }, { code: "033", name: "Santander" }, { code: "260", name: "Nu Pagamentos (Nubank)" },
+  { code: "077", name: "Banco Inter" }, { code: "336", name: "Banco C6" }, { code: "212", name: "Banco Original" },
+  { code: "748", name: "Sicredi" }, { code: "756", name: "Sicoob" }, { code: "422", name: "Banco Safra" }, { code: "070", name: "BRB" },
+  { code: "041", name: "Banrisul" }, { code: "208", name: "BTG Pactual" }, { code: "623", name: "Banco Pan" }, { code: "290", name: "PagBank (PagSeguro)" },
+];
 async function fetchBanks(): Promise<any[]> {
   if (banksCache && Date.now() - banksCache.at < 24 * 3600_000) return banksCache.data;
-  const r = await fetch("https://brasilapi.com.br/api/banks/v1", { headers: HTTP_HEADERS, signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new Error("Falha ao listar bancos");
-  const arr = (await r.json()) as any[];
-  const data = (Array.isArray(arr) ? arr : [])
-    .filter((b) => b && b.name && b.code != null)
-    .map((b) => ({ code: String(b.code).padStart(3, "0"), name: b.name, fullName: b.fullName }))
-    .sort((a, b) => a.code.localeCompare(b.code));
-  banksCache = { at: Date.now(), data };
-  return data;
+  try {
+    const r = await fetch("https://brasilapi.com.br/api/banks/v1", { headers: HTTP_HEADERS, signal: AbortSignal.timeout(10000) });
+    if (r.ok) {
+      const arr = (await r.json()) as any[];
+      const data = (Array.isArray(arr) ? arr : []).filter((b) => b && b.name && b.code != null)
+        .map((b) => ({ code: String(b.code).padStart(3, "0"), name: b.name, fullName: b.fullName })).sort((a, b) => a.code.localeCompare(b.code));
+      if (data.length) { banksCache = { at: Date.now(), data }; return data; }
+    }
+  } catch { /* fallback abaixo */ }
+  return BANKS_FALLBACK;
 }
+// CEP com cadeia de fallback (BrasilAPI v2 → ViaCEP → BrasilAPI v1 → OpenCEP)
 async function fetchCep(cep: string): Promise<any> {
-  const d = onlyDigits(cep);
-  if (d.length !== 8) throw new Error("CEP inválido");
-  const r = await fetch(`https://brasilapi.com.br/api/cep/v2/${d}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new Error("CEP não encontrado");
-  const j: any = await r.json();
-  return { cep: j.cep, logradouro: j.street || "", bairro: j.neighborhood || "", municipio: j.city || "", uf: j.state || "" };
+  const c = await lookupCep(cep);
+  if (!c) throw new Error("CEP não encontrado");
+  return { cep: c.cep, logradouro: c.logradouro, bairro: c.bairro, municipio: c.municipio, uf: c.uf, fonte: c.fonte };
 }
 
 // ── régua de conformidade (Receita + listas de restrição), reusa diligenciaRoutes ─
@@ -268,6 +275,18 @@ function computeEligibility(rec: KycRecord): KycEligibility {
   return { elegivel: motivos.length === 0, motivos };
 }
 
+// ── faixa de elegibilidade do FORNECEDOR (diligência + KYS/KYG) ──────────────────
+// Inelegível: consta restrição ou cadastro não-ativo (verdict ALERTA).
+// Elegível até 2 SM: nada consta + tudo ativo na Receita (verdict NADA_CONSTA).
+// Elegível a partir de 2 SM: nada consta + ativo + KYS/KYG aprovado (assinado, válido e elegível).
+// Pendente: diligência não concluída/ausente.
+export type Faixa = "inelegivel" | "ate_2sm" | "acima_2sm" | "pendente";
+function faixaOf(verdict: string | undefined, kycAprovado: boolean): Faixa {
+  if (verdict === "ALERTA") return "inelegivel";
+  if (verdict !== "NADA_CONSTA") return "pendente";
+  return kycAprovado ? "acima_2sm" : "ate_2sm";
+}
+
 // ── extração de identidade do registro (p/ listagem e signatário) ───────────────
 function recDoc(rec: KycRecord): string { return onlyDigits(rec.type === "kys" ? rec.kys?.cnpj : rec.kyg?.documento); }
 function recNome(rec: KycRecord): string { return (rec.type === "kys" ? rec.kys?.razaoSocial : rec.kyg?.nome) || ""; }
@@ -284,6 +303,96 @@ function toSummary(rec: KycRecord): KycSummary {
     fiscalYear: rec.fiscalYear, validUntil: rec.validUntil, valida: rec.status === "assinado" && isFiscalValid(rec),
     createdAt: rec.createdAt, signedAt: rec.signedAt,
   };
+}
+
+// ── route registration ──────────────────────────────────────────────────────────
+// ── impresso (HTML→PDF) do perfil consolidado do fornecedor ─────────────────────
+const escH = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const FAIXA_LABEL: Record<string, string> = {
+  inelegivel: "INELEGÍVEL", ate_2sm: "ELEGÍVEL — contratos até 2 salários mínimos",
+  acima_2sm: "ELEGÍVEL — contratos a partir de 2 salários mínimos", pendente: "PENDENTE — diligência não concluída",
+};
+function buildFornecedorReportHtml(p: any): string {
+  const c = p.cadastro || {}; const dil = p.diligencia; const kyc = p.kyc;
+  const dt = (s: any) => { try { return new Date(s).toLocaleString("pt-BR"); } catch { return s || "—"; } };
+  const row = (k: string, v: any) => v ? `<div class="row"><span class="k">${escH(k)}</span><span class="v">${escH(v)}</span></div>` : "";
+  const ender = [c.logradouro, c.numero, c.complemento, c.bairro].filter(Boolean).join(", ");
+  const cnaesSec = String(c.cnaesSecundarios || "").split("\n").filter(Boolean);
+  const sancHtml = (dil?.sancoes || []).map((s: any) => `<div class="row"><span class="k">${escH(s.fonte)}</span><span class="v ${s.status === "CONSTA" ? "bad" : ""}">${s.status === "CONSTA" ? `CONSTA (${s.hits?.length || 0})` : s.status === "NADA_CONSTA" ? "Nada consta" : escH(s.status)}</span></div>` + (s.hits || []).map((h: any) => `<div class="hit"><b>${escH(h.tipo)}</b> — ${escH(h.orgao)} · vigência ${escH(h.dataInicio || "?")}–${escH(h.dataFim || "?")} · processo ${escH(h.processo || "—")}</div>`).join("")).join("");
+  const qsa = (p.qsa || []).map((s: any) => `${escH(s.nome)}${s.qual ? ` (${escH(s.qual)})` : ""}`).join("; ");
+  const faixaCls = p.faixa === "acima_2sm" ? "f-ok" : p.faixa === "ate_2sm" ? "f-mid" : p.faixa === "inelegivel" ? "f-bad" : "f-pend";
+  const kycMot = (kyc?.elegibilidade?.motivos || []) as string[];
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Fornecedor ${escH(c.razaoSocial || p.docFmt)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"IBM Plex Sans",system-ui,sans-serif;color:#161616;background:#fff;font-size:12px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{max-width:860px;margin:0 auto;padding:40px 48px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #161616;padding-bottom:14px}
+.eyebrow{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#6f6f6f}
+h1{font-size:21px;font-weight:700;margin:4px 0 2px}
+.sub{color:#525252;font-size:12px}
+.brandtag{font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#0f62fe}
+.faixa{margin:16px 0 4px;padding:10px 14px;border-left:5px solid #6f6f6f;background:#f4f4f4;border-radius:4px;font-weight:700;font-size:13px;letter-spacing:.02em}
+.f-ok{border-color:#198038;background:#defbe6}.f-mid{border-color:#b28600;background:#fcf4d6}.f-bad{border-color:#da1e28;background:#fff1f1}.f-pend{border-color:#6f6f6f;background:#f4f4f4}
+section{margin-top:22px;break-inside:avoid}
+.sectitle{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#0f62fe;font-weight:700;border-bottom:1px solid #e0e0e0;padding-bottom:5px;margin-bottom:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}
+.row{display:flex;gap:10px;padding:2px 0;align-items:baseline;border-bottom:1px solid #f2f2f2}
+.k{color:#6f6f6f;min-width:130px;flex-shrink:0;font-size:11px}.v{font-weight:600;word-break:break-word}.v.bad{color:#da1e28}
+.list{margin:2px 0 0 0;padding-left:16px}.list li{font-size:11.5px;padding:1px 0}
+.hit{border:1px solid #ffd7d9;background:#fff1f1;border-radius:4px;padding:6px 9px;margin:4px 0;font-size:11px}
+.muted{color:#6f6f6f;font-size:11px}
+footer{margin-top:34px;border-top:1px solid #e0e0e0;padding-top:12px;color:#6f6f6f;font-size:10px;line-height:1.7}
+.toolbar{position:fixed;top:12px;right:16px;background:#0f62fe;color:#fff;border:none;padding:8px 14px;border-radius:4px;font:inherit;font-size:11px;cursor:pointer}
+@media print{.toolbar{display:none}.page{padding:0}}@page{margin:14mm}
+</style></head><body>
+<button class="toolbar" onclick="window.print()">Salvar em PDF / Imprimir</button>
+<div class="page">
+  <div class="top">
+    <div><div class="eyebrow">Perfil de Fornecedor</div><h1>${escH(c.razaoSocial || "—")}</h1>
+      <div class="sub">${escH(p.docFmt)}${c.nomeFantasia ? ` · ${escH(c.nomeFantasia)}` : ""}${c.tipo ? ` · ${escH(c.tipo)}` : ""}</div></div>
+    <div style="text-align:right"><div class="brandtag">Casa Hacker</div><div class="muted">Stack Audit™</div></div>
+  </div>
+  <div class="faixa ${faixaCls}">${escH(FAIXA_LABEL[p.faixa] || "—")}</div>
+
+  <section><div class="sectitle">Dados cadastrais (Receita Federal + CEP)</div>
+    <div class="grid">
+      ${row("Razão social", c.razaoSocial)}${row("Nome fantasia", c.nomeFantasia)}
+      ${row("Tipo", c.tipo)}${row("Porte", c.porte)}
+      ${row("Situação cadastral", (c.situacaoCadastral || "") + (c.dataSituacao ? ` (desde ${c.dataSituacao})` : ""))}${row("Motivo", c.motivoSituacao)}
+      ${row("Natureza jurídica", c.naturezaJuridica)}${row("Abertura", c.abertura)}
+      ${row("Capital social", c.capitalSocial)}${row("CNAE principal", c.cnaePrincipal)}
+    </div>
+    ${cnaesSec.length ? `<div style="margin-top:6px"><div class="k">CNAEs secundários</div><ul class="list">${cnaesSec.map((x) => `<li>${escH(x)}</li>`).join("")}</ul></div>` : ""}
+    <div class="grid" style="margin-top:6px">
+      ${row("Endereço", ender)}${row("Município / UF", `${c.municipio || "—"} / ${c.uf || "—"}`)}
+      ${row("CEP", c.cep)}${row("Telefone", c.telefone)}
+      ${row("E-mail", c.email)}
+    </div>
+    ${qsa ? `<div style="margin-top:6px">${row("Quadro societário", qsa)}</div>` : ""}
+    <div class="grid" style="margin-top:6px">
+      ${row("Banco", c.banco)}${row("Agência", c.agencia)}${row("Conta", c.conta)}${row("Chave PIX", c.chavePix)}
+    </div>
+    ${c.observacoes ? `<div style="margin-top:6px"><div class="k">Observações</div><div class="v">${escH(c.observacoes)}</div></div>` : ""}
+  </section>
+
+  <section><div class="sectitle">Diligência — listas de restrição (CGU)</div>
+    ${dil ? `<div class="row"><span class="k">Veredito</span><span class="v ${dil.verdict === "ALERTA" ? "bad" : ""}">${escH(dil.verdict)}</span></div>${row("Consultada em", dt(dil.checkedAt))}${sancHtml}` : `<div class="muted">Diligência ainda não realizada para este fornecedor.</div>`}
+  </section>
+
+  <section><div class="sectitle">Conformidade KYS / KYG</div>
+    ${kyc ? `${row("Tipo", String(kyc.type || "").toUpperCase())}${row("Status", kyc.status === "assinado" ? (kyc.valida ? "Assinado (válido)" : "Assinado (vencido)") : kyc.status)}${row("Ano fiscal", kyc.fiscalYear)}${kyc.signedAt ? row("Assinado em", dt(kyc.signedAt)) : ""}${row("Elegibilidade interna", kyc.elegibilidade?.elegivel ? "Aprovado" : "Reprovado")}${kycMot.length ? `<div style="margin-top:4px"><div class="k">Motivos</div><ul class="list">${kycMot.map((m) => `<li>${escH(m)}</li>`).join("")}</ul></div>` : ""}` : `<div class="muted">Sem KYS/KYG preenchido. Exigido apenas para contratações específicas.</div>`}
+  </section>
+
+  <footer>
+    <b>ASSOCIAÇÃO CASA HACKER</b> · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org<br>
+    Perfil consolidado gerado por Stack Audit™ em ${escH(new Date().toLocaleString("pt-BR"))}. Fontes: ${escH(p.fontes?.receita?.fonte || "Receita")}${p.fontes?.cep ? ` · ${escH(p.fontes.cep.fonte)}` : ""} · Portal da Transparência/CGU.
+  </footer>
+</div>
+<script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},500)})</script>
+</body></html>`;
 }
 
 // ── route registration ──────────────────────────────────────────────────────────
@@ -476,6 +585,10 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       if (!row.nome) row.nome = recNome(rec);
       row.kyc = { id: rec.id, type: rec.type, status: rec.status, elegivel: rec.elegibilidade?.elegivel, fiscalYear: rec.fiscalYear, valida: rec.status === "assinado" && isFiscalValid(rec), signedAt: rec.signedAt };
     }
+    for (const row of rows.values()) {
+      const kycAprovado = !!(row.kyc && row.kyc.status === "assinado" && row.kyc.valida && row.kyc.elegivel === true);
+      row.faixa = faixaOf(row.diligencia?.verdict, kycAprovado);
+    }
     res.json([...rows.values()].sort((a, b) => (a.nome || "").localeCompare(b.nome || "")));
   });
 
@@ -518,7 +631,9 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
   const profileResponse = (doc: string) => {
     const { cadastro, manual, fontes, qsa, dil, kyc } = consolidate(doc);
     const { documensoToken: _t, ...kycSafe } = (kyc || {}) as any;
-    return { doc, docFmt: fmtCnpj(doc), tipo: doc.length === 14 ? "pj" : "pf", cadastro, manual, fontes, qsa, diligencia: dil, kyc: kyc ? { ...kycSafe, valida: kyc.status === "assinado" && isFiscalValid(kyc) } : null };
+    const kycValida = !!(kyc && kyc.status === "assinado" && isFiscalValid(kyc));
+    const faixa = faixaOf(dil?.verdict, !!(kycValida && kyc!.elegibilidade?.elegivel === true));
+    return { doc, docFmt: fmtCnpj(doc), tipo: doc.length === 14 ? "pj" : "pf", cadastro, manual, fontes, qsa, faixa, diligencia: dil, kyc: kyc ? { ...kycSafe, valida: kycValida } : null };
   };
   const docParam = (req: any, res: any): string | null => {
     const d = onlyDigits(sanitizeSegment(String(req.params.doc || "")) || "");
@@ -581,6 +696,13 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     stored.updatedAt = new Date().toISOString(); stored.updatedBy = req.user?.email;
     writeCad(doc, stored);
     res.json(profileResponse(doc));
+  });
+
+  // impresso HTML→PDF do perfil consolidado
+  app.get("/api/fornecedores/:doc/report.html", requireAuth, (req: any, res) => {
+    const doc = docParam(req, res); if (!doc) return;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(buildFornecedorReportHtml(profileResponse(doc)));
   });
 
   app.get("/api/kyc/invites", requireAuth, (_req, res) => {

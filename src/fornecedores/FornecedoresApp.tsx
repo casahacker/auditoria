@@ -14,7 +14,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2, BookOpen, Link2, Loader2, Search, RefreshCw, ChevronRight, ChevronLeft,
   ShieldCheck, ShieldAlert, AlertTriangle, Upload, FileUp, History, BadgeCheck,
-  ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature, Pencil, Check,
+  ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature, Pencil, Check, Printer,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
@@ -56,7 +56,13 @@ const kycChip = (k: any) => {
   const tone: ChipTone = vencido ? 'warning' : k.status === 'assinado' ? 'success' : k.status === 'aguardando_assinatura' ? 'warning' : 'neutral';
   return <Chip tone={tone} size="sm">{vencido ? 'Vencido' : KYC_STATUS_LABEL[k.status as KycStatus]}{k.type ? ` · ${String(k.type).toUpperCase()}` : ''}</Chip>;
 };
-const eligChip = (k: any) => k?.elegivel === true ? <Chip tone="success" size="sm">Elegível</Chip> : k?.elegivel === false ? <Chip tone="error" size="sm">Inelegível</Chip> : <span className="text-text-secondary">—</span>;
+const FAIXA: Record<string, { tone: ChipTone; label: string; short: string }> = {
+  inelegivel: { tone: 'error', label: 'Inelegível', short: 'Inelegível' },
+  ate_2sm: { tone: 'warning', label: 'Elegível — contratos até 2 salários mínimos', short: 'Até 2 SM' },
+  acima_2sm: { tone: 'success', label: 'Elegível — contratos a partir de 2 salários mínimos', short: '2 SM+' },
+  pendente: { tone: 'neutral', label: 'Pendente — diligência não concluída', short: 'Pendente' },
+};
+const faixaChip = (f?: string, full?: boolean) => { const m = FAIXA[f || 'pendente'] || FAIXA.pendente; return <Chip tone={m.tone} size="sm">{full ? m.label : m.short}</Chip>; };
 
 export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navigate, initialDoc }: FornecedoresAppProps) {
   const [section, setSection] = useState<Section>('base');
@@ -203,10 +209,11 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
 
   const stats = useMemo(() => ({
     total: rows.length,
-    alerta: rows.filter((r: any) => r.diligencia?.verdict === 'ALERTA').length,
+    acima2: rows.filter((r: any) => r.faixa === 'acima_2sm').length,
+    ate2: rows.filter((r: any) => r.faixa === 'ate_2sm').length,
+    inelegivel: rows.filter((r: any) => r.faixa === 'inelegivel').length,
+    pendente: rows.filter((r: any) => r.faixa === 'pendente').length,
     semDilig: rows.filter((r: any) => r.doc.length === 14 && (!r.diligencia || !r.diligencia.valida)).length,
-    kycOk: rows.filter((r: any) => r.kyc?.status === 'assinado' && r.kyc?.valida).length,
-    inelegivel: rows.filter((r: any) => r.kyc?.elegivel === false).length,
   }), [rows]);
 
   const filtered = useMemo(() => rows.filter((r: any) => {
@@ -214,7 +221,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
     if (df !== 'all') { if (df === 'none') { if (r.diligencia) return false; } else if (df === 'vencida') { if (!(r.diligencia && !r.diligencia.valida)) return false; } else if (r.diligencia?.verdict !== df) return false; }
     if (kf !== 'all') { if (kf === 'none') { if (r.kyc) return false; } else if (kf === 'assinado') { if (!(r.kyc?.status === 'assinado' && r.kyc?.valida)) return false; } else if (kf === 'vencido') { if (!(r.kyc?.status === 'assinado' && !r.kyc?.valida)) return false; } else if (r.kyc?.status !== kf) return false; }
     if (tf !== 'all' && (tf === 'pj' ? r.doc.length !== 14 : r.doc.length !== 11)) return false;
-    if (ef !== 'all') { const e = r.kyc?.elegivel === true ? 'sim' : r.kyc?.elegivel === false ? 'nao' : 'na'; if (e !== ef) return false; }
+    if (ef !== 'all' && (r.faixa || 'pendente') !== ef) return false;
     if (origem !== 'all' && !(r.origens || []).includes(origem)) return false;
     return true;
   }), [rows, q, qd, df, kf, tf, ef, origem]);
@@ -222,7 +229,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
   const sorted = useMemo(() => {
     const dRank = (r: any) => r.diligencia ? ({ ALERTA: 0, PENDENTE: 1, NADA_CONSTA: 2 } as any)[r.diligencia.verdict] ?? 3 : 4;
     const kRank = (r: any) => !r.kyc ? 4 : r.kyc.status === 'aguardando_assinatura' ? 0 : (r.kyc.status === 'assinado' && !r.kyc.valida) ? 1 : r.kyc.status === 'assinado' ? 2 : 3;
-    const eRank = (r: any) => r.kyc?.elegivel === false ? 0 : r.kyc?.elegivel === true ? 1 : 2;
+    const eRank = (r: any) => (({ inelegivel: 0, pendente: 1, ate_2sm: 2, acima_2sm: 3 } as any)[r.faixa] ?? 1);
     const val = (r: any) => sort.k === 'nome' ? (r.nome || '~').toLowerCase() : sort.k === 'diligencia' ? dRank(r) : sort.k === 'kyc' ? kRank(r) : eRank(r);
     return [...filtered].sort((a, b) => { const va = val(a), vb = val(b); return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir; });
   }, [filtered, sort]);
@@ -246,10 +253,10 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
       {/* dashboard de stats (clicáveis → filtram) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Stat icon={Users} label="Fornecedores" value={stats.total} tone="info" active={!hasFilter} onClick={clear} />
-        <Stat icon={ShieldAlert} label="Alertas (diligência)" value={stats.alerta} tone="error" active={df === 'ALERTA'} onClick={() => { clear(); setDf('ALERTA'); }} />
-        <Stat icon={RefreshCw} label="Sem diligência válida" value={stats.semDilig} tone="warning" active={df === 'vencida'} onClick={() => { clear(); setDf('vencida'); }} />
-        <Stat icon={FileSignature} label="KYS/KYG assinado" value={stats.kycOk} tone="success" active={kf === 'assinado'} onClick={() => { clear(); setKf('assinado'); }} />
-        <Stat icon={AlertTriangle} label="Inelegíveis" value={stats.inelegivel} tone="error" active={ef === 'nao'} onClick={() => { clear(); setEf('nao'); }} />
+        <Stat icon={ShieldCheck} label="Elegível 2 SM+" value={stats.acima2} tone="success" active={ef === 'acima_2sm'} onClick={() => { clear(); setEf('acima_2sm'); }} />
+        <Stat icon={FileSignature} label="Elegível até 2 SM" value={stats.ate2} tone="warning" active={ef === 'ate_2sm'} onClick={() => { clear(); setEf('ate_2sm'); }} />
+        <Stat icon={ShieldAlert} label="Inelegíveis" value={stats.inelegivel} tone="error" active={ef === 'inelegivel'} onClick={() => { clear(); setEf('inelegivel'); }} />
+        <Stat icon={AlertTriangle} label="Pendentes (diligência)" value={stats.pendente} tone="neutral" active={ef === 'pendente'} onClick={() => { clear(); setEf('pendente'); }} />
       </div>
 
       {active && (
@@ -271,7 +278,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
             <Select ariaLabel="Filtrar por diligência" value={df} onChange={setDf} options={[{ value: 'all', label: 'Diligência: todas' }, { value: 'ALERTA', label: 'Alerta' }, { value: 'NADA_CONSTA', label: 'Nada consta' }, { value: 'PENDENTE', label: 'Pendente' }, { value: 'vencida', label: 'Vencida' }, { value: 'none', label: 'Não consultada' }]} />
             <Select ariaLabel="Filtrar por KYS/KYG" value={kf} onChange={setKf} options={[{ value: 'all', label: 'KYS/KYG: todos' }, { value: 'assinado', label: 'Assinado (válido)' }, { value: 'aguardando_assinatura', label: 'Aguardando' }, { value: 'vencido', label: 'Vencido' }, { value: 'none', label: 'Sem KYS/KYG' }]} />
             <Select ariaLabel="Filtrar por tipo" value={tf} onChange={setTf} options={[{ value: 'all', label: 'Tipo: todos' }, { value: 'pj', label: 'PJ (CNPJ)' }, { value: 'pf', label: 'PF (CPF)' }]} />
-            <Select ariaLabel="Filtrar por elegibilidade" value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'sim', label: 'Elegível' }, { value: 'nao', label: 'Inelegível' }]} />
+            <Select ariaLabel="Filtrar por elegibilidade" value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'acima_2sm', label: 'Elegível 2 SM+' }, { value: 'ate_2sm', label: 'Elegível até 2 SM' }, { value: 'inelegivel', label: 'Inelegível' }, { value: 'pendente', label: 'Pendente' }]} />
             {origens.length > 1 && <Select ariaLabel="Filtrar por origem" value={origem} onChange={setOrigem} options={[{ value: 'all', label: 'Todas as origens' }, ...origens.map((o) => ({ value: o, label: o }))]} />}
             {hasFilter && <Btn variant="ghost" size="sm" onClick={clear}><X size={13} aria-hidden /> Limpar</Btn>}
             <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{sorted.length} de {rows.length}</span>
@@ -285,7 +292,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
                   <th scope="col" className="px-4 py-2.5 font-semibold">Origem</th>
                   <SortTh label="Diligência" k="diligencia" sort={sort} setSort={setSort} />
                   <SortTh label="KYS / KYG" k="kyc" sort={sort} setSort={setSort} />
-                  <SortTh label="Elegível" k="elegivel" sort={sort} setSort={setSort} />
+                  <SortTh label="Elegibilidade" k="elegivel" sort={sort} setSort={setSort} />
                   <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
                 </tr></thead>
                 <tbody>
@@ -296,7 +303,7 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
                       <td className="px-4 py-2.5 text-text-secondary">{(r.origens || []).join(', ')}</td>
                       <td className="px-4 py-2.5">{dilChip(r.diligencia)}</td>
                       <td className="px-4 py-2.5">{kycChip(r.kyc)}</td>
-                      <td className="px-4 py-2.5">{eligChip(r.kyc)}</td>
+                      <td className="px-4 py-2.5">{faixaChip(r.faixa)}</td>
                       <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" aria-hidden /></td>
                     </tr>
                   ))}
@@ -311,7 +318,10 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
 }
 
 // ── Ficha do Fornecedor (header de status + abas acessíveis) ─────────────────────
-const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: boolean; multi?: boolean }[] }[] = [
+const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
+const isValidEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || ''));
+const isValidPhone = (s: string) => { const d = onlyDigits(s); return d.length === 10 || d.length === 11; };
+const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: boolean; multi?: boolean; t?: 'uf' | 'banco' | 'cep' | 'tel' | 'email' }[] }[] = [
   { title: 'Identificação', fields: [
     { k: 'razaoSocial', label: 'Razão social', full: true }, { k: 'nomeFantasia', label: 'Nome fantasia', full: true },
     { k: 'tipo', label: 'Tipo (matriz/filial)' }, { k: 'porte', label: 'Porte' },
@@ -322,11 +332,11 @@ const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: bo
     { k: 'cnaesSecundarios', label: 'CNAEs secundários', full: true, multi: true },
   ] },
   { title: 'Endereço', fields: [
-    { k: 'cep', label: 'CEP' }, { k: 'logradouro', label: 'Logradouro', full: true }, { k: 'numero', label: 'Número' },
-    { k: 'complemento', label: 'Complemento' }, { k: 'bairro', label: 'Bairro' }, { k: 'municipio', label: 'Município' }, { k: 'uf', label: 'UF' },
+    { k: 'cep', label: 'CEP', t: 'cep' }, { k: 'logradouro', label: 'Logradouro', full: true }, { k: 'numero', label: 'Número' },
+    { k: 'complemento', label: 'Complemento' }, { k: 'bairro', label: 'Bairro' }, { k: 'municipio', label: 'Município' }, { k: 'uf', label: 'UF', t: 'uf' },
   ] },
-  { title: 'Contato', fields: [{ k: 'telefone', label: 'Telefone' }, { k: 'email', label: 'E-mail' }] },
-  { title: 'Dados bancários', fields: [{ k: 'banco', label: 'Banco' }, { k: 'agencia', label: 'Agência' }, { k: 'conta', label: 'Conta' }, { k: 'chavePix', label: 'Chave PIX' }] },
+  { title: 'Contato', fields: [{ k: 'telefone', label: 'Telefone', t: 'tel' }, { k: 'email', label: 'E-mail', t: 'email' }] },
+  { title: 'Dados bancários', fields: [{ k: 'banco', label: 'Banco', t: 'banco' }, { k: 'agencia', label: 'Agência' }, { k: 'conta', label: 'Conta' }, { k: 'chavePix', label: 'Chave PIX' }] },
 ];
 const sancaoLabel = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
 
@@ -334,7 +344,10 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  const [banks, setBanks] = useState<{ code: string; name: string }[]>([]);
+  const [cepBusy, setCepBusy] = useState(false);
   useEffect(() => { setEdit(false); }, [profile?.doc]); // sai do modo edição ao trocar de fornecedor
+  useEffect(() => { fetch('/api/public/kyc/banks').then((r) => r.ok ? r.json() : []).then((b) => setBanks(Array.isArray(b) ? b : [])).catch(() => {}); }, []);
 
   if (busy && !profile) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando perfil…</div>;
   if (!profile) return <div className="text-[13px] text-text-secondary">Selecione um fornecedor na base.</div>;
@@ -342,10 +355,29 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
   const nome = c.razaoSocial || '—';
   const startEdit = () => { setForm({ ...c }); setEdit(true); };
   const save = async () => { setSaving(true); const ok = await onSave(form); setSaving(false); if (ok) setEdit(false); };
+  const setF = (k: string, v: string) => setForm((p: any) => ({ ...p, [k]: v }));
+  const onCepEdit = async (v: string) => {
+    setF('cep', v); const d = onlyDigits(v); if (d.length !== 8) return;
+    setCepBusy(true);
+    try { const r = await fetch(`/api/public/kyc/cep/${d}`); if (r.ok) { const a = await r.json(); setForm((p: any) => ({ ...p, cep: a.cep || v, logradouro: a.logradouro || p.logradouro, bairro: a.bairro || p.bairro, municipio: a.municipio || p.municipio, uf: a.uf || p.uf })); } } catch { /* */ } finally { setCepBusy(false); }
+  };
+  const inputCls = 'mt-1 w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[12px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
+  const editControl = (f: any) => {
+    if (f.multi) return <textarea value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} rows={5} className={inputCls + ' resize-y'} />;
+    if (f.t === 'uf') return <select value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} className={inputCls + ' cursor-pointer'}><option value="">—</option>{UFS.map((u) => <option key={u} value={u}>{u}</option>)}</select>;
+    if (f.t === 'banco') return <input list="cad-banks" value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} placeholder="Código - Banco" className={inputCls} />;
+    if (f.t === 'cep') return <div className="relative"><input value={form[f.k] || ''} onChange={(e) => onCepEdit(e.target.value)} placeholder="00000-000" className={inputCls} />{cepBusy && <Loader2 size={13} className="animate-spin text-primary absolute right-2 top-[55%] -translate-y-1/2" aria-hidden />}</div>;
+    if (f.t === 'tel') { const inv = form[f.k] && !isValidPhone(form[f.k]); return <><input value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} placeholder="(11) 90000-0000" className={cn(inputCls, inv && 'border-error')} />{inv && <span className="text-[10px] text-error">Telefone inválido (com DDD)</span>}</>; }
+    if (f.t === 'email') { const inv = form[f.k] && !isValidEmail(form[f.k]); return <><input type="email" value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} className={cn(inputCls, inv && 'border-error')} />{inv && <span className="text-[10px] text-error">E-mail inválido</span>}</>; }
+    return <input value={form[f.k] || ''} onChange={(e) => setF(f.k, e.target.value)} className={inputCls} />;
+  };
 
   return (
     <div className="space-y-5 max-w-4xl animate-in fade-in duration-300">
-      <button onClick={onBack} className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-primary uppercase tracking-wider rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronLeft size={13} aria-hidden /> Fornecedores</button>
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={onBack} className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-primary uppercase tracking-wider rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronLeft size={13} aria-hidden /> Fornecedores</button>
+        <Btn variant="secondary" size="sm" onClick={() => window.open(`/api/fornecedores/${doc}/report.html`, '_blank')}><Printer size={13} aria-hidden /> Imprimir / PDF</Btn>
+      </div>
 
       {/* header: identidade + status num relance */}
       <Card className="p-5">
@@ -354,7 +386,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         <div className="grid sm:grid-cols-3 gap-3 mt-4">
           <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
           <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}{kyc && <span className="block text-[10px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}</div>
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Elegibilidade</div>{eligChip(kyc)}</div>
+          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1.5">Elegibilidade</div>{faixaChip(profile.faixa, true)}</div>
         </div>
       </Card>
 
@@ -371,6 +403,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
           </div>
         </div>
         <div className="space-y-4">
+          <datalist id="cad-banks">{banks.map((b) => <option key={b.code} value={`${b.code} - ${b.name}`} />)}</datalist>
           {CAD_GROUPS.map((g) => (
             <div key={g.title}>
               <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-2">{g.title}</div>
@@ -380,9 +413,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
                     {edit ? (
                       <label className="block">
                         <span className="text-[10px] uppercase tracking-wider text-text-secondary">{f.label}{manual[f.k] && <span className="text-primary"> · manual</span>}</span>
-                        {f.multi
-                          ? <textarea value={form[f.k] || ''} onChange={(e) => setForm({ ...form, [f.k]: e.target.value })} rows={5} className="mt-1 w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
-                          : <input value={form[f.k] || ''} onChange={(e) => setForm({ ...form, [f.k]: e.target.value })} className="mt-1 w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[12px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />}
+                        {editControl(f)}
                       </label>
                     ) : f.multi ? (
                       <div>

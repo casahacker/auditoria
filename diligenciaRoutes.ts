@@ -92,11 +92,12 @@ async function limitedFetch(url: string, init: RequestInit, retries = 2): Promis
 // ── external lookups ──────────────────────────────────────────────────────────
 
 async function fetchReceitaRaw(cnpj: string): Promise<any> {
+  let best: any = null; // melhor candidato SEM logradouro (usado se nenhuma fonte trouxer endereço)
   try {
     const r = await limitedFetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
     if (r.ok) {
       const d: any = await r.json();
-      return {
+      const out: any = {
         fonte: "BrasilAPI (Receita Federal)", apiUrl: `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, fetchedAt: new Date().toISOString(),
         razao_social: d.razao_social, nome_fantasia: d.nome_fantasia, tipo: d.descricao_identificador_matriz_filial,
         situacao_cadastral: d.descricao_situacao_cadastral, data_situacao: d.data_situacao_cadastral, motivo_situacao: d.descricao_motivo_situacao_cadastral,
@@ -108,13 +109,14 @@ async function fetchReceitaRaw(cnpj: string): Promise<any> {
         cnaes_secundarios: Array.isArray(d.cnaes_secundarios) ? d.cnaes_secundarios.filter((c: any) => c.codigo).map((c: any) => `${c.codigo} - ${c.descricao}`) : [],
         qsa: Array.isArray(d.qsa) ? d.qsa.map((s: any) => ({ nome: s.nome_socio, qual: s.qualificacao_socio, entrada: s.data_entrada_sociedade, faixa: s.faixa_etaria })) : [],
       };
+      if (out.logradouro) return out; best = best || out; // BrasilAPI às vezes vem sem endereço → tenta próxima fonte
     }
   } catch { /* fall through */ }
   try {
     const r = await limitedFetch(`https://www.receitaws.com.br/v1/cnpj/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
     if (r.ok) {
       const d: any = await r.json();
-      return {
+      const out: any = {
         fonte: "ReceitaWS (Receita Federal)", apiUrl: `https://www.receitaws.com.br/v1/cnpj/${cnpj}`, fetchedAt: new Date().toISOString(),
         razao_social: d.nome, nome_fantasia: d.fantasia, tipo: d.tipo, situacao_cadastral: d.situacao, data_situacao: d.data_situacao, motivo_situacao: d.motivo_situacao,
         natureza_juridica: typeof d.natureza_juridica === "object" ? d.natureza_juridica?.descricao : d.natureza_juridica,
@@ -125,30 +127,74 @@ async function fetchReceitaRaw(cnpj: string): Promise<any> {
         cnaes_secundarios: Array.isArray(d.atividades_secundarias) ? d.atividades_secundarias.filter((c: any) => c.code && c.code !== "00.00-0-00").map((c: any) => `${c.code} - ${c.text}`) : [],
         qsa: Array.isArray(d.qsa) ? d.qsa.map((s: any) => ({ nome: s.nome, qual: s.qual })) : [],
       };
+      if (out.logradouro) return out; best = best || out;
     }
   } catch { /* */ }
+  // 3º fallback: CNPJá (open) — quando as anteriores falham ou vêm sem endereço
+  try {
+    const r = await limitedFetch(`https://open.cnpja.com/office/${cnpj}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(12000) });
+    if (r.ok) {
+      const d: any = await r.json(); const a = d.address || {};
+      const out: any = {
+        fonte: "CNPJá (Receita Federal)", apiUrl: `https://open.cnpja.com/office/${cnpj}`, fetchedAt: new Date().toISOString(),
+        razao_social: d.company?.name, nome_fantasia: d.alias || "", tipo: d.head ? "MATRIZ" : "FILIAL",
+        situacao_cadastral: d.status?.text, data_situacao: d.statusDate, motivo_situacao: d.reason?.text || "",
+        natureza_juridica: d.company?.nature?.text, porte: d.company?.size?.text, abertura: d.founded,
+        capital_social: d.company?.equity != null ? Number(d.company.equity).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "",
+        logradouro: a.street, numero: a.number, complemento: a.details, bairro: a.district, municipio: a.city, uf: a.state, cep: a.zip,
+        email: Array.isArray(d.emails) && d.emails[0] ? d.emails[0].address : "", telefone: Array.isArray(d.phones) && d.phones[0] ? `(${d.phones[0].area}) ${d.phones[0].number}` : "",
+        cnae_principal: d.mainActivity ? `${d.mainActivity.id} - ${d.mainActivity.text}` : "",
+        cnaes_secundarios: Array.isArray(d.sideActivities) ? d.sideActivities.map((x: any) => `${x.id} - ${x.text}`) : [],
+        qsa: Array.isArray(d.members) ? d.members.map((m: any) => ({ nome: m.person?.name, qual: m.role?.text })) : [],
+      };
+      if (out.logradouro) return out; best = best || out;
+    }
+  } catch { /* */ }
+  return best; // nenhuma fonte com logradouro → melhor disponível (o CEP completa o endereço)
+}
+
+export interface CepData { cep: string; logradouro: string; bairro: string; municipio: string; uf: string; fonte: string; apiUrl: string; }
+
+/**
+ * Consulta de CEP com CADEIA DE FALLBACK entre provedores: BrasilAPI v2 → ViaCEP →
+ * BrasilAPI v1 → OpenCEP. Retorna o 1º que responder com endereço, normalizado. `doFetch`
+ * permite usar o rate limiter (diligência) ou fetch direto (endpoint público).
+ */
+export async function lookupCep(cepRaw: string, doFetch: (url: string, init: RequestInit) => Promise<Response> = (u, i) => fetch(u, i)): Promise<CepData | null> {
+  const cep = onlyDigits(cepRaw);
+  if (cep.length !== 8) return null;
+  const init = { headers: HTTP_HEADERS, signal: AbortSignal.timeout(8000) } as RequestInit;
+  const sources: { url: string; fonte: string; map: (c: any) => Partial<CepData> | null }[] = [
+    { url: `https://brasilapi.com.br/api/cep/v2/${cep}`, fonte: "BrasilAPI (CEP)", map: (c) => (c.street || c.city) ? { logradouro: c.street, bairro: c.neighborhood, municipio: c.city, uf: c.state, cep: c.cep } : null },
+    { url: `https://viacep.com.br/ws/${cep}/json/`, fonte: "ViaCEP", map: (c) => (!c.erro && (c.logradouro || c.localidade)) ? { logradouro: c.logradouro, bairro: c.bairro, municipio: c.localidade, uf: c.uf, cep: c.cep } : null },
+    { url: `https://brasilapi.com.br/api/cep/v1/${cep}`, fonte: "BrasilAPI (CEP v1)", map: (c) => (c.street || c.city) ? { logradouro: c.street, bairro: c.neighborhood, municipio: c.city, uf: c.state, cep: c.cep } : null },
+    { url: `https://opencep.com/v1/${cep}`, fonte: "OpenCEP", map: (c) => (c.logradouro || c.localidade) ? { logradouro: c.logradouro, bairro: c.bairro, municipio: c.localidade, uf: c.uf, cep: c.cep } : null },
+  ];
+  for (const s of sources) {
+    try {
+      const r = await doFetch(s.url, init);
+      if (!r.ok) continue;
+      const m = s.map(await r.json());
+      if (m) return { cep: m.cep || cep, logradouro: m.logradouro || "", bairro: m.bairro || "", municipio: m.municipio || "", uf: m.uf || "", fonte: s.fonte, apiUrl: s.url };
+    } catch { /* tenta o próximo provedor */ }
+  }
   return null;
 }
 
 /**
- * Padroniza o endereço pela API de CEP (BrasilAPI): logradouro/bairro/município/UF passam
- * a vir do CEP (que é mais consistente/completo que a Receita, sobretudo em MEIs). Número e
+ * Padroniza o endereço pela API de CEP (cadeia de fallback): logradouro/bairro/município/UF
+ * passam a vir do CEP (mais consistente/completo que a Receita, sobretudo em MEIs). Número e
  * complemento permanecem da Receita. Tolerante a falha (não derruba a consulta).
  */
 async function enrichCep(o: any): Promise<void> {
   try {
-    const cep = onlyDigits(o?.cep);
-    if (cep.length !== 8) return;
-    const r = await limitedFetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(10000) });
-    if (!r.ok) return;
-    const c: any = await r.json();
-    if (c.street) o.logradouro = c.street;          // CEP é a fonte do logradouro/bairro/município/UF
-    if (c.neighborhood) o.bairro = c.neighborhood;
-    if (c.city) o.municipio = c.city;
-    if (c.state) o.uf = c.state;
-    o.cepFonte = "BrasilAPI (CEP)";
-    o.cepApiUrl = `https://brasilapi.com.br/api/cep/v2/${cep}`;
-    o.cepFetchedAt = new Date().toISOString();
+    const c = await lookupCep(o?.cep, limitedFetch);
+    if (!c) return;
+    if (c.logradouro) o.logradouro = c.logradouro;
+    if (c.bairro) o.bairro = c.bairro;
+    if (c.municipio) o.municipio = c.municipio;
+    if (c.uf) o.uf = c.uf;
+    o.cepFonte = c.fonte; o.cepApiUrl = c.apiUrl; o.cepFetchedAt = new Date().toISOString();
   } catch { /* CEP é complementar */ }
 }
 
