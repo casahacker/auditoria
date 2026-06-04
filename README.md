@@ -8,13 +8,14 @@
 
 **Suíte de auditoria e prestação de contas para organizações de impacto social.**
 
-O **Stack Audit™** é uma plataforma da **Associação Casa Hacker** com **três ferramentas** sob um único launcher, compartilhando autenticação, design system (IBM Carbon) e base de fornecedores:
+O **Stack Audit™** é uma plataforma da **Associação Casa Hacker** com **quatro ferramentas** sob um único launcher, compartilhando autenticação, design system (IBM Carbon) e base de fornecedores:
 
 | # | Ferramenta | Para que serve |
 |---|---|---|
 | **A** | **Auditoria de Prestação de Contas** | Concilia notas fiscais, comprovantes e orçamento por rubrica com IA (DeepSeek + Azure Document Intelligence) e emite o parecer final (RAPC). |
 | **B** | **Processador FEAC / SGPP** | Concilia lançamentos × documentos, **trata** os PDFs (mescla, carimbo de margem, conversão **PDF/A-2b**), gera a **Declaração de Rateio** e o Relatório de Prestação de Contas para a Fundação FEAC. |
 | **C** | **Diligência de Fornecedores** | Consulta um CNPJ na **Receita Federal** e nas **listas de restrição** do Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Acordos de Leniência), com relatório auditável e validade de 30 dias. |
+| **D** | **Conformidade KYS / KYG** | Ficha de conformidade preenchida pelo próprio fornecedor (**KYS**) ou organização/liderança (**KYG**) numa **página pública**, com verificação por APIs em tempo real e **assinatura eletrônica via Documenso**. Validade por ano fiscal. |
 
 > Produção: `https://stack-audit.casahacker.org` · login Google OAuth restrito ao domínio `@casahacker.org`.
 
@@ -44,6 +45,14 @@ Fluxo em 4 etapas, cada prestação persistida no servidor:
 - **Geração automática:** fornecedores novos e diligências vencidas entram numa fila e são consultados em segundo plano, respeitando um teto de **chamadas/minuto** às APIs oficiais (com recuo em `429`). Botão **"Consultar todos os não consultados"** + faixa de progresso na Base.
 - Exportação: relatório **PDF** (documento monocromático preto, pronto para arquivo, via impressão do navegador) e dados em **TXT**.
 
+### D — Conformidade KYS / KYG
+- **Página pública** (sem login) em formato de **wizard**, preenchida pelo próprio **representante legal/autorizado**: `/kys` (fornecedores PJ) e `/kyg` (OSCs e lideranças PF que recebem doação com encargos). Links genéricos ou **convites rastreáveis** gerados no painel.
+- **Verificação em tempo real por APIs:** CNPJ → Receita (auto-preenche razão social, endereço, situação cadastral); **CEP** → endereço; lista de **bancos** (BrasilAPI); validação de **CPF/CNPJ** (dígitos verificadores). No envio, roda a **régua de conformidade** (CEIS/CNEP/CEPIM/Leniência) montando uma **trilha auditável** com fonte, URL e horário de cada consulta.
+- **Assinatura via Documenso** (documenso.casahacker.org) por **template + `formValues`** — num **modal embutido** (iframe `/embed/sign/<token>`), sem o usuário sair da página. O **solicitante da Casa Hacker** (opcional) entra como **CC** e recebe cópia do documento assinado.
+- **Painel interno** (`/conformidade`): lista todas as conformidades com filtros por fornecedor/CNPJ, tipo, status (assinado/aguardando/vencido) e **ano fiscal**; abre a trilha de conformidade, as respostas e baixa o **PDF assinado**. **Validade por ano fiscal** — renovação anual.
+
+> **Setup único do Documenso** (uma vez): `npx tsx scripts/gen-kyc-templates.ts` gera os PDFs-template fillable em `kyc-templates/`; suba cada um como **Template** no Documenso, coloque 1 campo **SIGNATURE** + 1 recipient "Signatário", e preencha `DOCUMENSO_API_TOKEN` + `DOCUMENSO_KYS_TEMPLATE_ID`/`_KYG_` no `.env`. Sem isso, o wizard recebe os dados mas a assinatura fica desabilitada.
+
 ---
 
 ## Roteamento (URLs compartilháveis)
@@ -58,6 +67,9 @@ Cada página tem um caminho próprio no navegador (deep-link + voltar/avançar):
 | `/feac/<id>/<preliminar\|tratamento\|relatorio>` | FEAC — uma prestação numa etapa específica |
 | `/diligencia` · `/diligencia/historico` · `/diligencia/ajuda` | Diligência — base, histórico, como usar |
 | `/diligencia/<cnpj>` | Diligência — resultado de um fornecedor |
+| `/conformidade` · `/conformidade/convites` · `/conformidade/ajuda` | KYS/KYG — painel, convites, como usar (autenticado) |
+| `/conformidade/<id>` | KYS/KYG — detalhe de uma conformidade (autenticado) |
+| `/kys` · `/kyg` · `/kys/<token>` · `/kyg/<token>` | **Página pública** do wizard KYS/KYG (sem login) |
 | `/share/<token>` | Link público (somente leitura) de uma auditoria |
 
 O servidor faz fallback de SPA para qualquer rota, então recarregar ou compartilhar um deep-link funciona.
@@ -97,12 +109,18 @@ stack-audit/
 │   │   └── feacTypes.ts
 │   ├── diligencia/              # Tool C — Diligência de Fornecedores
 │   │   └── DiligenciaApp.tsx
+│   ├── kyc/                     # Tool D — Conformidade KYS/KYG
+│   │   ├── KycApp.tsx           #   painel interno (autenticado)
+│   │   ├── KycWizard.tsx        #   wizard PÚBLICO (renderizado por main.tsx em /kys /kyg)
+│   │   └── kycTypes.ts          #   tipos + perguntas/declarações (KYS/KYG)
 │   ├── services/auditService.ts
 │   ├── types.ts
 │   └── index.css                # Tokens do design system (Tailwind @theme)
 ├── server.ts                    # API REST (Express) — Auditoria + registro dos módulos
 ├── feacRoutes.ts                # API /api/feac (registerFeacRoutes)
 ├── diligenciaRoutes.ts          # API /api/diligencia (registerDiligenciaRoutes)
+├── kycRoutes.ts                 # API /api/kyc + /api/public/kyc (registerKycRoutes)
+├── scripts/gen-kyc-templates.ts # gera os PDFs-template fillable do Documenso (uso único)
 ├── assets/                      # Fontes IBM Plex, sRGB.icc, logos do rateio
 ├── docs/                        # Guias do usuário (ver docs/README.md)
 ├── Dockerfile
@@ -110,7 +128,7 @@ stack-audit/
 └── vite.config.ts
 ```
 
-> O estágio final do `Dockerfile` copia explicitamente `server.ts feacRoutes.ts diligenciaRoutes.ts` + `assets`. **Todo novo arquivo de backend na raiz precisa de um `COPY`.** Arquivos sob `src/` são empacotados pelo Vite.
+> O estágio final do `Dockerfile` copia explicitamente `server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts` + `assets`. **Todo novo arquivo de backend na raiz precisa de um `COPY`.** Arquivos sob `src/` são empacotados pelo Vite.
 
 ---
 
@@ -139,6 +157,12 @@ PORTAL_TRANSPARENCIA_KEY=               # listas de restrição da Diligência (
 DILIGENCIA_RATE_PER_MIN=100             # teto de chamadas/min às APIs externas da Diligência
 DILIGENCIA_SWEEP_MS=300000              # varredura de novos/vencidos (5 min; mín 60000)
 DILIGENCIA_AUTO=1                       # "0" desliga a geração automática
+
+# KYS/KYG — assinatura via Documenso (sem isso, o wizard recebe os dados sem assinar)
+DOCUMENSO_URL=https://documenso.casahacker.org
+DOCUMENSO_API_TOKEN=                    # Documenso → Settings → API Tokens
+DOCUMENSO_KYS_TEMPLATE_ID=             # id do template KYS no Documenso
+DOCUMENSO_KYG_TEMPLATE_ID=             # id do template KYG no Documenso
 ```
 
 ## Desenvolvimento
@@ -169,6 +193,7 @@ Porta interna `127.0.0.1:18088 → 3000`, volume `/data/stack-audit/data → /ap
 - **`docs/README.md`** — índice dos guias do usuário.
 - **`docs/processador-feac-sgpp.md`** — guia do Processador FEAC/SGPP.
 - **`docs/diligencia-fornecedores.md`** — guia da Diligência de Fornecedores.
+- **`docs/conformidade-kys-kyg.md`** — guia do KYS/KYG (inclui o setup do Documenso).
 - Cada ferramenta também tem uma seção **"Como usar"** dentro do próprio app.
 
 ## Licença

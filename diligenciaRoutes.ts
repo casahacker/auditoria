@@ -498,7 +498,13 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
 
   app.get("/api/diligencia/suppliers", requireAuth, (_req, res) => {
     const suppliers = collectSuppliers(DATA_DIR);
-    for (const s of suppliers) { const r = readRec(s.cnpj); s.diligencia = r ? { checkedAt: r.checkedAt, validUntil: r.validUntil, verdict: r.verdict, valida: isValid(r) } : null; }
+    for (const s of suppliers) {
+      const r = readRec(s.cnpj);
+      // Importados entram sem nome (o import só grava o CNPJ); a razão social fica
+      // disponível no registro de diligência (vinda da Receita) — usa-a como nome.
+      if ((!s.nome || s.nome === "—") && r?.razaoSocial && r.razaoSocial !== "—") s.nome = r.razaoSocial;
+      s.diligencia = r ? { checkedAt: r.checkedAt, validUntil: r.validUntil, verdict: r.verdict, valida: isValid(r) } : null;
+    }
     res.json(suppliers);
   });
 

@@ -17,6 +17,7 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { registerFeacRoutes } from "./feacRoutes";
 import { registerDiligenciaRoutes } from "./diligenciaRoutes";
+import { registerKycRoutes } from "./kycRoutes";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1355,6 +1356,9 @@ registerFeacRoutes(app, {
 
 // ── Diligência de Fornecedores (Tool C) ───────────────────────────────────────
 registerDiligenciaRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
+
+// ── KYS / KYG — Conformidade de Fornecedores e Organizações (Tool D) ───────────
+registerKycRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
 
 // ── Serve React SPA ───────────────────────────────────────────────────────────
 

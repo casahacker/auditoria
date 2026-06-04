@@ -7,6 +7,11 @@ coverage/
 .env*
 !.env.example
 
+# KYS/KYG: PDFs-template gerados (artefato do scripts/gen-kyc-templates.ts)
+kyc-templates/
+# arquivos de teste temporários
+_smoke_*.ts
+
 # local operational backups
 _backup_*/
 

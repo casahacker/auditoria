@@ -39,6 +39,7 @@ import {
   Layers,
   Keyboard,
   Clock,
+  BadgeCheck,
 } from 'lucide-react';
 import { cn, formatCurrency, truncateFileName } from './lib/utils';
 import Papa from 'papaparse';
@@ -46,14 +47,15 @@ import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from
 import { processAudit, reprocessItems } from './services/auditService';
 import FeacApp from './feac/FeacApp';
 import DiligenciaApp from './diligencia/DiligenciaApp';
+import KycApp from './kyc/KycApp';
 import { Btn, ToolSidebar, ToolHeader, SidebarItem, SkipLink } from './ui/kit';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' | 'documentacao';
 
 // ── Multi-tool suite: top-level tool selector (sits above the audit's Section) ──
-type Tool = 'launcher' | 'audit' | 'feac' | 'diligencia';
-const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', diligencia: 'diligencia' };
-const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', diligencia: 'diligencia' };
+type Tool = 'launcher' | 'audit' | 'feac' | 'diligencia' | 'kyc';
+const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', diligencia: 'diligencia', kyc: 'conformidade' };
+const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', diligencia: 'diligencia', conformidade: 'kyc' };
 const AUDIT_PATH_SECTIONS = ['nova', 'processando', 'resultado', 'historico', 'pesquisa', 'documentacao'];
 const AUDIT_HEADERS: Record<Section, [string, string]> = {
   nova:         ['Configuração de', 'Nova Auditoria'],
@@ -339,6 +341,7 @@ export default function App() {
     if (activeTool === 'audit') p = '/auditoria/' + activeSection;
     else if (activeTool === 'feac') p = '/feac';
     else if (activeTool === 'diligencia') p = '/diligencia';
+    else if (activeTool === 'kyc') p = '/conformidade';
     navigate(p);
   }, [activeTool, activeSection, navigate]);
   // back/forward
@@ -1851,6 +1854,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
     {activeTool === 'diligencia' && (
       <DiligenciaApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialCnpj={diligInitialCnpj} />
+    )}
+
+    {activeTool === 'kyc' && (
+      <KycApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} />
     )}
 
     {activeTool === 'feac' && (
@@ -3633,6 +3640,14 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
       subtitle: 'CNPJ + listas de restrição',
       description: 'Consulta de CNPJ na Receita Federal e verificação em listas de restrição (CEIS/CNEP/CEPIM/Leniência) com relatório auditável e validade de 30 dias.',
       icon: Building2,
+      enabled: true,
+    },
+    {
+      id: 'kyc',
+      title: 'Conformidade KYS / KYG',
+      subtitle: 'Cadastro verificado + assinatura',
+      description: 'Ficha de conformidade preenchida pelo próprio fornecedor (KYS) ou organização/liderança (KYG) numa página pública, com verificação por APIs em tempo real e assinatura eletrônica via Documenso. Validade por ano fiscal.',
+      icon: BadgeCheck,
       enabled: true,
     },
   ];
