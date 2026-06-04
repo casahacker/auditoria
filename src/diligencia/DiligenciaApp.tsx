@@ -9,12 +9,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   Building2, Search, Layers, LogOut, Loader2, ShieldCheck, ShieldAlert, AlertTriangle,
-  FileDown, RefreshCw, History, ExternalLink, ChevronRight, X,
+  FileDown, RefreshCw, History, ExternalLink, ChevronRight, X, BookOpen,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
 
-type Section = 'base' | 'resultado' | 'historico';
+type Section = 'base' | 'resultado' | 'historico' | 'ajuda';
 
 export interface DiligenciaAppProps {
   user: AuthUser;
@@ -22,6 +22,7 @@ export interface DiligenciaAppProps {
   addToast: (kind: 'success' | 'error' | 'info', message: string) => void;
   onHome: () => void;
   initialCnpj?: string;
+  navigate?: (path: string) => void;
 }
 
 const VERDICT = {
@@ -47,7 +48,7 @@ async function dl(apiFetch: DiligenciaAppProps['apiFetch'], url: string, name: s
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initialCnpj }: DiligenciaAppProps) {
+export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initialCnpj, navigate }: DiligenciaAppProps) {
   const [section, setSection] = useState<Section>('base');
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [suppliersLoading, setSuppliersLoading] = useState(false);
@@ -63,6 +64,15 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
   const loadHistory = async () => { try { const r = await apiFetch('/api/diligencia'); if (r.ok) setHistory(await r.json()); } catch { /* */ } };
   useEffect(() => { loadSuppliers(); loadHistory(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (initialCnpj && onlyDigits(initialCnpj).length === 14) openSaved(onlyDigits(initialCnpj)); }, [initialCnpj]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onPop = () => {
+      const s = window.location.pathname.split('/').filter(Boolean);
+      if (s[0] !== 'diligencia') return;
+      if (s[1] && onlyDigits(s[1]).length === 14) openSaved(s[1]); else setSection('base');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runCheck = async (cnpj: string, force = false) => {
     const d = onlyDigits(cnpj);
@@ -73,6 +83,7 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
       if (!r.ok) throw new Error((await r.json().catch(() => ({} as any))).error || 'Falha na diligência');
       const rec = await r.json();
       setCurrent(rec);
+      navigate?.(`/diligencia/${d}`);
       addToast(rec.verdict === 'ALERTA' ? 'error' : 'success', rec.verdict === 'ALERTA' ? 'Diligência concluída — ALERTA: restrições encontradas.' : 'Diligência concluída — nada consta.');
       loadSuppliers(); loadHistory();
     } catch (e: any) { addToast('error', e.message); setSection('base'); }
@@ -80,13 +91,14 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
   };
   const openSaved = async (cnpj: string) => {
     setBusy(true); setSection('resultado'); setCurrent(null);
-    try { const r = await apiFetch(`/api/diligencia/${onlyDigits(cnpj)}`); if (r.ok) { setCurrent(await r.json()); } else { addToast('error', 'Diligência não encontrada — execute uma nova.'); setSection('base'); } }
+    try { const r = await apiFetch(`/api/diligencia/${onlyDigits(cnpj)}`); if (r.ok) { setCurrent(await r.json()); navigate?.(`/diligencia/${onlyDigits(cnpj)}`); } else { addToast('error', 'Diligência não encontrada — execute uma nova.'); setSection('base'); } }
     catch { addToast('error', 'Falha ao abrir.'); setSection('base'); } finally { setBusy(false); }
   };
 
   const navItems: { id: Section; label: string; icon: React.ElementType }[] = [
     { id: 'base', label: 'Base de fornecedores', icon: Building2 },
     { id: 'historico', label: 'Histórico', icon: History },
+    { id: 'ajuda', label: 'Como usar', icon: BookOpen },
   ];
 
   return (
@@ -101,7 +113,7 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
         </div>
         <nav className="flex-1 px-2 pt-2 space-y-0.5">
           {navItems.map(it => (
-            <button key={it.id} onClick={() => setSection(it.id)}
+            <button key={it.id} onClick={() => { setSection(it.id); navigate?.('/diligencia'); }}
               className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] transition-colors',
                 section === it.id ? 'bg-sidebar-active text-primary font-semibold' : 'text-text-secondary hover:text-text hover:bg-white/5')}>
               <it.icon size={15} /> {it.label}
@@ -121,6 +133,7 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
             {section === 'base' && <>Diligência de <span className="font-bold text-primary">Fornecedores</span></>}
             {section === 'resultado' && <>Relatório de <span className="font-bold text-primary">Diligência</span></>}
             {section === 'historico' && <>Histórico de <span className="font-bold text-primary">Diligências</span></>}
+            {section === 'ajuda' && <>Como <span className="font-bold text-primary">usar</span></>}
           </h1>
           {/* CNPJ search — always available */}
           <div className="flex items-center gap-2">
@@ -136,6 +149,7 @@ export default function DiligenciaApp({ user, apiFetch, addToast, onHome, initia
         <div className="flex-1 overflow-y-auto px-10 py-8 pb-24">
           {section === 'base' && <BaseView {...{ suppliers, suppliersLoading, runCheck, openSaved }} />}
           {section === 'historico' && <HistoricoView {...{ history, openSaved, loadHistory }} />}
+          {section === 'ajuda' && <AjudaDilig />}
           {section === 'resultado' && <ResultadoView {...{ current, busy, apiFetch, addToast, runCheck }} />}
         </div>
       </main>
@@ -151,6 +165,29 @@ function ChipStatus({ s }: { s: any }) {
       <VerdictChip v={s.verdict} />
       <span className={cn('text-[10px]', valida ? 'text-text-secondary' : 'text-warning')}>{valida ? `válida até ${new Date(s.validUntil).toLocaleDateString('pt-BR')}` : 'vencida'}</span>
     </span>
+  );
+}
+
+function AjudaDilig() {
+  const blocks = [
+    { t: 'O que é verificado', d: 'Situação cadastral na Receita Federal (Ativa/Baixada/Inapta/Suspensa, natureza, porte, CNAE, sócios) e as listas de restrição do Portal da Transparência/CGU: CEIS (inidôneas e suspensas), CNEP (Lei Anticorrupção), CEPIM (entidades impedidas) e Acordos de Leniência.' },
+    { t: 'Como consultar', d: 'Em "Base de fornecedores", consulte qualquer fornecedor das prestações já realizadas, ou digite um CNPJ novo no campo do topo e clique em Consultar. O resultado sai em segundos.' },
+    { t: 'Lendo o resultado', d: 'O veredito é "Nada consta" (verde), "Alerta" (vermelho — há sanção ou cadastro não-ativo) ou "Pendente". Veja os detalhes da Receita, o status de cada lista e, quando "Consta", o tipo de sanção, órgão, vigência e processo.' },
+    { t: 'Validade e auditoria', d: 'Cada diligência vale 30 dias e fica registrada com data-hora, IP e solicitante. Baixe o relatório em PDF auditável e guarde junto à prestação de contas. Use "Reconsultar" para atualizar antes do vencimento.' },
+    { t: 'Fontes complementares', d: 'Lista Suja do Trabalho Escravo (MTE), IBAMA (embargos) e TCU/CNJ aparecem no relatório com link para verificação manual — o download automatizado é bloqueado pelos órgãos. Verifique-as quando o risco exigir (ex.: IBAMA para serviços ambientais).' },
+  ];
+  return (
+    <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">
+      <p className="text-[13px] text-text-secondary">A Diligência verifica um fornecedor por CNPJ em fontes oficiais e gera um relatório auditável e exportável. Faça a diligência antes de contratar e antes de pagar fornecedores relevantes.</p>
+      <div className="space-y-3">
+        {blocks.map((b, i) => (
+          <div key={i} className="bg-card border border-line rounded-lg p-4">
+            <div className="text-[13px] font-bold text-primary mb-1">{b.t}</div>
+            <div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

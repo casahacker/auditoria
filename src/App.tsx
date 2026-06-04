@@ -51,6 +51,10 @@ type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' |
 
 // ── Multi-tool suite: top-level tool selector (sits above the audit's Section) ──
 type Tool = 'launcher' | 'audit' | 'feac' | 'diligencia';
+const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', diligencia: 'diligencia' };
+const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', diligencia: 'diligencia' };
+const AUDIT_PATH_SECTIONS = ['nova', 'processando', 'resultado', 'historico', 'pesquisa', 'documentacao'];
+const pathSegs = () => window.location.pathname.split('/').filter(Boolean);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -309,8 +313,36 @@ export default function App() {
 
   const [activeSection, setActiveSection] = useState<Section>('nova');
 
-  // Multi-tool suite — which tool is active; 'launcher' is the default landing.
-  const [activeTool, setActiveTool] = useState<Tool>('launcher');
+  // ── Multi-tool suite + URL routing (tool/section ↔ browser path) ────────────
+  const [activeTool, setActiveTool] = useState<Tool>(() => SHARE_TOKEN ? 'launcher' : (PATH_TO_TOOL[pathSegs()[0]] || 'launcher'));
+  const [feacInitialId] = useState(() => { const s = pathSegs(); return s[0] === 'feac' && s[1] && s[1] !== 'nova' ? s[1] : ''; });
+  const [diligInitialCnpj] = useState(() => { const s = pathSegs(); return s[0] === 'diligencia' ? (s[1] || '') : ''; });
+  const routeFirst = useRef(true);
+  const routePop = useRef(false);
+  const navigate = useCallback((p: string) => { if (window.location.pathname !== p) window.history.pushState({}, '', p); }, []);
+  // initial audit section from the path (e.g. /auditoria/historico)
+  useEffect(() => { const s = pathSegs(); if (s[0] === 'auditoria' && AUDIT_PATH_SECTIONS.includes(s[1])) setActiveSection(s[1] as Section); }, []);
+  // push URL when tool/section changes (skip the first render and popstate-driven changes)
+  useEffect(() => {
+    if (routeFirst.current) { routeFirst.current = false; return; }
+    if (routePop.current) { routePop.current = false; return; }
+    let p = '/';
+    if (activeTool === 'audit') p = '/auditoria/' + activeSection;
+    else if (activeTool === 'feac') p = '/feac';
+    else if (activeTool === 'diligencia') p = '/diligencia';
+    navigate(p);
+  }, [activeTool, activeSection, navigate]);
+  // back/forward
+  useEffect(() => {
+    const onPop = () => {
+      routePop.current = true;
+      const s = pathSegs();
+      setActiveTool(PATH_TO_TOOL[s[0]] || 'launcher');
+      if (s[0] === 'auditoria' && AUDIT_PATH_SECTIONS.includes(s[1])) setActiveSection(s[1] as Section);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // ── Pesquisa global ───────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -1809,11 +1841,11 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
     )}
 
     {activeTool === 'diligencia' && (
-      <DiligenciaApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} />
+      <DiligenciaApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialCnpj={diligInitialCnpj} />
     )}
 
     {activeTool === 'feac' && (
-      <FeacApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} />
+      <FeacApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialRecordId={feacInitialId} />
     )}
 
     {activeTool === 'audit' && (

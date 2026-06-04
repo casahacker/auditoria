@@ -9,19 +9,21 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   NotebookPen, Layers, Upload, FileText, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
   Info, Download, FileDown, Search, Building2, X, ChevronRight, Trash2, RefreshCw, Package,
-  FileCheck2, ArrowRight, LogOut, ScrollText, PlusCircle, History,
+  FileCheck2, ArrowRight, LogOut, ScrollText, PlusCircle, History, BookOpen,
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { AuthUser } from '../types';
 import { FeacProcessing, FeacLancamento, FeacMatchStatus, CNPJDataLike, FeacSummary } from './feacTypes';
 
-type FeacSection = 'historico' | 'upload' | 'preliminar' | 'tratamento' | 'relatorio';
+type FeacSection = 'historico' | 'upload' | 'preliminar' | 'tratamento' | 'relatorio' | 'ajuda';
 
 export interface FeacAppProps {
   user: AuthUser;
   apiFetch: (url: string, opts?: RequestInit) => Promise<Response>;
   addToast: (kind: 'success' | 'error' | 'info', message: string) => void;
   onHome: () => void;
+  navigate?: (path: string) => void;
+  initialRecordId?: string;
 }
 
 const STATUS_META: Record<FeacMatchStatus, { label: string; cls: string; icon: React.ElementType }> = {
@@ -117,7 +119,7 @@ async function downloadBlob(apiFetch: FeacAppProps['apiFetch'], url: string, fal
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppProps) {
+export default function FeacApp({ user, apiFetch, addToast, onHome, navigate, initialRecordId }: FeacAppProps) {
   const [section, setSection] = useState<FeacSection>('historico');
   const [record, setRecord] = useState<FeacProcessing | null>(null);
   const [busy, setBusy] = useState(false);
@@ -240,18 +242,34 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
       const rec: FeacProcessing = await r.json();
       setRecord(rec);
       setSection(rec.stage === 'concluido' || rec.stage === 'tratado' ? 'relatorio' : (rec.lancamentos?.length ? 'preliminar' : 'upload'));
+      navigate?.(`/feac/${id}`);
     } catch { addToast('error', 'Falha ao abrir a prestação.'); }
   };
   const newPrestacao = () => {
     setRecord(null); setNotas([]); setComprovantes([]); setExtrato([]); setFluxo([]);
     setMeta({ projeto: '', contractNumber: '', periodoInicio: '', periodoFim: '' });
     setSection('upload');
+    navigate?.('/feac/nova');
   };
   const deleteRecord = async (id: string) => {
     const r = await apiFetch(`/api/feac/${id}`, { method: 'DELETE' });
     if (r.ok) { addToast('success', 'Prestação excluída.'); if (record?.id === id) setRecord(null); loadHistory(); }
     else addToast('error', 'Falha ao excluir.');
   };
+
+  // routing: open record from /feac/:id on load + handle back/forward
+  useEffect(() => { if (initialRecordId) openRecord(initialRecordId); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onPop = () => {
+      const s = window.location.pathname.split('/').filter(Boolean);
+      if (s[0] !== 'feac') return;
+      if (s[1] && s[1] !== 'nova') openRecord(s[1]);
+      else if (s[1] === 'nova') newPrestacao();
+      else setSection('historico');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── shell: step model ────────────────────────────────────────────────────────
   const STAGE_RANK: Record<string, number> = { criado: 0, extraido: 1, auditado: 2, tratado: 3, concluido: 4 };
@@ -281,11 +299,16 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
         </div>
 
         <div className="px-3 pb-1">
-          <button onClick={() => { setSection('historico'); loadHistory(); }}
+          <button onClick={() => { setSection('historico'); loadHistory(); navigate?.('/feac'); }}
             className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] transition-colors',
               section === 'historico' ? 'bg-sidebar-active text-primary font-semibold' : 'text-text-secondary hover:text-text hover:bg-white/5')}>
             <History size={15} /> Histórico
             {history.length > 0 && <span className="ml-auto text-[10px] bg-line/70 text-text px-1.5 py-0.5 rounded-full">{history.length}</span>}
+          </button>
+          <button onClick={() => setSection('ajuda')}
+            className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] transition-colors',
+              section === 'ajuda' ? 'bg-sidebar-active text-primary font-semibold' : 'text-text-secondary hover:text-text hover:bg-white/5')}>
+            <BookOpen size={15} /> Como usar
           </button>
         </div>
 
@@ -324,6 +347,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
             {section === 'preliminar' && <>Relatório <span className="font-bold text-primary">Preliminar</span></>}
             {section === 'tratamento' && <>Tratamento de <span className="font-bold text-primary">Documentos</span></>}
             {section === 'relatorio' && <>Prestação de <span className="font-bold text-primary">Contas — FEAC</span></>}
+            {section === 'ajuda' && <>Como <span className="font-bold text-primary">usar</span></>}
           </h1>
           {record && <div className="text-[11px] text-text-secondary truncate">{record.accountability?.projeto || '—'} · Contrato {record.accountability?.contractNumber || '—'}</div>}
         </header>
@@ -332,6 +356,7 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
           {section === 'historico' && (
             <HistoricoView {...{ history, historyLoading, openRecord, deleteRecord, newPrestacao }} />
           )}
+          {section === 'ajuda' && <AjudaFeac onNova={newPrestacao} />}
           {section === 'upload' && (
             <UploadView {...{ notas, setNotas, comprovantes, setComprovantes, extrato, setExtrato, fluxo, setFluxo, meta, setMeta, busy, progress, canStart, start }} />
           )}
@@ -359,6 +384,29 @@ export default function FeacApp({ user, apiFetch, addToast, onHome }: FeacAppPro
 }
 
 // ── Upload view ─────────────────────────────────────────────────────────────
+function AjudaFeac({ onNova }: { onNova: () => void }) {
+  const steps = [
+    { t: '1 · Entrada de documentos', d: 'Clique em "Nova prestação" e envie as notas fiscais, os comprovantes de pagamento, o extrato e a planilha de fluxo de caixa (.xlsx). Pode selecionar vários PDFs por campo — eles são mesclados. Informe o Nome do Projeto e o Número do Contrato (conforme o SGPP) e o período. A caixa de pré-visualização mostra o carimbo que será aplicado.' },
+    { t: '2 · Relatório preliminar', d: 'Revise a conciliação de cada lançamento (Conciliado / Sem NF / Sem comprovante / Valor divergente). Marque RATEIO=Sim quando aplicável e informe os valores (projeto / recurso próprio). Abra um lançamento para ver detalhes, consultar o CNPJ e ler a Observação. Você pode Exportar/Importar os dados (o ID é preservado).' },
+    { t: '3 · Tratamento de documentos', d: 'Ao clicar em "Tratar documentos", cada lançamento vira um PDF único — nota fiscal primeiro, depois o comprovante — com o carimbo na margem esquerda de todas as páginas, convertido para PDF/A-2b. A Declaração de Rateio e o fluxo de caixa atualizado também são gerados.' },
+    { t: '4 · Prestação de contas', d: 'Tela final com os campos da prestação e a tabela de 13 colunas. Baixe tudo em ZIP, o Relatório (CSV), o Fluxo de caixa atualizado (.xlsx), a Declaração de Rateio (PDF) e cada documento individual (nomeado ID - Nº NF - Fornecedor - Valor).' },
+  ];
+  return (
+    <div className="max-w-3xl space-y-5 animate-in fade-in duration-300">
+      <p className="text-[13px] text-text-secondary">O Processador FEAC concilia notas fiscais e comprovantes com a planilha de fluxo de caixa, trata os documentos e gera a prestação de contas pronta para a Fundação FEAC. Cada prestação fica salva no Histórico.</p>
+      <div className="space-y-3">
+        {steps.map((s, i) => (
+          <div key={i} className="bg-card border border-line rounded-lg p-4">
+            <div className="text-[13px] font-bold text-primary mb-1">{s.t}</div>
+            <div className="text-[12px] text-text-secondary leading-relaxed">{s.d}</div>
+          </div>
+        ))}
+      </div>
+      <button onClick={onNova} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded text-[11px] uppercase tracking-widest font-bold hover:bg-blue-700 transition-colors"><PlusCircle size={14} /> Começar uma nova prestação</button>
+    </div>
+  );
+}
+
 function HistoricoView({ history, historyLoading, openRecord, deleteRecord, newPrestacao }: any) {
   const STAGE_LABEL: Record<string, string> = { criado: 'Rascunho', extraido: 'Processado', auditado: 'Conciliado', tratado: 'Tratado', concluido: 'Concluído' };
   return (
