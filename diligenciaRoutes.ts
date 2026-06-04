@@ -485,6 +485,39 @@ export function buildReportTxt(rec: any): string {
 
 // ── route registration ────────────────────────────────────────────────────────
 
+/**
+ * Atualização em massa (LEVE) de toda a base: re-busca Receita+CEP de cada fornecedor e
+ * atualiza a parte cadastral do registro de diligência (endereço via CEP, número via
+ * fallback, tipo, CNAEs) + ajusta o veredito quanto à situação. As SANÇÕES permanecem do
+ * cache (válidas 30 dias). Throttled pelo rate limiter global. Roda em segundo plano.
+ */
+export async function lightRefreshAll(DATA_DIR: string): Promise<{ done: number; fail: number }> {
+  const DIL_DIR = path.join(DATA_DIR, "diligencia");
+  fs.mkdirSync(DIL_DIR, { recursive: true });
+  let done = 0, fail = 0;
+  for (const s of collectSuppliers(DATA_DIR)) {
+    try {
+      const receita = await fetchReceita(s.cnpj);
+      if (receita) {
+        const p = path.join(DIL_DIR, `${s.cnpj}.json`);
+        let dil: any;
+        try { dil = JSON.parse(fs.readFileSync(p, "utf-8")); }
+        catch { dil = { cnpj: s.cnpj, sancoes: [], verdict: "PENDENTE", checkedAt: new Date().toISOString(), validUntil: new Date(Date.now() + VALIDADE_DIAS * 86400000).toISOString(), checkedBy: "atualização em massa", ip: "sistema", metadata: {} }; }
+        dil.receita = receita;
+        dil.razaoSocial = receita.razao_social || dil.razaoSocial || "—";
+        dil.nomeFantasia = receita.nome_fantasia || dil.nomeFantasia || "";
+        const inativa = !/ATIVA/i.test(receita.situacao_cadastral || "");
+        const anySancao = (dil.sancoes || []).some((x: any) => x.status === "CONSTA");
+        dil.verdict = (anySancao || inativa) ? "ALERTA" : ((dil.sancoes || []).length ? "NADA_CONSTA" : "PENDENTE");
+        fs.writeFileSync(p, JSON.stringify(dil, null, 2));
+      }
+      done++;
+    } catch { fail++; }
+  }
+  console.log(`[Diligência] atualização em massa (cadastral) concluída: ${done} ok, ${fail} erro(s)`);
+  return { done, fail };
+}
+
 export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   const { DATA_DIR, requireAuth, sanitizeSegment } = ctx;
   const DIL_DIR = path.join(DATA_DIR, "diligencia");
@@ -546,6 +579,10 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   if (AUTO_ON) {
     setTimeout(() => sweep(), 8_000);       // primeira varredura logo após subir
     setInterval(() => sweep(), SWEEP_MS);   // novos + vencidos periodicamente
+  }
+  // atualização cadastral em massa (uma vez) quando DILIGENCIA_FORCE_REFRESH=1
+  if (process.env.DILIGENCIA_FORCE_REFRESH === "1") {
+    setTimeout(() => { console.log("[Diligência] DILIGENCIA_FORCE_REFRESH=1 — atualizando o cadastro de toda a base…"); void lightRefreshAll(DATA_DIR); }, 15_000);
   }
 
   // dispara a diligência de todos os ainda não consultados (ou vencidos) — manual
