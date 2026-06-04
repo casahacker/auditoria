@@ -314,6 +314,40 @@ async function consultaOFAC(DATA_DIR: string, nomes: string[]): Promise<any> {
   return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade antes de qualquer ação." } : {}) };
 }
 
+const OFAC_CONS_URL = process.env.OFAC_CONS_URL || "https://www.treasury.gov/ofac/downloads/consolidated/cons_prim.csv";
+/** OFAC Consolidated (não-SDN) — mesmo formato do SDN; match por NOME. Conservador → ATENÇÃO. */
+async function consultaOFACCons(DATA_DIR: string, nomes: string[]): Promise<any> {
+  const base = { fonte: "OFAC Consolidated (não-SDN) — EUA (Tesouro)", recurso: "ofac-cons", url: "https://sanctionssearch.ofac.treas.gov/", apiUrl: OFAC_CONS_URL, fetchedAt: new Date().toISOString() };
+  const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
+  if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const csv = await cachedSourceFile(DATA_DIR, "ofac-cons.csv", OFAC_CONS_URL, 3 * 86400000, "utf8");
+  if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a Consolidated List" };
+  const hits: any[] = []; const lines = csv.split(/\r?\n/);
+  for (const line of lines) {
+    const c = parseCsvLine(line); const nm = norm(c[1]); if (nm.length < 4) continue;
+    for (const alvo of alvos) if (nm.includes(alvo)) { hits.push({ tipo: `Possível correspondência OFAC Consolidated: "${String(c[1] || "").trim()}"`, orgao: `OFAC · ${String(c[2] || "").trim()} · ${String(c[3] || "").trim()} · CONFIRMAR identidade`, processo: String(c[0] || "").trim() }); break; }
+  }
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade." } : {}) };
+}
+
+const UN_SC_URL = process.env.UN_SC_URL || "https://scsanctions.un.org/resources/xml/en/consolidated.xml";
+/** UN Security Council Consolidated List (XML) — match por NOME (razão + sócios). Conservador → ATENÇÃO. */
+async function consultaUN(DATA_DIR: string, nomes: string[]): Promise<any> {
+  const base = { fonte: "UN Security Council Consolidated List", recurso: "un-sc", url: "https://main.un.org/securitycouncil/en/content/un-sc-consolidated-list", apiUrl: UN_SC_URL, fetchedAt: new Date().toISOString() };
+  const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
+  if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const xml = await cachedSourceFile(DATA_DIR, "un-consolidated.xml", UN_SC_URL, 3 * 86400000, "utf8");
+  if (!xml) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a UN Consolidated List" };
+  const hits: any[] = [];
+  const blocks = xml.match(/<(INDIVIDUAL|ENTITY)>[\s\S]*?<\/\1>/g) || [];
+  for (const b of blocks) {
+    const parts = [...b.matchAll(/<(?:FIRST|SECOND|THIRD|FOURTH)_NAME>([^<]+)<\/(?:FIRST|SECOND|THIRD|FOURTH)_NAME>/g)].map((m) => m[1].trim()).filter(Boolean);
+    const nome = parts.join(" "); const n = norm(nome); if (n.length < 4) continue;
+    for (const alvo of alvos) if (n.includes(alvo)) { const ref = (b.match(/<REFERENCE_NUMBER>([^<]+)</) || [])[1] || ""; hits.push({ tipo: `Possível correspondência ONU: "${nome}"`, orgao: `UN Security Council · ${ref} · CONFIRMAR identidade`, processo: ref }); break; }
+  }
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade." } : {}) };
+}
+
 /** PEP (Pessoas Expostas Politicamente) — checa os sócios (QSA) por nome no Portal da Transparência → ATENÇÃO (informativo). */
 async function consultaPEP(qsaNomes: string[]): Promise<any> {
   const base = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString() };
@@ -365,9 +399,11 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
       consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
       consultaListaSuja(DATA_DIR, cnpj),
       consultaOFAC(DATA_DIR, [razao, ...qsaNomes]),
+      consultaOFACCons(DATA_DIR, [razao, ...qsaNomes]),
+      consultaUN(DATA_DIR, [razao, ...qsaNomes]),
       consultaPEP(qsaNomes),
     ]);
-    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN (EUA, Tesouro)");
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List");
   }
   const anySancao = sancoes.some((s) => s.status === "CONSTA");
   const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
