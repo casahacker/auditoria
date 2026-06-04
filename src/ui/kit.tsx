@@ -9,7 +9,7 @@
  * cabeçalho, botões, chips de status, cartões e modais. Tokens de cor em index.css.
  */
 import React, { useEffect, useRef } from 'react';
-import { Layers, LogOut, X } from 'lucide-react';
+import { Layers, LogOut, X, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
 
@@ -99,6 +99,45 @@ export function Card({ className, children, ...rest }: React.HTMLAttributes<HTML
   return (
     <div {...rest} className={cn('bg-card border border-line rounded-lg', className)}>
       {children}
+    </div>
+  );
+}
+
+// ── Filtros: Select + busca ───────────────────────────────────────────────────
+export function Select({
+  value, onChange, options, label, className,
+}: {
+  value: string; onChange: (v: string) => void;
+  options: { value: string; label: string }[]; label?: string; className?: string;
+}) {
+  return (
+    <label className={cn('inline-flex items-center gap-2', className)}>
+      {label && <span className="text-[10px] uppercase tracking-widest text-text-secondary">{label}</span>}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-card border border-line rounded px-2.5 py-1.5 text-[12px] text-text hover:border-primary focus:border-primary focus:outline-none cursor-pointer"
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+export function SearchInput({
+  value, onChange, placeholder, className,
+}: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
+  return (
+    <div className={cn('inline-flex items-center gap-2 bg-card border border-line rounded px-2.5 py-1.5 focus-within:border-primary', className)}>
+      <Search size={14} className="text-text-secondary shrink-0" aria-hidden />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder || 'Buscar'}
+        className="bg-transparent text-[12px] text-text outline-none w-full min-w-[120px]"
+      />
+      {value && <IconBtn label="Limpar busca" className="p-0.5" onClick={() => onChange('')}><X size={13} /></IconBtn>}
     </div>
   );
 }

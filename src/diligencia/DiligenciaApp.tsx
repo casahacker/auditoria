@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
-import { Btn, Chip, Card, Modal, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls } from '../ui/kit';
+import { Btn, Chip, Card, Modal, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
 
 type Section = 'base' | 'resultado' | 'historico' | 'ajuda';
@@ -285,6 +285,19 @@ function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, run
   const processingCnpj = onlyDigits(queue?.processing || '');
   const active = !!queue && (queue.running || queue.pending > 0);
   const unconsulted = suppliers.filter((s: any) => !s.diligencia || !s.diligencia.valida).length;
+
+  // filtros
+  const [q, setQ] = useState('');
+  const [vf, setVf] = useState('all');
+  const [origem, setOrigem] = useState('all');
+  const qd = onlyDigits(q);
+  const origens: string[] = (Array.from(new Set(suppliers.flatMap((s: any) => s.origens || []))) as string[]).sort();
+  const filtered = suppliers.filter((s: any) => {
+    if (q) { const hay = `${s.nome || ''} ${s.cnpjFormatado || ''}`.toLowerCase(); if (!hay.includes(q.toLowerCase()) && !(qd && onlyDigits(s.cnpj).includes(qd))) return false; }
+    if (vf !== 'all') { if (vf === 'none') { if (s.diligencia) return false; } else if (s.diligencia?.verdict !== vf) return false; }
+    if (origem !== 'all' && !(s.origens || []).includes(origem)) return false;
+    return true;
+  });
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -322,71 +335,124 @@ function BaseView({ suppliers, suppliersLoading, runCheck, openSaved, queue, run
         <EmptyState icon={Building2} title="Nenhum fornecedor com CNPJ na base ainda"
           description="A base é montada a partir das prestações de contas. Digite um CNPJ no campo acima para consultar um fornecedor novo." />
       ) : (
-        <Card className="overflow-hidden">
-          <table className="w-full text-[12px]">
-            <thead className={tableHeadCls}><tr>
-              <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th>
-              <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
-              <th scope="col" className="px-4 py-2.5 font-semibold">Origem</th>
-              <th scope="col" className="px-4 py-2.5 font-semibold">Diligência</th>
-              <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
-            </tr></thead>
-            <tbody>
-              {suppliers.map((s: any) => {
-                const d = onlyDigits(s.cnpj);
-                return (
-                <tr key={s.cnpj} className="border-t border-line hover:bg-primary/5">
-                  <td className="px-4 py-2.5 max-w-[280px] truncate">{s.nome || '—'}</td>
-                  <td className="px-4 py-2.5 font-mono whitespace-nowrap">{s.cnpjFormatado}</td>
-                  <td className="px-4 py-2.5 text-text-secondary">{(s.origens || []).join(', ')}</td>
-                  <td className="px-4 py-2.5"><ChipStatus s={s.diligencia} /></td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    {processingCnpj === d ? (
-                      <span className="inline-flex items-center gap-1 text-primary text-[11px]"><Loader2 size={12} className="animate-spin" aria-hidden /> consultando…</span>
-                    ) : pendingSet.has(d) ? (
-                      <span className="text-text-secondary text-[11px]">na fila…</span>
-                    ) : (<>
-                      {s.diligencia?.valida && <button onClick={() => openSaved(s.cnpj)} className="text-primary hover:underline mr-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Ver</button>}
-                      <button onClick={() => runCheck(s.cnpj, !!s.diligencia?.valida)} className="text-primary hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{s.diligencia ? 'Reconsultar' : 'Consultar'}</button>
-                    </>)}
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </Card>
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput value={q} onChange={setQ} placeholder="Buscar por nome ou CNPJ" className="w-full sm:w-[260px]" />
+            <Select value={vf} onChange={setVf} options={[
+              { value: 'all', label: 'Todos os resultados' },
+              { value: 'ALERTA', label: 'Alerta' },
+              { value: 'NADA_CONSTA', label: 'Nada consta' },
+              { value: 'PENDENTE', label: 'Pendente' },
+              { value: 'none', label: 'Não consultado' },
+            ]} />
+            {origens.length > 1 && <Select value={origem} onChange={setOrigem} options={[{ value: 'all', label: 'Todas as origens' }, ...origens.map((o) => ({ value: o, label: o }))]} />}
+            {(q || vf !== 'all' || origem !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setVf('all'); setOrigem('all'); }}>Limpar</Btn>}
+            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {suppliers.length}</span>
+          </div>
+
+          {!filtered.length ? (
+            <EmptyState icon={Search} title="Nenhum fornecedor com esses filtros" description="Ajuste a busca ou os filtros acima." />
+          ) : (
+            <Card className="overflow-hidden">
+              <table className="w-full text-[12px]">
+                <thead className={tableHeadCls}><tr>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Origem</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Diligência</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
+                </tr></thead>
+                <tbody>
+                  {filtered.map((s: any) => {
+                    const d = onlyDigits(s.cnpj);
+                    return (
+                    <tr key={s.cnpj} className="border-t border-line hover:bg-primary/5">
+                      <td className="px-4 py-2.5 max-w-[280px] truncate">{s.nome || '—'}</td>
+                      <td className="px-4 py-2.5 font-mono whitespace-nowrap">{s.cnpjFormatado}</td>
+                      <td className="px-4 py-2.5 text-text-secondary">{(s.origens || []).join(', ')}</td>
+                      <td className="px-4 py-2.5"><ChipStatus s={s.diligencia} /></td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        {processingCnpj === d ? (
+                          <span className="inline-flex items-center gap-1 text-primary text-[11px]"><Loader2 size={12} className="animate-spin" aria-hidden /> consultando…</span>
+                        ) : pendingSet.has(d) ? (
+                          <span className="text-text-secondary text-[11px]">na fila…</span>
+                        ) : (<>
+                          {s.diligencia?.valida && <button onClick={() => openSaved(s.cnpj)} className="text-primary hover:underline mr-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Ver</button>}
+                          <button onClick={() => runCheck(s.cnpj, !!s.diligencia?.valida)} className="text-primary hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{s.diligencia ? 'Reconsultar' : 'Consultar'}</button>
+                        </>)}
+                      </td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
 }
 
 function HistoricoView({ history, openSaved }: any) {
+  const [q, setQ] = useState('');
+  const [vf, setVf] = useState('all');
+  const [val, setVal] = useState('all');
+  const qd = onlyDigits(q);
+  const filtered = history.filter((h: any) => {
+    if (q) { const hay = `${h.razaoSocial || ''} ${maskCnpj(h.cnpj)}`.toLowerCase(); if (!hay.includes(q.toLowerCase()) && !(qd && onlyDigits(h.cnpj).includes(qd))) return false; }
+    if (vf !== 'all' && h.verdict !== vf) return false;
+    if (val === 'valida' && !h.valida) return false;
+    if (val === 'vencida' && h.valida) return false;
+    return true;
+  });
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
       {!history.length ? (
         <EmptyState icon={History} title="Nenhuma diligência realizada ainda" description="Consulte um fornecedor na Base ou digite um CNPJ no campo do topo." />
       ) : (
-        <Card className="overflow-hidden">
-          <table className="w-full text-[12px]">
-            <thead className={tableHeadCls}><tr>
-              <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th><th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
-              <th scope="col" className="px-4 py-2.5 font-semibold">Resultado</th><th scope="col" className="px-4 py-2.5 font-semibold">Consulta</th>
-              <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
-            </tr></thead>
-            <tbody>
-              {history.map((h: any) => (
-                <tr key={h.cnpj} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openSaved(h.cnpj)}>
-                  <td className="px-4 py-2.5 max-w-[280px] truncate">{h.razaoSocial || '—'}</td>
-                  <td className="px-4 py-2.5 font-mono whitespace-nowrap">{maskCnpj(h.cnpj)}</td>
-                  <td className="px-4 py-2.5"><VerdictChip v={h.verdict} /></td>
-                  <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR')} {h.valida ? '' : '· vencida'}</td>
-                  <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" aria-hidden /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput value={q} onChange={setQ} placeholder="Buscar por nome ou CNPJ" className="w-full sm:w-[260px]" />
+            <Select value={vf} onChange={setVf} options={[
+              { value: 'all', label: 'Todos os resultados' },
+              { value: 'ALERTA', label: 'Alerta' },
+              { value: 'NADA_CONSTA', label: 'Nada consta' },
+              { value: 'PENDENTE', label: 'Pendente' },
+            ]} />
+            <Select value={val} onChange={setVal} options={[
+              { value: 'all', label: 'Todas as validades' },
+              { value: 'valida', label: 'Válidas' },
+              { value: 'vencida', label: 'Vencidas' },
+            ]} />
+            {(q || vf !== 'all' || val !== 'all') && <Btn variant="ghost" size="sm" onClick={() => { setQ(''); setVf('all'); setVal('all'); }}>Limpar</Btn>}
+            <span className="text-[11px] text-text-secondary ml-auto whitespace-nowrap">{filtered.length} de {history.length}</span>
+          </div>
+          {!filtered.length ? (
+            <EmptyState icon={Search} title="Nenhuma diligência com esses filtros" description="Ajuste a busca ou os filtros acima." />
+          ) : (
+            <Card className="overflow-hidden">
+              <table className="w-full text-[12px]">
+                <thead className={tableHeadCls}><tr>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th><th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Resultado</th><th scope="col" className="px-4 py-2.5 font-semibold">Consulta</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
+                </tr></thead>
+                <tbody>
+                  {filtered.map((h: any) => (
+                    <tr key={h.cnpj} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openSaved(h.cnpj)}>
+                      <td className="px-4 py-2.5 max-w-[280px] truncate">{h.razaoSocial || '—'}</td>
+                      <td className="px-4 py-2.5 font-mono whitespace-nowrap">{maskCnpj(h.cnpj)}</td>
+                      <td className="px-4 py-2.5"><VerdictChip v={h.verdict} /></td>
+                      <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR')} {h.valida ? '' : '· vencida'}</td>
+                      <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" aria-hidden /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
