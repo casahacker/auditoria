@@ -262,6 +262,80 @@ export async function consultaPT(recurso: string, label: string, razaoSocial: st
   }
 }
 
+// ── listas extras: Lista Suja (trabalho escravo), OFAC SDN, PEP ──────────────────
+const norm = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+/** Baixa e cacheia um arquivo de fonte (SDN, Lista Suja) em DATA_DIR/sources, com TTL; usa cache vencido em caso de falha. */
+async function cachedSourceFile(DATA_DIR: string, name: string, url: string, ttlMs: number, decode: "utf8" | "latin1"): Promise<string | null> {
+  const dir = path.join(DATA_DIR, "sources"); fs.mkdirSync(dir, { recursive: true });
+  const fp = path.join(dir, name);
+  const enc = decode === "latin1" ? "latin1" : "utf-8";
+  try { if (Date.now() - fs.statSync(fp).mtimeMs < ttlMs) return fs.readFileSync(fp, enc as BufferEncoding); } catch { /* sem cache */ }
+  try {
+    const r = await limitedFetch(url, { headers: { "User-Agent": "casahacker-auditoria/1.0", Accept: "*/*" }, signal: AbortSignal.timeout(60000) }, 1);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    fs.writeFileSync(fp, buf);
+    return buf.toString(enc as BufferEncoding);
+  } catch { try { return fs.readFileSync(fp, enc as BufferEncoding); } catch { return null; } }
+}
+
+const LISTA_SUJA_URL = process.env.LISTA_SUJA_URL || "https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho/areas-de-atuacao/cadastro_de_empregadores.csv";
+/** Cadastro de Empregadores (trabalho análogo ao de escravo) — match por CNPJ/CPF EXATO (definitivo → CONSTA). */
+async function consultaListaSuja(DATA_DIR: string, cnpj: string, cpfsExtras: string[] = []): Promise<any> {
+  const base = { fonte: "Cadastro de Empregadores — trabalho análogo ao de escravo (MTE)", recurso: "lista-suja", url: "https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho", apiUrl: LISTA_SUJA_URL, fetchedAt: new Date().toISOString() };
+  const csv = await cachedSourceFile(DATA_DIR, "lista-suja.csv", LISTA_SUJA_URL, 7 * 86400000, "latin1");
+  if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar o cadastro do MTE" };
+  const alvo = new Set([onlyDigits(cnpj), ...cpfsExtras.map(onlyDigits)].filter(Boolean));
+  const lines = csv.split(/\r?\n/); const hits: any[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(";"); if (c.length < 5) continue;
+    const doc = onlyDigits(c[4]);
+    if (doc && alvo.has(doc)) hits.push({ tipo: `Trabalho análogo ao de escravo — ${String(c[3] || "").trim()}`, orgao: `MTE · ${c[2] || "?"} · ${c[6] || "?"} trabalhador(es) · ação fiscal ${c[1] || "?"}`, dataInicio: c[1] || "", processo: String(c[9] || c[0] || "").trim() });
+  }
+  return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits, registros: lines.length - 1 };
+}
+
+const OFAC_SDN_URL = process.env.OFAC_SDN_URL || "https://www.treasury.gov/ofac/downloads/sdn.csv";
+function parseCsvLine(line: string): string[] { const out: string[] = []; let cur = "", q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; } else { if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch; } } out.push(cur); return out; }
+/** OFAC SDN (sanções dos EUA) — match por NOME (razão social + sócios). Conservador → ATENÇÃO (revisar, não auto-inelegível). */
+async function consultaOFAC(DATA_DIR: string, nomes: string[]): Promise<any> {
+  const base = { fonte: "OFAC SDN — Sanções dos EUA (Tesouro)", recurso: "ofac-sdn", url: "https://sanctionssearch.ofac.treas.gov/", apiUrl: OFAC_SDN_URL, fetchedAt: new Date().toISOString() };
+  const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
+  if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const csv = await cachedSourceFile(DATA_DIR, "sdn.csv", OFAC_SDN_URL, 3 * 86400000, "utf8");
+  if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a SDN List" };
+  const hits: any[] = []; const lines = csv.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line || line[0] === '"' && line.indexOf('","') === -1) { /* */ }
+    const c = parseCsvLine(line); const sdn = norm(c[1]); if (sdn.length < 4) continue;
+    for (const alvo of alvos) if (sdn.includes(alvo)) { hits.push({ tipo: `Possível correspondência OFAC SDN: "${String(c[1] || "").trim()}"`, orgao: `OFAC · ${String(c[2] || "").trim()} · ${String(c[3] || "").trim()} · CONFIRMAR identidade`, processo: String(c[0] || "").trim() }); break; }
+  }
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade antes de qualquer ação." } : {}) };
+}
+
+/** PEP (Pessoas Expostas Politicamente) — checa os sócios (QSA) por nome no Portal da Transparência → ATENÇÃO (informativo). */
+async function consultaPEP(qsaNomes: string[]): Promise<any> {
+  const base = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString() };
+  if (!process.env.PORTAL_TRANSPARENCIA_KEY) return { ...base, status: "PENDENTE", hits: [], erro: "Chave da API não configurada" };
+  const nomes = Array.from(new Set(qsaNomes.map((n) => String(n || "").trim()).filter((n) => norm(n).split(" ").length >= 2))).slice(0, 12);
+  if (!nomes.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const hits: any[] = []; const hoje = new Date();
+  try {
+    for (const nome of nomes) {
+      const r = await limitedFetch(`${PT_BASE}peps?nome=${encodeURIComponent(nome)}&pagina=1`, { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const lista = await r.json();
+      for (const p of Array.isArray(lista) ? lista : []) {
+        if (norm(p.nome) !== norm(nome)) continue;
+        const carenciaOk = !p.dt_fim_carencia || new Date(p.dt_fim_carencia) >= hoje;
+        if (carenciaOk) hits.push({ tipo: `PEP: ${String(p.nome).trim()} — ${String(p.descricao_funcao || "").trim()}`, orgao: `${String(p.nome_orgao || "").trim()} · exercício ${p.dt_inicio_exercicio || "?"}–${p.dt_fim_exercicio || "?"}`, dataFim: p.dt_fim_carencia || "" });
+      }
+    }
+  } catch (e: any) { return hits.length ? { ...base, status: "ATENCAO", hits, parcial: true } : { ...base, status: "ERRO", erro: e.message, hits: [] }; }
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits };
+}
+
 // ── supplier base ─────────────────────────────────────────────────────────────
 
 /**
@@ -283,13 +357,17 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
   if (receita) apis.push(receita.fonte);
   let sancoes: any[] = [];
   if (razao) {
+    const qsaNomes: string[] = (receita?.qsa || []).map((s: any) => s?.nome).filter(Boolean);
     sancoes = await Promise.all([
       consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
       consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
       consultaPT("cepim", "CEPIM — Entidades sem fins lucrativos impedidas", razao, cnpj),
       consultaPT("acordos-leniencia", "Acordos de Leniência", razao, cnpj),
+      consultaListaSuja(DATA_DIR, cnpj),
+      consultaOFAC(DATA_DIR, [razao, ...qsaNomes]),
+      consultaPEP(qsaNomes),
     ]);
-    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência)");
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN (EUA, Tesouro)");
   }
   const anySancao = sancoes.some((s) => s.status === "CONSTA");
   const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");

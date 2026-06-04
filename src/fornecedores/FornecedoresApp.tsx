@@ -375,7 +375,7 @@ const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: bo
   { title: 'Contato', fields: [{ k: 'telefone', label: 'Telefone', t: 'tel' }, { k: 'email', label: 'E-mail', t: 'email' }] },
   { title: 'Dados bancários', fields: [{ k: 'banco', label: 'Banco', t: 'banco' }, { k: 'agencia', label: 'Agência' }, { k: 'conta', label: 'Conta' }, { k: 'chavePix', label: 'Chave PIX' }] },
 ];
-const sancaoLabel = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
+const sancaoLabel = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'ATENCAO' ? `Atenção (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
 
 function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, onReconsultar, onSave, reloadKyc, onBack, onInvite }: any) {
   const [edit, setEdit] = useState(false);
