@@ -198,6 +198,9 @@ async function createSignature(rec: KycRecord, signer: { name: string; email: st
   const signerRec = recps.find((r) => r.role === "SIGNER") || recps[recps.length - 1];
   const token: string = signerRec?.token;
   if (!documentId || !token) throw new Error("Documenso não retornou documentId/token do signatário");
+  // O campo SIGNATURE do signatário precisa existir NO TEMPLATE (criado pela UI do Documenso),
+  // que é inherdado aqui. NÃO dá p/ criar via API: o POST /documents/{id}/fields grava fieldMeta
+  // null e o /send valida fieldMeta != null → 400 ("Signers must have at least one signature field").
   // envia (sai do rascunho → habilita a assinatura; e-mail de cópia ao CC)
   try { await dso("POST", `/documents/${documentId}/send`, { sendEmail: true }); }
   catch (e: any) { console.warn("[KYC] falha no send (pode já ter sido enviado):", e.message); }
