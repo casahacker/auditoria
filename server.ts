@@ -118,7 +118,8 @@ app.set("trust proxy", 1);
 
 // ── Security headers (SEC-02) ─────────────────────────────────────────────────
 // CSP disabled: SPA loads Google Fonts + Casa Hacker CDN; configure separately.
-app.use(helmet({ contentSecurityPolicy: false }));
+// HSTS/X-Frame-Options/Referrer-Policy vêm do nginx (snippets/security-headers.conf) — desligados aqui p/ não duplicar
+app.use(helmet({ contentSecurityPolicy: false, hsts: false, frameguard: false, referrerPolicy: false }));
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
 // General endpoints: 1mb limit (SEC-04). Audit run gets its own higher limit

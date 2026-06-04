@@ -145,13 +145,9 @@ async function runKycChecks(documento: string): Promise<{ trail: KycVerification
   return { trail, verdict, receita, sancoes };
 }
 
-// ── Documenso client (template + formValues; sem S3) ────────────────────────────
+// ── Documenso client (createDocument via S3 — PDF pré-preenchido) ────────────────
 const DOCUMENSO_URL = (process.env.DOCUMENSO_URL || "https://documenso.casahacker.org").replace(/\/$/, "");
 const DOCUMENSO_TOKEN = process.env.DOCUMENSO_API_TOKEN || "";
-const TEMPLATE_ID: Record<KycType, string> = {
-  kys: process.env.DOCUMENSO_KYS_TEMPLATE_ID || "",
-  kyg: process.env.DOCUMENSO_KYG_TEMPLATE_ID || "",
-};
 // Com S3 ligado no Documenso, criamos o documento por API (PDF pré-preenchido) — sem template.
 // Basta o token; vale para KYS e KYG (KYG deixa de depender de um template criado na UI).
 const documensoReady = (_t: KycType) => !!DOCUMENSO_TOKEN;
@@ -232,40 +228,6 @@ async function downloadSigned(documentId: number): Promise<Buffer | null> {
     if (!r.ok) return null;
     return Buffer.from(await r.arrayBuffer());
   } catch { return null; }
-}
-
-// ── formValues: achata o registro nos campos AcroForm do template ───────────────
-function addr(a: any): string {
-  if (!a) return "";
-  return [[a.logradouro, a.numero].filter(Boolean).join(", "), a.complemento, a.bairro, [a.municipio, a.uf].filter(Boolean).join("/"), a.cep ? `CEP ${a.cep}` : ""].filter(Boolean).join(" · ");
-}
-function buildFormValues(rec: KycRecord): Record<string, any> {
-  if (rec.type === "kys" && rec.kys) {
-    const k = rec.kys;
-    const fv: Record<string, any> = {
-      razao_social: k.razaoSocial, cnpj: fmtCnpj(k.cnpj), nome_fantasia: k.nomeFantasia,
-      empresa_endereco: addr(k.endereco), empresa_telefone: k.telefone, empresa_email: k.email,
-      banco: k.banco.banco, agencia: k.banco.agencia, conta: k.banco.conta, chave_pix: k.banco.chavePix,
-      rep_nome: k.repNome, rep_cpf: k.repCpf, rep_estado_civil: k.repEstadoCivil, rep_profissao: k.repProfissao,
-      rep_endereco: addr(k.repEndereco), rep_telefone: k.repTelefone, rep_email: k.repEmail,
-      observacoes: k.observacoes,
-    };
-    for (const [key, ans] of Object.entries(k.respostas || {})) {
-      fv[`${key}_resposta`] = ans.resposta === "sim" ? "SIM" : ans.resposta === "nao" ? "NÃO" : "";
-      if (ans.obs) fv[`${key}_obs`] = ans.obs;
-    }
-    return fv;
-  }
-  if (rec.type === "kyg" && rec.kyg) {
-    const g = rec.kyg;
-    return {
-      proponente_nome: g.nome, proponente_documento: g.documento.length === 14 ? fmtCnpj(g.documento) : fmtCnpj(g.documento),
-      projeto: g.projeto, proponente_endereco: addr(g.endereco), proponente_email: g.email, proponente_telefone: g.telefone,
-      banco: g.banco.banco, agencia: g.banco.agencia, conta: g.banco.conta, chave_pix: g.banco.chavePix,
-      observacoes: g.observacoes,
-    };
-  }
-  return {};
 }
 
 // ── elegibilidade: sem restrições + respostas adequadas + previdência cumprida ──
