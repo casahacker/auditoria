@@ -98,7 +98,7 @@ async function fetchReceitaRaw(cnpj: string): Promise<any> {
       const d: any = await r.json();
       return {
         fonte: "BrasilAPI (Receita Federal)", apiUrl: `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, fetchedAt: new Date().toISOString(),
-        razao_social: d.razao_social, nome_fantasia: d.nome_fantasia,
+        razao_social: d.razao_social, nome_fantasia: d.nome_fantasia, tipo: d.descricao_identificador_matriz_filial,
         situacao_cadastral: d.descricao_situacao_cadastral, data_situacao: d.data_situacao_cadastral, motivo_situacao: d.descricao_motivo_situacao_cadastral,
         natureza_juridica: d.natureza_juridica, porte: d.porte, abertura: d.data_inicio_atividade,
         capital_social: d.capital_social != null ? Number(d.capital_social).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "",
@@ -116,7 +116,7 @@ async function fetchReceitaRaw(cnpj: string): Promise<any> {
       const d: any = await r.json();
       return {
         fonte: "ReceitaWS (Receita Federal)", apiUrl: `https://www.receitaws.com.br/v1/cnpj/${cnpj}`, fetchedAt: new Date().toISOString(),
-        razao_social: d.nome, nome_fantasia: d.fantasia, situacao_cadastral: d.situacao, data_situacao: d.data_situacao, motivo_situacao: d.motivo_situacao,
+        razao_social: d.nome, nome_fantasia: d.fantasia, tipo: d.tipo, situacao_cadastral: d.situacao, data_situacao: d.data_situacao, motivo_situacao: d.motivo_situacao,
         natureza_juridica: typeof d.natureza_juridica === "object" ? d.natureza_juridica?.descricao : d.natureza_juridica,
         porte: d.porte, abertura: d.abertura, capital_social: d.capital_social,
         logradouro: d.logradouro, numero: d.numero, complemento: d.complemento, bairro: d.bairro, municipio: d.municipio, uf: d.uf, cep: d.cep,
@@ -131,22 +131,21 @@ async function fetchReceitaRaw(cnpj: string): Promise<any> {
 }
 
 /**
- * Enriquece o endereço vindo da Receita com a API de CEP (BrasilAPI) quando faltar o
- * logradouro/bairro — comum em MEIs/Empresários Individuais, cujo cadastro traz só CEP
- * e bairro. Complementar e tolerante a falha (não derruba a consulta).
+ * Padroniza o endereço pela API de CEP (BrasilAPI): logradouro/bairro/município/UF passam
+ * a vir do CEP (que é mais consistente/completo que a Receita, sobretudo em MEIs). Número e
+ * complemento permanecem da Receita. Tolerante a falha (não derruba a consulta).
  */
 async function enrichCep(o: any): Promise<void> {
   try {
     const cep = onlyDigits(o?.cep);
     if (cep.length !== 8) return;
-    if (o.logradouro && o.bairro) return; // endereço já completo
     const r = await limitedFetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, { headers: HTTP_HEADERS, signal: AbortSignal.timeout(10000) });
     if (!r.ok) return;
     const c: any = await r.json();
-    if (!o.logradouro && c.street) o.logradouro = c.street;
-    if (!o.bairro && c.neighborhood) o.bairro = c.neighborhood;
-    if (!o.municipio && c.city) o.municipio = c.city;
-    if (!o.uf && c.state) o.uf = c.state;
+    if (c.street) o.logradouro = c.street;          // CEP é a fonte do logradouro/bairro/município/UF
+    if (c.neighborhood) o.bairro = c.neighborhood;
+    if (c.city) o.municipio = c.city;
+    if (c.state) o.uf = c.state;
     o.cepFonte = "BrasilAPI (CEP)";
     o.cepApiUrl = `https://brasilapi.com.br/api/cep/v2/${cep}`;
     o.cepFetchedAt = new Date().toISOString();

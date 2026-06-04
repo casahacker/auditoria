@@ -305,12 +305,15 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, onImport, o
 }
 
 // ── Ficha do Fornecedor (header de status + abas acessíveis) ─────────────────────
-const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: boolean }[] }[] = [
+const CAD_GROUPS: { title: string; fields: { k: string; label: string; full?: boolean; multi?: boolean }[] }[] = [
   { title: 'Identificação', fields: [
     { k: 'razaoSocial', label: 'Razão social', full: true }, { k: 'nomeFantasia', label: 'Nome fantasia', full: true },
+    { k: 'tipo', label: 'Tipo (matriz/filial)' }, { k: 'porte', label: 'Porte' },
     { k: 'situacaoCadastral', label: 'Situação cadastral' }, { k: 'dataSituacao', label: 'Situação desde' },
-    { k: 'naturezaJuridica', label: 'Natureza jurídica', full: true }, { k: 'porte', label: 'Porte' }, { k: 'abertura', label: 'Abertura' },
-    { k: 'capitalSocial', label: 'Capital social' }, { k: 'cnaePrincipal', label: 'CNAE principal', full: true },
+    { k: 'motivoSituacao', label: 'Motivo da situação', full: true },
+    { k: 'naturezaJuridica', label: 'Natureza jurídica', full: true }, { k: 'abertura', label: 'Abertura' }, { k: 'capitalSocial', label: 'Capital social' },
+    { k: 'cnaePrincipal', label: 'CNAE principal', full: true },
+    { k: 'cnaesSecundarios', label: 'CNAEs secundários', full: true, multi: true },
   ] },
   { title: 'Endereço', fields: [
     { k: 'cep', label: 'CEP' }, { k: 'logradouro', label: 'Logradouro', full: true }, { k: 'numero', label: 'Número' },
@@ -371,9 +374,15 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
                     {edit ? (
                       <label className="block">
                         <span className="text-[10px] uppercase tracking-wider text-text-secondary">{f.label}{manual[f.k] && <span className="text-primary"> · manual</span>}</span>
-                        <input value={form[f.k] || ''} onChange={(e) => setForm({ ...form, [f.k]: e.target.value })}
-                          className="mt-1 w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[12px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
+                        {f.multi
+                          ? <textarea value={form[f.k] || ''} onChange={(e) => setForm({ ...form, [f.k]: e.target.value })} rows={5} className="mt-1 w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[12px] text-text focus:border-primary focus:outline-none resize-y" />
+                          : <input value={form[f.k] || ''} onChange={(e) => setForm({ ...form, [f.k]: e.target.value })} className="mt-1 w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[12px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />}
                       </label>
+                    ) : f.multi ? (
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-text-secondary mb-1">{f.label}{manual[f.k] && <span className="ml-1.5 text-[9px] text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</div>
+                        {c[f.k] ? <ul className="space-y-0.5">{String(c[f.k]).split('\n').filter(Boolean).map((x: string, i: number) => <li key={i} className="text-[12px] text-text flex gap-1.5"><span className="text-text-secondary shrink-0">•</span><span className="break-words">{x}</span></li>)}</ul> : <span className="text-[12px] text-text-secondary">—</span>}
+                      </div>
                     ) : (
                       <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{f.label}</span>
                         <span className="font-medium break-words">{c[f.k] || '—'}{manual[f.k] && <span className="ml-1.5 text-[9px] uppercase tracking-wider text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</span></div>

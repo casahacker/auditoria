@@ -482,7 +482,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
   // ── perfil consolidado, persistente e editável (cadastrais + diligência + KYS/KYG) ──
   const FORN_DIR = path.join(DATA_DIR, "fornecedores");
   fs.mkdirSync(FORN_DIR, { recursive: true });
-  const CADASTRO_FIELDS = ["razaoSocial", "nomeFantasia", "situacaoCadastral", "dataSituacao", "naturezaJuridica", "porte", "abertura", "capitalSocial", "cnaePrincipal", "cep", "logradouro", "numero", "complemento", "bairro", "municipio", "uf", "telefone", "email", "banco", "agencia", "conta", "chavePix", "observacoes"];
+  const CADASTRO_FIELDS = ["razaoSocial", "nomeFantasia", "tipo", "situacaoCadastral", "dataSituacao", "motivoSituacao", "naturezaJuridica", "porte", "abertura", "capitalSocial", "cnaePrincipal", "cnaesSecundarios", "cep", "logradouro", "numero", "complemento", "bairro", "municipio", "uf", "telefone", "email", "banco", "agencia", "conta", "chavePix", "observacoes"];
   const cadPath = (doc: string) => path.join(FORN_DIR, `${doc}.json`);
   const readCad = (doc: string): any => { try { return JSON.parse(fs.readFileSync(cadPath(doc), "utf-8")); } catch { return null; } };
   const writeCad = (doc: string, rec: any) => fs.writeFileSync(cadPath(doc), JSON.stringify(rec, null, 2));
@@ -494,9 +494,10 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const kyc = latestKyc(doc); const kd: any = kyc?.kys || kyc?.kyg || {}; const kEnd = kd.endereco || {}; const kB = kd.banco || {};
     const fields: Record<string, string> = {
       razaoSocial: r.razao_social || kyc?.kys?.razaoSocial || kyc?.kyg?.nome || "",
-      nomeFantasia: r.nome_fantasia || kd.nomeFantasia || "",
-      situacaoCadastral: r.situacao_cadastral || "", dataSituacao: r.data_situacao || "",
+      nomeFantasia: r.nome_fantasia || kd.nomeFantasia || "", tipo: r.tipo || "",
+      situacaoCadastral: r.situacao_cadastral || "", dataSituacao: r.data_situacao || "", motivoSituacao: r.motivo_situacao || "",
       naturezaJuridica: r.natureza_juridica || "", porte: r.porte || "", abertura: r.abertura || "", capitalSocial: r.capital_social || "", cnaePrincipal: r.cnae_principal || "",
+      cnaesSecundarios: Array.isArray(r.cnaes_secundarios) ? r.cnaes_secundarios.join("\n") : "",
       cep: r.cep || kEnd.cep || "", logradouro: r.logradouro || kEnd.logradouro || "", numero: r.numero || kEnd.numero || "", complemento: r.complemento || kEnd.complemento || "",
       bairro: r.bairro || kEnd.bairro || "", municipio: r.municipio || kEnd.municipio || "", uf: r.uf || kEnd.uf || "",
       telefone: r.telefone || kd.telefone || "", email: r.email || kd.email || "",
