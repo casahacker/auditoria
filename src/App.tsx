@@ -258,7 +258,7 @@ function LoginScreen({ errorParam }: { errorParam: string | null }) {
           className="h-12 mx-auto mb-6 invert opacity-90"
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
-        <h1 className="text-[28px] font-semibold text-primary mb-2">Stack Audit™</h1>
+        <h1 className="text-[28px] font-semibold text-primary mb-2">Auditoria</h1>
         <p className="text-text-secondary text-[12px] mb-8">
           Plataforma de Auditoria com IA
         </p>
@@ -1045,7 +1045,7 @@ table.rapc tr.row-pend td { background: #fff1f2; }
 
 <!-- ── CAPA ──────────────────────────────────────────────────────────────────── -->
 <div class="cover">
-  <div class="cover-logo">STACK AUDIT™</div>
+  <div class="cover-logo">AUDITORIA</div>
   <div class="cover-sub">Plataforma de Auditoria Financeira com IA · Casa Hacker</div>
   <div class="cover-box">
     <span class="field-label">Organização</span><span class="field-value">${esc(r.organization)}</span>
@@ -1127,7 +1127,7 @@ table.rapc tr.row-pend td { background: #fff1f2; }
 </div>
 
 <div class="footer">
-  Stack Audit™ &nbsp;·&nbsp; casahacker.org &nbsp;·&nbsp; Contrato #${esc(r.contractNumber)} &nbsp;·&nbsp; ${esc(r.organization)} &nbsp;·&nbsp; ID ${r.id.slice(0, 8).toUpperCase()}
+  Auditoria &nbsp;·&nbsp; casahacker.org &nbsp;·&nbsp; Contrato #${esc(r.contractNumber)} &nbsp;·&nbsp; ${esc(r.organization)} &nbsp;·&nbsp; ID ${r.id.slice(0, 8).toUpperCase()}
 </div>
 
 <script>window.onload = function() { setTimeout(function() { window.focus(); window.print(); }, 150); };</script>
@@ -1188,7 +1188,7 @@ table.rapc tr.row-pend td { background: #fff1f2; }
       <rect width="32" height="32" rx="4" fill="#0f62fe"/>
       <text x="6" y="22" font-family="monospace" font-size="18" font-weight="800" fill="#fff">CH</text>
       <text x="40" y="14" font-family="'IBM Plex Mono',monospace" font-size="9" font-weight="700" fill="#0f62fe" text-anchor="start" letter-spacing="1">CASA HACKER</text>
-      <text x="40" y="26" font-family="'IBM Plex Mono',monospace" font-size="7" fill="#525252" text-anchor="start" letter-spacing="0.5">Stack Audit™</text>
+      <text x="40" y="26" font-family="'IBM Plex Mono',monospace" font-size="7" fill="#525252" text-anchor="start" letter-spacing="0.5">Auditoria</text>
     </svg>`;
     const originalRowHtml = item.originalRow
       ? Object.entries(item.originalRow).map(([k, v]) => row(k, String(v ?? ''))).join('')
@@ -1237,7 +1237,7 @@ table.rapc tr.row-pend td { background: #fff1f2; }
 <div><span class="badge">${item.status}</span></div>
 <div class="grid">
   <div class="col section">
-    <h2>Apuração Stack Audit™</h2>
+    <h2>Apuração Auditoria</h2>
     <table>
       ${row('Descrição', item.description)}
       ${row('Atividade / Rubrica', item.activity)}
@@ -1261,11 +1261,11 @@ table.rapc tr.row-pend td { background: #fff1f2; }
   </div>
 </div>
 <div class="section">
-  <h2>Observações Stack Audit™</h2>
+  <h2>Observações Auditoria</h2>
   <div class="obs">${item.observations || (item.status === 'Conciliado' ? 'Lançamento conciliado com documentos fiscais e comprovantes de pagamento sem divergências.' : 'Nenhuma observação registrada.')}</div>
 </div>
 ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div class="obs" style="border-left:3px solid #0f62fe">${item.auditorNote}</div></div>` : ''}
-<footer>CONFIDENCIAL — USO INTERNO &nbsp;&bull;&nbsp; Stack Audit™ — Associação Casa Hacker &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97</footer>
+<footer>CONFIDENCIAL — USO INTERNO &nbsp;&bull;&nbsp; Auditoria — Associação Casa Hacker &nbsp;&bull;&nbsp; CNPJ 36.038.079/0001-97</footer>
 <script>window.onload=()=>{window.print();}</script>
 </body></html>`;
     const win = window.open('', '_blank', 'width=900,height=700');
@@ -1437,7 +1437,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         <header className="px-10 py-4 border-b border-line flex items-center justify-between bg-sidebar sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-8 w-auto object-contain invert opacity-90" />
-            <div className="text-primary font-semibold text-[12px]">Stack Audit™</div>
+            <div className="text-primary font-semibold text-[12px]">Auditoria</div>
             <span className="text-text-secondary text-[12px] font-mono hidden sm:inline">· Consulta Pública de Auditoria</span>
           </div>
           {sa && (
@@ -1660,7 +1660,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
           {/* Footer */}
           <div className="border-t border-line pt-6 text-center text-[12px] text-text-secondary font-mono">
-            Auditoria gerada pela plataforma <span className="text-primary font-semibold">Stack Audit™</span> · Casa Hacker &bull; Este link é público e foi compartilhado pela equipe auditora.
+            Auditoria gerada pela plataforma <span className="text-primary font-semibold">Auditoria</span> · Casa Hacker &bull; Este link é público e foi compartilhado pela equipe auditora.
           </div>
         </main>
 
@@ -1676,7 +1676,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="bg-card border border-line rounded-xl w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-line sticky top-0 bg-card z-10">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-[12px] font-semibold">Apuração Stack Audit™ — Lançamento #{selectedItem.id}</h2>
+                  <h2 className="text-[12px] font-semibold">Apuração Auditoria — Lançamento #{selectedItem.id}</h2>
                   {selectedItem.itemCode && (
                     <button
                       onClick={() => {
@@ -1868,7 +1868,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
       <SkipLink />
 
       {/* Sidebar (kit compartilhado) */}
-      <ToolSidebar brand="Stack Audit" onHome={() => setActiveTool('launcher')} user={user}>
+      <ToolSidebar brand="Auditoria" onHome={() => setActiveTool('launcher')} user={user}>
         {([
           { id: 'nova', label: 'Nova análise', icon: PlusCircle },
           { id: 'processando', label: 'Processando', icon: Loader2 },
@@ -1891,7 +1891,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
         {/* Header (kit compartilhado) */}
         <ToolHeader
           light={AUDIT_HEADERS[activeSection][0]} accent={AUDIT_HEADERS[activeSection][1]}
-          right={<div className="text-[12px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-semibold">Stack Audit™</div>}
+          right={<div className="text-[12px] bg-sidebar-active px-3 py-1.5 rounded border border-primary text-primary font-semibold">Auditoria</div>}
         />
 
         {/* Metadata strip — só nas telas em que os dados do contrato são relevantes */}
@@ -1950,7 +1950,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   <span>Rubrica Aprovada</span><span>Lançamento Declarado</span><span>Documento Fiscal</span><span>Pagamento Efetuado</span>
                 </div>
                 <p className="mt-6 text-[12px] text-text-secondary italic leading-relaxed">
-                  * O Stack Audit™ verificará individualmente cada lançamento dos CSVs contra as evidências PDF.
+                  * A Auditoria verificará individualmente cada lançamento dos CSVs contra as evidências PDF.
                 </p>
               </div>
             </div>
@@ -1974,10 +1974,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     canStartAudit ? 'bg-primary text-white shadow-lg hover:scale-[1.02]' : 'bg-line text-text-secondary opacity-50 cursor-not-allowed'
                   )}
                 >
-                  Iniciar Stack Audit™ →
+                  Iniciar Auditoria →
                 </button>
                 <p className="mt-4 text-[12px] text-text-secondary text-center leading-relaxed">
-                  Preencha todos os slots e metadados para habilitar o Stack Audit™.
+                  Preencha todos os slots e metadados para habilitar a Auditoria.
                 </p>
               </div>
 
@@ -1998,7 +1998,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
           <section className="px-10 py-20 max-w-4xl mx-auto flex-1">
             <div className="text-center mb-16">
               <h1 className="text-[32px] font-semibold tracking-tighter mb-4">Auditoria em execução</h1>
-              <p className="text-text-secondary text-[14px]">O Stack Audit™ está cruzando 4 camadas de dados para cada lançamento financeiro.</p>
+              <p className="text-text-secondary text-[14px]">A Auditoria está cruzando 4 camadas de dados para cada lançamento financeiro.</p>
             </div>
             <div className="mb-16">
               <div className="h-1 w-full bg-line rounded-full overflow-hidden mb-4">
@@ -2854,7 +2854,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
               <BookOpen size={22} className="text-primary" />
               <div>
                 <h1 className="text-[20px] font-semibold">Documentação da Plataforma</h1>
-                <p className="text-[12px] text-text-secondary font-mono mt-0.5">Stack Audit™ — Casa Hacker &bull; Guia completo de uso e interpretação</p>
+                <p className="text-[12px] text-text-secondary font-mono mt-0.5">Auditoria — Casa Hacker &bull; Guia completo de uso e interpretação</p>
               </div>
             </div>
 
@@ -2879,7 +2879,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <ol className="space-y-2 list-none">
                       {[
                         ['Nova análise', 'Faça upload dos 4 arquivos (2 CSVs + 2 PDFs) e preencha os metadados do contrato.'],
-                        ['Processando', 'O Stack Audit™ extrai texto dos PDFs e cruza os dados contra o orçamento aprovado usando IA.'],
+                        ['Processando', 'A Auditoria extrai texto dos PDFs e cruza os dados contra o orçamento aprovado usando IA.'],
                         ['Resultado', 'Visualize o RAPC, métricas de conciliação, gráfico de execução orçamentária e itens diligenciados.'],
                         ['Histórico', 'Acesse auditorias anteriores a qualquer momento para consulta ou reprocessamento.'],
                       ].map(([title, desc], i) => (
@@ -3009,7 +3009,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   </div>
                   <div>
                     <h3 className="text-[12px] font-semibold text-text mb-2">Verificação Quádrupla</h3>
-                    <p>O algoritmo do Stack Audit™ cruza cada lançamento contra 4 fontes simultaneamente: <strong className="text-text">(1)</strong> CSV de Orçamento Aprovado, <strong className="text-text">(2)</strong> CSV de Prestação de Contas, <strong className="text-text">(3)</strong> PDF de Notas Fiscais e <strong className="text-text">(4)</strong> PDF de Comprovantes de Pagamento. Somente itens com correspondência em todas as camadas recebem status "Conciliado".</p>
+                    <p>O algoritmo da Auditoria cruza cada lançamento contra 4 fontes simultaneamente: <strong className="text-text">(1)</strong> CSV de Orçamento Aprovado, <strong className="text-text">(2)</strong> CSV de Prestação de Contas, <strong className="text-text">(3)</strong> PDF de Notas Fiscais e <strong className="text-text">(4)</strong> PDF de Comprovantes de Pagamento. Somente itens com correspondência em todas as camadas recebem status "Conciliado".</p>
                   </div>
                 </div>
               </div>
@@ -3019,19 +3019,19 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 <h2 className="text-[12px] font-semibold text-primary mb-4 pb-3 border-b border-line">4. Glossário de termos</h2>
                 <dl className="grid grid-cols-1 gap-3 text-[12px]">
                   {[
-                    ['RAPC', 'Relatório de Apuração de Prestação de Contas. Documento gerado pelo Stack Audit™ com o resultado da conciliação de todos os lançamentos.'],
+                    ['RAPC', 'Relatório de Apuração de Prestação de Contas. Documento gerado pela Auditoria com o resultado da conciliação de todos os lançamentos.'],
                     ['Lançamento', 'Cada linha do CSV de Prestação de Contas representa um lançamento financeiro — uma despesa declarada pelo proponente.'],
                     ['Conciliado', 'Lançamento auditado com sucesso. Todos os 4 documentos cruzados confirmam o gasto.'],
                     ['Ressalva', 'Lançamento com pequena divergência ou documentação incompleta que pode ser corrigida com justificativa.'],
                     ['Pendente', 'Lançamento sem lastro documental completo. Exige providência do proponente.'],
                     ['Diligência', 'Processo formal de complementação documental solicitado ao proponente quando há muitos itens pendentes.'],
-                    ['Verificação Quádrupla', 'Metodologia proprietária do Stack Audit™ que cruza CSV orçamento + CSV despesas + PDF notas fiscais + PDF comprovantes.'],
+                    ['Verificação Quádrupla', 'Metodologia proprietária da Auditoria que cruza CSV orçamento + CSV despesas + PDF notas fiscais + PDF comprovantes.'],
                     ['Razão Social', 'Nome jurídico registrado de uma pessoa jurídica na Receita Federal. Distinto do nome fantasia.'],
                     ['Rubrica / Atividade', 'Linha orçamentária aprovada à qual o gasto deve ser imputado (ex: "Recursos Humanos", "Material de Consumo").'],
                     ['Dotação Orçamentária', 'Valor aprovado para uma determinada rubrica no orçamento do projeto.'],
                     ['NSU', 'Número Sequencial Único — identificador único de transações financeiras em sistemas bancários.'],
                     ['TXID PIX', 'Transaction ID — identificador único de cada transação PIX, gerado pelo sistema bancário.'],
-                    ['Tarifa Bancária', 'Cobrança de serviço bancário. Tarifas de até R$ 150,00 são automaticamente conciliadas pelo Stack Audit™ sem necessidade de nota fiscal.'],
+                    ['Tarifa Bancária', 'Cobrança de serviço bancário. Tarifas de até R$ 150,00 são automaticamente conciliadas pela Auditoria sem necessidade de nota fiscal.'],
                     ['NF-e / NFS-e', 'Nota Fiscal Eletrônica (produtos) / Nota Fiscal de Serviços Eletrônica. Documentos fiscais obrigatórios para comprovação de despesas.'],
                     ['Prestação de Contas', 'Processo pelo qual o proponente comprova ao financiador que os recursos foram aplicados conforme o plano de trabalho aprovado.'],
                     ['Terceiro Setor', 'Organizações sem fins lucrativos, como OSCs, institutos e fundações, que executam projetos com recursos públicos ou privados.'],
@@ -3053,7 +3053,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                   {[
                     'PDFs escaneados (imagens) não são processados — apenas documentos com texto selecionável são suportados.',
                     'A IA pode cometer erros. Revisão humana por amostragem é obrigatória antes de qualquer encaminhamento oficial.',
-                    'Os resultados do Stack Audit™ não constituem parecer jurídico, contábil ou fiscal. São uma ferramenta de apoio operacional.',
+                    'Os resultados da Auditoria não constituem parecer jurídico, contábil ou fiscal. São uma ferramenta de apoio operacional.',
                     'A plataforma não armazena dados pessoais além do necessário para autenticação (Google OAuth @casahacker.org).',
                     'Acesso restrito a usuários do domínio @casahacker.org. Não compartilhe credenciais ou resultados com terceiros sem autorização.',
                     'A Verificação Quádrupla depende da qualidade do texto extraído dos PDFs. Documentos mal formatados ou com tabelas complexas podem reduzir a precisão.',
@@ -3077,13 +3077,13 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
             <div className="bg-bg border border-line p-8 max-w-2xl w-full">
               <h2 className="text-[20px] font-semibold mb-4 text-primary">Termo de Responsabilidade</h2>
               <p className="text-[14px] text-text-secondary mb-6 leading-relaxed">
-                O Casa Hacker® Stack Audit™ é um auditor auxiliar e não deve substituir processos analíticos e de inteligência, mas sim <b>processos operacionais</b>.
+                A Auditoria (Casa Hacker®) é um auditor auxiliar e não deve substituir processos analíticos e de inteligência, mas sim <b>processos operacionais</b>.
               </p>
               <div className="space-y-4 mb-8">
                 {[
-                  'Usarei o Stack Audit™ como auxiliar de auditoria.',
-                  'Analisarei os resultados por amostragem para confirmação dos dados gerados pelo Stack Audit™.',
-                  'Não encaminharei resultados, análises e informações integralmente gerados pelo Stack Audit™ sem verificação por amostragem.',
+                  'Usarei a Auditoria como auxiliar de auditoria.',
+                  'Analisarei os resultados por amostragem para confirmação dos dados gerados pela Auditoria.',
+                  'Não encaminharei resultados, análises e informações integralmente gerados pela Auditoria sem verificação por amostragem.',
                   'Compreendo que as informações são de uso confidencial e interno na Associação Casa Hacker.',
                 ].map((term, idx) => (
                   <label key={idx} className="flex items-start gap-4 cursor-pointer group">
@@ -3171,10 +3171,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
               {/* Modal scrollable body */}
               <div className="overflow-y-auto flex-1 custom-scrollbar">
                 <div className="grid grid-cols-2 gap-0 border-b border-line">
-                  {/* Left: Stack Audit™ analysis */}
+                  {/* Left: Auditoria analysis */}
                   <div className="p-8 border-r border-line">
                     <h3 className="text-[12px] font-semibold pb-3 mb-4 border-b border-line text-primary">
-                      Apuração Stack Audit™
+                      Apuração Auditoria
                     </h3>
                     <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-3 text-[12px]">
                       {(() => {
@@ -3334,7 +3334,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                 <div className="grid grid-cols-2 gap-0">
                   <div className="p-8 border-r border-line">
                     <h3 className="text-[12px] font-semibold mb-4 text-primary">
-                      Observações Stack Audit™
+                      Observações Auditoria
                       <span className={cn('ml-2 text-[12px] px-2 py-0.5 rounded border font-normal',
                         selectedItem.status === 'Conciliado' && 'bg-success/10 text-success border-success/30',
                         selectedItem.status === 'Ressalva' && 'bg-warning/10 text-warning border-warning/30',
@@ -3362,7 +3362,7 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
                     <div className="bg-card border border-line p-4 rounded text-[14px] font-sans leading-relaxed text-text-secondary min-h-[100px]">
                       {selectedItem.status === 'Conciliado'
                         ? 'Nenhuma ação necessária. Lançamento conciliado com documentos fiscais e comprovantes de pagamento sem divergências.'
-                        : 'Verifique o documento na respectiva página nos comprovantes originais. Divergências foram geradas pelo Stack Audit™ validando o conteúdo textual dos PDFs. Itens sem lastro documental exigem conciliação humana.'}
+                        : 'Verifique o documento na respectiva página nos comprovantes originais. Divergências foram geradas pela Auditoria validando o conteúdo textual dos PDFs. Itens sem lastro documental exigem conciliação humana.'}
                     </div>
                   </div>
                 </div>
@@ -3648,7 +3648,7 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
       <header className="px-6 sm:px-10 py-5 border-b border-line flex items-center justify-between bg-sidebar">
         <div className="flex items-center gap-4">
           <img src="https://casahacker.org/wp-content/uploads/2023/07/logo_vertical-branco.svg" alt="Casa Hacker" className="h-9 w-auto object-contain invert opacity-90" />
-          <div className="text-primary font-semibold text-[12px]">Stack Audit™</div>
+          <div className="text-primary font-semibold text-[12px]">Auditoria</div>
           <span className="text-text-secondary text-[12px] font-mono hidden sm:inline">· Suíte de Ferramentas</span>
         </div>
         <div className="flex items-center gap-3">
@@ -3889,7 +3889,7 @@ function VerdictBanner({ result }: { result: AuditResult }) {
     <div className={cn('mb-8 p-6 border rounded-xl', `border-${color}/30 bg-${color}/5`)}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[12px] text-text-secondary mb-2">Parecer Final — Stack Audit™</p>
+          <p className="text-[12px] text-text-secondary mb-2">Parecer Final — Auditoria</p>
           <h2 className={cn('text-[32px] font-semibold', `text-${color}`)}>{result.verdict}</h2>
           <p className="text-text-secondary text-[14px] mt-2 font-mono">
             {result.organization} &bull; {result.periodStart} → {result.periodEnd} &bull; Contrato {result.contractNumber}

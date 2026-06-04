@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Stack Audit — kit de UI compartilhado (IBM Carbon / Casa Hacker).
+ * Auditoria — kit de UI compartilhado (IBM Carbon / Casa Hacker).
  *
  * Primitivos usados pelas três ferramentas (Auditoria, FEAC/SGPP e Diligência) e
  * pelo launcher, para que toda a suíte tenha o MESMO design: mesma barra lateral,

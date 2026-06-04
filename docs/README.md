@@ -1,7 +1,7 @@
-# Stack Audit™ — Documentação
+# Auditoria — Documentação
 
 Plataforma de auditoria e prestação de contas da Associação Casa Hacker. Acesse em
-`https://stack-audit.casahacker.org` (login Google `@casahacker.org`). A tela inicial é
+`https://auditoria.casahacker.org` (login Google `@casahacker.org`). A tela inicial é
 um **launcher** com três ferramentas:
 
 | Ferramenta | Para que serve | Guia |

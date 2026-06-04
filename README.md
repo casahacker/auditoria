@@ -1,4 +1,4 @@
-# Stack Audit™
+# Auditoria
 
 [![Node.js](https://img.shields.io/badge/node-22+-339933.svg)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/react-19-61DAFB.svg)](https://react.dev/)
@@ -8,7 +8,7 @@
 
 **Suíte de auditoria e prestação de contas para organizações de impacto social.**
 
-O **Stack Audit™** é uma plataforma da **Associação Casa Hacker** com **três ferramentas** sob um único launcher, compartilhando autenticação, design system (IBM Carbon) e base de fornecedores:
+O **Auditoria** é uma plataforma da **Associação Casa Hacker** com **três ferramentas** sob um único launcher, compartilhando autenticação, design system (IBM Carbon) e base de fornecedores:
 
 | # | Ferramenta | Para que serve |
 |---|---|---|
@@ -18,7 +18,7 @@ O **Stack Audit™** é uma plataforma da **Associação Casa Hacker** com **tr�
 
 > O **Cockpit de Fornecedores** unifica as antigas ferramentas *Diligência* e *Conformidade KYS/KYG* numa só (o KYS/KYG é exigido apenas para contratações específicas). O preenchimento do KYS/KYG é feito pelo próprio fornecedor numa **página pública** (`/kys`, `/kyg`).
 
-> Produção: `https://stack-audit.casahacker.org` · login Google OAuth restrito ao domínio `@casahacker.org`.
+> Produção: `https://auditoria.casahacker.org` · login Google OAuth restrito ao domínio `@casahacker.org`.
 
 ---
 
@@ -99,7 +99,7 @@ Barra fixa de acessibilidade (tema claro/escuro, **alto contraste WCAG AA**, tam
 ## Estrutura do projeto
 
 ```text
-stack-audit/
+auditoria/
 ├── src/
 │   ├── App.tsx                  # Launcher + Auditoria (Tool A) + roteamento de tools
 │   ├── ui/kit.tsx               # Kit de UI compartilhado (Carbon): Btn, Chip, Card,
@@ -149,7 +149,7 @@ DEEPSEEK_API_KEY=sk-...                 # IA da auditoria/FEAC
 GOOGLE_CLIENT_ID=...                    # Login Google
 GOOGLE_CLIENT_SECRET=...
 SESSION_SECRET=...                      # openssl rand -hex 32
-APP_URL=https://stack-audit.example.org # base do callback OAuth (sem barra final)
+APP_URL=https://auditoria.example.org # base do callback OAuth (sem barra final)
 
 # Opcionais
 AZURE_DI_ENDPOINT=                      # extração via Azure DI
@@ -182,11 +182,11 @@ npm run build            # build de produção (Vite)
 ```bash
 # build (TMPDIR em /data porque /var é pequeno; formato docker p/ compatibilidade)
 sudo TMPDIR=/data/podman-tmp/tmp BUILDAH_FORMAT=docker podman-compose build
-sudo systemctl stop stack-audit && sudo podman rm -f stack-audit && sudo systemctl start stack-audit
-# saúde: https://stack-audit.casahacker.org/api/health
+sudo systemctl stop auditoria && sudo podman rm -f auditoria && sudo systemctl start auditoria
+# saúde: https://auditoria.casahacker.org/api/health
 ```
 
-Porta interna `127.0.0.1:18088 → 3000`, volume `/data/stack-audit/data → /app/data`, rede `10.89.11.0/24`, memória 1G (o tratamento PDF/A do FEAC é mais pesado que a auditoria).
+Porta interna `127.0.0.1:18088 → 3000`, volume `/data/auditoria/data → /app/data`, rede `10.89.11.0/24`, memória 1G (o tratamento PDF/A do FEAC é mais pesado que a auditoria).
 
 ---
 

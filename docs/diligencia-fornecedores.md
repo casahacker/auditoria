@@ -2,7 +2,7 @@
 
 Guia do usuário. A Diligência verifica, a partir de um **CNPJ**, a situação cadastral na **Receita Federal** e a presença do fornecedor em **listas de restrição** oficiais, gerando um **relatório auditável e exportável (PDF)**. Cada consulta é registrada (data-hora, IP, solicitante, APIs) e tem **validade de 30 dias**.
 
-> Acesso: `https://stack-audit.casahacker.org` → login `@casahacker.org` → cartão **"Diligência de Fornecedores"**.
+> Acesso: `https://auditoria.casahacker.org` → login `@casahacker.org` → cartão **"Diligência de Fornecedores"**.
 
 ---
 

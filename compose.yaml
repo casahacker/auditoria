@@ -1,13 +1,13 @@
 services:
-  stack-audit:
+  auditoria:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
         APP_URL: ${APP_URL}
-    image: localhost/stack-audit:latest
-    container_name: stack-audit
+    image: localhost/auditoria:latest
+    container_name: auditoria
     restart: on-failure:3
     security_opt:
       - "no-new-privileges:true"
@@ -40,7 +40,7 @@ services:
           cpus: '0.25'
           memory: 256M
     volumes:
-      - /data/stack-audit/data:/app/data
+      - /data/auditoria/data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
@@ -50,10 +50,10 @@ services:
     ports:
       - "127.0.0.1:18088:3000"
     networks:
-      - stack-audit-net
+      - auditoria-net
 
 networks:
-  stack-audit-net:
+  auditoria-net:
     driver: bridge
     ipam:
       config:
