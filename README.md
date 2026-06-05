@@ -14,7 +14,7 @@ O **Auditoria** é uma plataforma da **Associação Casa Hacker** com **três fe
 |---|---|---|
 | **A** | **Auditoria de Prestação de Contas** | Concilia notas fiscais, comprovantes e orçamento por rubrica com IA (DeepSeek + Azure Document Intelligence) e emite o parecer final (RAPC). |
 | **B** | **Processador FEAC / SGPP** | Concilia lançamentos × documentos, **trata** os PDFs (mescla, carimbo de margem, conversão **PDF/A-2b**), gera a **Declaração de Rateio** e o Relatório de Prestação de Contas para a Fundação FEAC. |
-| **C** | **Cockpit de Fornecedores** | Concentra, por fornecedor, a **Diligência** (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) **e** a **Conformidade KYS / KYG** (cadastro verificado + **assinatura via Documenso**). A diferença entre fornecedores é apenas ter ou não KYS/KYG assinado. |
+| **C** | **Cockpit de Fornecedores** | Concentra, por fornecedor, a **Diligência** (Receita Federal + **15 listas de restrição** nacionais e internacionais) **e** a **Conformidade KYS / KYG** (cadastro verificado + **assinatura via Documenso**). A diferença entre fornecedores é apenas ter ou não KYS/KYG assinado. |
 
 > O **Cockpit de Fornecedores** unifica as antigas ferramentas *Diligência* e *Conformidade KYS/KYG* numa só (o KYS/KYG é exigido apenas para contratações específicas). O preenchimento do KYS/KYG é feito pelo próprio fornecedor numa **página pública** (`/kys`, `/kyg`).
 
@@ -40,7 +40,7 @@ Fluxo em 4 etapas, cada prestação persistida no servidor:
 4. **Prestação de contas** — relatório de 13 colunas + downloads (ZIP, CSV, `.xlsx`, Declaração de Rateio, PDF por lançamento).
 
 ### C — Diligência de Fornecedores
-- Consulta por **CNPJ**: cadastro completo na Receita (BrasilAPI → fallback ReceitaWS) + listas de restrição da CGU.
+- Consulta por **CNPJ**: cadastro completo na Receita (BrasilAPI → fallback ReceitaWS) + **15 listas de restrição** (CGU + sanções nacionais e internacionais — ver [guia da diligência](docs/diligencia-fornecedores.md)).
 - As listas do Portal da Transparência são consultadas **por razão social** e filtradas pelo **CNPJ exato** — varrendo todas as páginas da resposta (o filtro por CNPJ da API oficial é inoperante). Na prática a verificação combina **nome + CNPJ**.
 - Veredito **Nada consta / Alerta / Pendente**, registro auditável (data-hora, IP, solicitante, APIs), **validade de 30 dias** (cache) e base de fornecedores agregada da Auditoria + FEAC.
 - **Geração automática:** fornecedores novos e diligências vencidas entram numa fila e são consultados em segundo plano, respeitando um teto de **chamadas/minuto** às APIs oficiais (com recuo em `429`). Botão **"Consultar todos os não consultados"** + faixa de progresso na Base.
@@ -49,10 +49,10 @@ Fluxo em 4 etapas, cada prestação persistida no servidor:
 ### D — Conformidade KYS / KYG
 - **Página pública** (sem login) em formato de **wizard**, preenchida pelo próprio **representante legal/autorizado**: `/kys` (fornecedores PJ) e `/kyg` (OSCs e lideranças PF que recebem doação com encargos). Links genéricos ou **convites rastreáveis** gerados no painel.
 - **Verificação em tempo real por APIs:** CNPJ → Receita (auto-preenche razão social, endereço, situação cadastral); **CEP** → endereço; lista de **bancos** (BrasilAPI); validação de **CPF/CNPJ** (dígitos verificadores). No envio, roda a **régua de conformidade** (CEIS/CNEP/CEPIM/Leniência) montando uma **trilha auditável** com fonte, URL e horário de cada consulta.
-- **Assinatura via Documenso** (documenso.casahacker.org) por **template + `formValues`** — num **modal embutido** (iframe `/embed/sign/<token>`), sem o usuário sair da página. O **solicitante da Casa Hacker** (opcional) entra como **CC** e recebe cópia do documento assinado.
+- **Assinatura via Documenso** (documenso.casahacker.org): o app **gera o PDF de conformidade pré-preenchido**, cria o documento via API (armazenamento **S3**), posiciona o campo de assinatura e o fornecedor assina num **modal embutido** (iframe `/embed/sign/<token>`), sem sair da página. O **solicitante da Casa Hacker** entra como **CC** e recebe cópia do documento assinado.
 - **Painel interno** (`/conformidade`): lista todas as conformidades com filtros por fornecedor/CNPJ, tipo, status (assinado/aguardando/vencido) e **ano fiscal**; abre a trilha de conformidade, as respostas e baixa o **PDF assinado**. **Validade por ano fiscal** — renovação anual.
 
-> **Setup único do Documenso** (uma vez): `npx tsx scripts/gen-kyc-templates.ts` gera os PDFs-template fillable em `kyc-templates/`; suba cada um como **Template** no Documenso, coloque 1 campo **SIGNATURE** + 1 recipient "Signatário", e preencha `DOCUMENSO_API_TOKEN` + `DOCUMENSO_KYS_TEMPLATE_ID`/`_KYG_` no `.env`. Sem isso, o wizard recebe os dados mas a assinatura fica desabilitada.
+> **Setup único do Documenso** (uma vez): garanta que a instância do Documenso esteja com **armazenamento S3** habilitado, crie um **API token** e preencha `DOCUMENSO_URL` + `DOCUMENSO_API_TOKEN` no `.env`. **Não há templates a configurar** — o app gera o PDF a cada envio. Sem o token, o wizard recebe os dados mas a assinatura fica desabilitada.
 
 ---
 
@@ -122,7 +122,8 @@ auditoria/
 ├── feacRoutes.ts                # API /api/feac (registerFeacRoutes)
 ├── diligenciaRoutes.ts          # API /api/diligencia (registerDiligenciaRoutes)
 ├── kycRoutes.ts                 # API /api/kyc + /api/public/kyc (registerKycRoutes)
-├── scripts/gen-kyc-templates.ts # gera os PDFs-template fillable do Documenso (uso único)
+├── kycPdf.ts                    # gera o PDF de conformidade KYS/KYG pré-preenchido (p/ assinatura)
+├── scripts/gen-kyc-templates.ts # (legado) gerava os templates fillable do fluxo Documenso antigo
 ├── assets/                      # Fontes IBM Plex, sRGB.icc, logos do rateio
 ├── docs/                        # Guias do usuário (ver docs/README.md)
 ├── Dockerfile
@@ -130,7 +131,7 @@ auditoria/
 └── vite.config.ts
 ```
 
-> O estágio final do `Dockerfile` copia explicitamente `server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts` + `assets`. **Todo novo arquivo de backend na raiz precisa de um `COPY`.** Arquivos sob `src/` são empacotados pelo Vite.
+> O estágio final do `Dockerfile` copia explicitamente `server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts kycPdf.ts` + `src/kyc/kycTypes.ts` + `assets`. **Todo novo arquivo de backend na raiz precisa de um `COPY`.** Arquivos sob `src/` são empacotados pelo Vite.
 
 ---
 
@@ -160,12 +161,13 @@ DILIGENCIA_RATE_PER_MIN=100             # teto de chamadas/min às APIs externas
 DILIGENCIA_SWEEP_MS=300000              # varredura de novos/vencidos (5 min; mín 60000)
 DILIGENCIA_AUTO=1                       # "0" desliga a geração automática
 
-# KYS/KYG — assinatura via Documenso (sem isso, o wizard recebe os dados sem assinar)
+# KYS/KYG — assinatura via Documenso (armazenamento S3). Sem o token, o wizard
+# recebe os dados mas não dispara a assinatura. Não há templates a configurar.
 DOCUMENSO_URL=https://documenso.casahacker.org
 DOCUMENSO_API_TOKEN=                    # Documenso → Settings → API Tokens
-DOCUMENSO_KYS_TEMPLATE_ID=             # id do template KYS no Documenso
-DOCUMENSO_KYG_TEMPLATE_ID=             # id do template KYG no Documenso
 ```
+
+> Variáveis adicionais (fuso, IP de auditoria, overrides de fontes da diligência, etc.) estão documentadas no [`.env.example`](.env.example).
 
 ## Desenvolvimento
 
@@ -180,9 +182,11 @@ npm run build            # build de produção (Vite)
 ## Produção (Podman)
 
 ```bash
-# build (TMPDIR em /data porque /var é pequeno; formato docker p/ compatibilidade)
-sudo TMPDIR=/data/podman-tmp/tmp BUILDAH_FORMAT=docker podman-compose build
-sudo systemctl stop auditoria && sudo podman rm -f auditoria && sudo systemctl start auditoria
+# build (TMPDIR em /data porque /var é pequeno; formato docker p/ compatibilidade;
+#        APP_COMMIT carimba o commit no rodapé/memória do relatório de diligência)
+export APP_COMMIT=$(git rev-parse --short HEAD)
+sudo env TMPDIR=/data/podman-tmp/tmp BUILDAH_FORMAT=docker APP_COMMIT="$APP_COMMIT" podman-compose build
+sudo systemctl restart auditoria.service
 # saúde: https://auditoria.casahacker.org/api/health
 ```
 

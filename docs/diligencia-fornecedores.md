@@ -17,6 +17,8 @@ Guia do usuário. A Diligência verifica, a partir de um **CNPJ**, a situação 
 | **Acordos de Leniência** (CGU) | Acordos firmados | Portal da Transparência · por CNPJ |
 | **Cadastro de Empregadores / "Lista Suja"** (MTE) | Trabalho análogo ao de escravo | CSV oficial · por CNPJ/CPF |
 | **TCU — Licitantes Inidôneos** | Inidoneidade para licitar (art. 46, Lei 8.443/92) | Webservice público · por CNPJ |
+| **TCE-SP — Apenados** | Impedidos de licitar/contratar com a Administração estadual paulista | Webservice público · por CNPJ |
+| **COBES — Prefeitura de São Paulo** | Empresas punidas pelo município de São Paulo | Lista oficial (PDF) · por CNPJ |
 | **PEP** (CGU) | Pessoas Expostas Politicamente (sócios do QSA) | Portal da Transparência · por nome |
 | **OFAC SDN** (Tesouro/EUA) | Sanções dos EUA | Lista oficial · por nome |
 | **OFAC Consolidated** (Tesouro/EUA) | Sanções setoriais não-SDN | Lista oficial · por nome |
@@ -25,12 +27,12 @@ Guia do usuário. A Diligência verifica, a partir de um **CNPJ**, a situação 
 | **UK Sanctions** (FCDO) | Sanções do Reino Unido | Lista oficial · por nome |
 | **IDB / BID** | Sancionados pelo Banco Interamericano | Lista oficial · por nome |
 
-São **13 listas de restrição automatizadas**. As listas do **Portal da Transparência (CGU)** são consultadas por **razão social** (obtida na Receita) e filtradas pelo **CNPJ exato**, percorrendo **todas as páginas** da resposta (o filtro por CNPJ da API oficial é inoperante, devolve a lista inteira).
+São **15 listas de restrição automatizadas**. As listas do **Portal da Transparência (CGU)** são consultadas por **razão social** (obtida na Receita) e filtradas pelo **CNPJ exato**, percorrendo **todas as páginas** da resposta (o filtro por CNPJ da API oficial é inoperante, devolve a lista inteira).
 
-- **Correspondência por CNPJ/CPF exato** (CEIS, CNEP, CEPIM, Leniência, Lista Suja, TCU): quando consta, é **definitivo** → eleva o veredito para **Alerta**.
+- **Correspondência por CNPJ/CPF exato** (CEIS, CNEP, CEPIM, Leniência, Lista Suja, TCU, TCE-SP e COBES): quando consta, é **definitivo** → eleva o veredito para **Alerta**.
 - **Correspondência por nome** (OFAC, ONU, UE, Reino Unido, BID e PEP): casa razão social + sócios de forma **conservadora** → gera **"Atenção"** (possível homônimo; **confirme a identidade** antes de decidir), sem reprovar automaticamente.
 
-> A consulta ambiental do **IBAMA** segue **manual** (link no relatório) — o órgão bloqueia o download automatizado.
+> No **TCE-SP**, um registro com vigência **expirada** aparece como **"Atenção"** (histórico), não como "Consta". A consulta ambiental do **IBAMA** **não é automatizada** (o órgão bloqueia o download) — quando o risco ambiental exigir, verifique manualmente no portal de consultas do IBAMA.
 
 ---
 
@@ -88,6 +90,6 @@ O sistema gera as diligências **sozinho, em segundo plano**:
 ## Boas práticas
 
 - Faça a diligência **antes de contratar** e **antes de pagar** fornecedores relevantes.
-- Para serviços ambientais, **sempre** verifique manualmente o IBAMA (link no relatório).
+- Para serviços com risco ambiental, verifique também o **IBAMA** manualmente (não é automatizado).
 - Guarde o PDF da diligência junto à prestação de contas — ele é auditável (traz data-hora, IP e fontes).
-- Um veredito "Nada consta" cobre as **13 listas automatizadas**; complemente com o IBAMA (manual) quando o risco ambiental exigir.
+- Um veredito "Nada consta" cobre as **15 listas automatizadas**; complemente com a consulta manual ao IBAMA quando o risco ambiental exigir.
