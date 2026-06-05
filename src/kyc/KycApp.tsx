@@ -159,7 +159,7 @@ export function BaseView({ records, loading, openDetail }: { records: KycSummary
             <EmptyState icon={Search} title="Nenhum registro com esses filtros" description="Ajuste a busca ou os filtros acima." />
           ) : (
             <Card className="overflow-hidden">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-[14px]">
                 <thead className={tableHeadCls}><tr>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor / Proponente</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Tipo</th>
@@ -237,7 +237,7 @@ export function ConvitesView({ apiFetch, addToast, initialCnpj }: { apiFetch: Ky
         <EmptyState icon={Link2} title="Nenhum convite gerado" description="Gere um convite acima ou use os links públicos genéricos." />
       ) : (
         <Card className="overflow-hidden">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-[14px]">
             <thead className={tableHeadCls}><tr>
               <th scope="col" className="px-4 py-2.5 font-semibold">Tipo</th><th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
               <th scope="col" className="px-4 py-2.5 font-semibold">Criado em</th><th scope="col" className="px-4 py-2.5 font-semibold">Situação</th>

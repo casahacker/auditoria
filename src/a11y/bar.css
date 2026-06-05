@@ -28,7 +28,7 @@
   color: #fff;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   user-select: none;
   overflow-x: auto;
@@ -58,7 +58,7 @@
   color: rgba(255, 255, 255, 0.4);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 10px;
+  font-size: 12px;
   flex-shrink: 0;
   display: none;
 }
@@ -111,15 +111,15 @@
 
 /* Tamanhos de fonte (A−/A/A+) */
 .ch-a11y-btn--font-small {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 .ch-a11y-btn--font-normal {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
 }
 .ch-a11y-btn--font-large {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
 }
 
