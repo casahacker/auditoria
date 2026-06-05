@@ -459,6 +459,15 @@ function HistoricoView({ history, openSaved }: any) {
 }
 
 const ST_LABEL = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
+// #103 — sub-linha técnica de proveniência (espelha provTech do backend; a URL já aparece como link na linha principal).
+const provTechLine = (s: any): string => {
+  const out = [s.metodo || 'GET'];
+  if (s.http != null) out.push(`HTTP ${s.http}`);
+  if (s.cache) { const a = s.cacheAge != null ? (s.cacheAge < 172800000 ? `${Math.round(s.cacheAge / 3600000)} h` : `${Math.round(s.cacheAge / 86400000)} d`) : '?'; const up = s.sourceUpdatedAt ? new Date(s.sourceUpdatedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''; out.push(`cache${s.stale ? ' (vencido)' : ''} (idade ${a}${up ? ` · cópia de ${up}` : ''})`); }
+  else if (s.http != null || s.ms != null) out.push(`ao vivo${s.ms != null ? ` · ${s.ms} ms` : ''}`);
+  if (s.erro) out.push(`erro: ${s.erro}`);
+  return out.join(' · ');
+};
 const KVr = ({ k, v, cls }: { k: string; v: any; cls?: string }) => (
   <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{k}</span><span className={cn('font-medium break-words', cls)}>{v || '—'}</span></div>
 );
@@ -498,15 +507,19 @@ export function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: a
           <KVr k="IP de origem" v={r.ip} />
         </div>
         <div className="mt-3 pt-3 border-t border-line space-y-1">
-          <div className="text-[12px] text-text-secondary mb-1">Fontes consultadas</div>
+          <div className="text-[12px] text-text-secondary mb-1">Memória do processo — fontes consultadas</div>
+          {(r.fontesCount || r.diligenciaId) && <div className="text-[12px] text-text-secondary mb-1 break-all">{r.fontesCount ? `${r.fontesCount} fontes${r.fontesVersao ? ` (conjunto v${r.fontesVersao})` : ''}` : ''}{r.diligenciaId ? ` · ID ${r.diligenciaId}` : ''}{r.tempoTotalMs != null ? ` · tempo ${(r.tempoTotalMs / 1000).toFixed(1)} s` : ''}{r.integridadeHash ? ` · SHA-256 ${String(r.integridadeHash).slice(0, 16)}…` : ''}</div>}
           {rf.fonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.fonte}:</span> <span>{rf.fetchedAt ? new Date(rf.fetchedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}</span>{rf.apiUrl && <a href={rf.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.apiUrl}</a>}</div>}
           {rf.cepFonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.cepFonte}:</span> <span>{rf.cepFetchedAt ? new Date(rf.cepFetchedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}</span>{rf.cepApiUrl && <a href={rf.cepApiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.cepApiUrl}</a>}</div>}
           {(r.sancoes || []).map((s: any, i: number) => (
-            <div key={i} className="text-[12px] flex flex-wrap gap-x-2">
-              <span className="text-text-secondary">{s.fonte}:</span>
-              <span className={s.status === 'CONSTA' ? 'text-error font-semibold' : s.status === 'NADA_CONSTA' ? 'text-success' : 'text-warning'}>{ST_LABEL(s)}</span>
-              <span className="text-text-secondary">{s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''}</span>
-              {s.apiUrl && <a href={s.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{s.apiUrl}</a>}
+            <div key={i}>
+              <div className="text-[12px] flex flex-wrap gap-x-2">
+                <span className="text-text-secondary">{s.fonte}:</span>
+                <span className={s.status === 'CONSTA' ? 'text-error font-semibold' : s.status === 'NADA_CONSTA' ? 'text-success' : 'text-warning'}>{ST_LABEL(s)}</span>
+                <span className="text-text-secondary">{s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''}</span>
+                {s.apiUrl && <a href={s.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{s.apiUrl}</a>}
+              </div>
+              {(s.metodo || s.http != null || s.cache) && <div className="text-[12px] text-text-secondary pl-3 break-all">↳ {provTechLine(s)}</div>}
             </div>
           ))}
         </div>

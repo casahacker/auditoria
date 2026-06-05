@@ -6,6 +6,7 @@ services:
       args:
         DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
         APP_URL: ${APP_URL}
+        APP_COMMIT: ${APP_COMMIT:-}
     image: localhost/auditoria:latest
     container_name: auditoria
     restart: on-failure:3
