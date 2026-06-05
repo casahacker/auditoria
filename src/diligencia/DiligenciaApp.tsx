@@ -249,7 +249,7 @@ function ChipStatus({ s }: { s: any }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <VerdictChip v={s.verdict} />
-      <span className={cn('text-[12px]', valida ? 'text-text-secondary' : 'text-warning')}>{valida ? `válida até ${new Date(s.validUntil).toLocaleDateString('pt-BR')}` : 'vencida'}</span>
+      <span className={cn('text-[12px]', valida ? 'text-text-secondary' : 'text-warning')}>{valida ? `válida até ${new Date(s.validUntil).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : 'vencida'}</span>
     </span>
   );
 }
@@ -444,7 +444,7 @@ function HistoricoView({ history, openSaved }: any) {
                       <td className="px-4 py-2.5 max-w-[280px] truncate">{h.razaoSocial || '—'}</td>
                       <td className="px-4 py-2.5 font-mono whitespace-nowrap">{maskCnpj(h.cnpj)}</td>
                       <td className="px-4 py-2.5"><VerdictChip v={h.verdict} /></td>
-                      <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR')} {h.valida ? '' : '· vencida'}</td>
+                      <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {h.valida ? '' : '· vencida'}</td>
                       <td className="px-4 py-2.5 text-right"><ChevronRight size={14} className="inline text-text-secondary" aria-hidden /></td>
                     </tr>
                   ))}
@@ -492,20 +492,20 @@ export function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: a
       <Card className="p-5">
         <div className="text-[12px] font-semibold text-text-secondary mb-3">Dados da consulta (auditável)</div>
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
-          <KVr k="Data/hora" v={new Date(r.checkedAt).toLocaleString('pt-BR')} />
-          <KVr k="Validade" v={`${new Date(r.validUntil).toLocaleDateString('pt-BR')}${r.valida ? '' : ' (vencida)'}`} cls={r.valida ? '' : 'text-warning'} />
+          <KVr k="Data/hora" v={new Date(r.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} />
+          <KVr k="Validade" v={`${new Date(r.validUntil).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}${r.valida ? '' : ' (vencida)'}`} cls={r.valida ? '' : 'text-warning'} />
           <KVr k="Solicitante" v={r.checkedBy} />
           <KVr k="IP de origem" v={r.ip} />
         </div>
         <div className="mt-3 pt-3 border-t border-line space-y-1">
           <div className="text-[12px] text-text-secondary mb-1">Fontes consultadas</div>
-          {rf.fonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.fonte}:</span> <span>{rf.fetchedAt ? new Date(rf.fetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.apiUrl && <a href={rf.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.apiUrl}</a>}</div>}
-          {rf.cepFonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.cepFonte}:</span> <span>{rf.cepFetchedAt ? new Date(rf.cepFetchedAt).toLocaleString('pt-BR') : '—'}</span>{rf.cepApiUrl && <a href={rf.cepApiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.cepApiUrl}</a>}</div>}
+          {rf.fonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.fonte}:</span> <span>{rf.fetchedAt ? new Date(rf.fetchedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}</span>{rf.apiUrl && <a href={rf.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.apiUrl}</a>}</div>}
+          {rf.cepFonte && <div className="text-[12px] flex flex-wrap gap-x-2"><span className="text-text-secondary">{rf.cepFonte}:</span> <span>{rf.cepFetchedAt ? new Date(rf.cepFetchedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}</span>{rf.cepApiUrl && <a href={rf.cepApiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{rf.cepApiUrl}</a>}</div>}
           {(r.sancoes || []).map((s: any, i: number) => (
             <div key={i} className="text-[12px] flex flex-wrap gap-x-2">
               <span className="text-text-secondary">{s.fonte}:</span>
               <span className={s.status === 'CONSTA' ? 'text-error font-semibold' : s.status === 'NADA_CONSTA' ? 'text-success' : 'text-warning'}>{ST_LABEL(s)}</span>
-              <span className="text-text-secondary">{s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('pt-BR') : ''}</span>
+              <span className="text-text-secondary">{s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''}</span>
               {s.apiUrl && <a href={s.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{s.apiUrl}</a>}
             </div>
           ))}

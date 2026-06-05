@@ -481,7 +481,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         </div>
         {(fontes.receita || fontes.cep) && (
           <div className="mt-4 pt-3 border-t border-line text-[12px] text-text-secondary leading-relaxed">
-            Fontes: {fontes.receita && <span>{fontes.receita.fonte}{fontes.receita.fetchedAt ? ` (${new Date(fontes.receita.fetchedAt).toLocaleDateString('pt-BR')})` : ''}</span>}{fontes.cep && <span> · {fontes.cep.fonte}</span>}. Campos marcados como <b>manual</b> não são sobrescritos ao atualizar das APIs.
+            Fontes: {fontes.receita && <span>{fontes.receita.fonte}{fontes.receita.fetchedAt ? ` (${new Date(fontes.receita.fetchedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })})` : ''}</span>}{fontes.cep && <span> · {fontes.cep.fonte}</span>}. Campos marcados como <b>manual</b> não são sobrescritos ao atualizar das APIs.
           </div>
         )}
       </Card>
@@ -497,7 +497,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         </div>
         {dil ? (
           <div className="space-y-2.5">
-            <div>{dilChip(dil)}{dil.checkedAt && <span className="text-[12px] text-text-secondary ml-2">consultada em {new Date(dil.checkedAt).toLocaleString('pt-BR')}</span>}</div>
+            <div>{dilChip(dil)}{dil.checkedAt && <span className="text-[12px] text-text-secondary ml-2">consultada em {new Date(dil.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span>}</div>
             {(dil.sancoes || []).map((s: any, i: number) => (
               <div key={i} className="border-b border-line pb-2 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-semibold">{s.fonte}</span>
@@ -543,7 +543,7 @@ function HistoricoView({ history, openFornecedor }: any) {
                     <td className="px-4 py-2.5 max-w-[280px] truncate">{h.razaoSocial || '—'}</td>
                     <td className="px-4 py-2.5 font-mono whitespace-nowrap">{maskDoc(h.cnpj)}</td>
                     <td className="px-4 py-2.5">{h.verdict ? <Chip tone={DIL[h.verdict]?.tone} icon={DIL[h.verdict]?.icon} size="sm">{DIL[h.verdict]?.label || h.verdict}</Chip> : '—'}</td>
-                    <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR')}{h.valida ? '' : ' · vencida'}</td>
+                    <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}{h.valida ? '' : ' · vencida'}</td>
                     <td className="px-4 py-2.5 text-right">
                       <IconBtn label={`Abrir ficha de ${h.razaoSocial || maskDoc(h.cnpj)}`} onClick={(e) => { e.stopPropagation(); openFornecedor(h.cnpj); }}><ChevronRight size={16} aria-hidden /></IconBtn>
                     </td>

@@ -250,7 +250,7 @@ export function ConvitesView({ apiFetch, addToast, initialCnpj }: { apiFetch: Ky
                   <tr key={i.token} className="border-t border-line hover:bg-primary/5">
                     <td className="px-4 py-2.5"><span className="text-[12px] font-semibold uppercase text-primary">{i.type}</span></td>
                     <td className="px-4 py-2.5 font-mono">{i.cnpj ? maskDoc(i.cnpj) : '—'}</td>
-                    <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(i.createdAt).toLocaleDateString('pt-BR')}</td>
+                    <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(i.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
                     <td className="px-4 py-2.5">{i.usedByRecordId ? <Chip tone="success" size="sm">Utilizado</Chip> : <Chip tone="info" size="sm">Pendente</Chip>}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
                       <button onClick={() => copy(url)} className="text-primary hover:underline mr-3 inline-flex items-center gap-1"><Copy size={12} /> Copiar</button>
@@ -309,9 +309,9 @@ export function DetailView({ current, busy, apiFetch, addToast, reload }: { curr
 
       <Card className="p-5">
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-[12px]">
-          <KV k="Ano fiscal / validade" v={`${r.fiscalYear} · até ${new Date(r.validUntil).toLocaleDateString('pt-BR')}${r.valida ? '' : ' (vencido)'}`} />
-          <KV k="Criado em" v={new Date(r.createdAt).toLocaleString('pt-BR')} />
-          {r.signedAt && <KV k="Assinado em" v={new Date(r.signedAt).toLocaleString('pt-BR')} />}
+          <KV k="Ano fiscal / validade" v={`${r.fiscalYear} · até ${new Date(r.validUntil).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}${r.valida ? '' : ' (vencido)'}`} />
+          <KV k="Criado em" v={new Date(r.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} />
+          {r.signedAt && <KV k="Assinado em" v={new Date(r.signedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} />}
           {r.requester?.email && <KV k="Solicitante (Casa Hacker)" v={[r.requester.nome, r.requester.email].filter(Boolean).join(' · ')} />}
           {r.ip && <KV k="IP de origem" v={r.ip} />}
         </div>
@@ -339,7 +339,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload }: { curr
             <div key={i} className="flex items-start justify-between gap-3 border-b border-line pb-2 last:border-0 last:pb-0">
               <div>
                 <div className="text-[12px] font-semibold text-text">{t.tipo}</div>
-                <div className="text-[12px] text-text-secondary">{t.fonte} · {t.checkedAt ? new Date(t.checkedAt).toLocaleString('pt-BR') : ''}{t.apiUrl ? ' · ' : ''}{t.apiUrl && <a href={t.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">consulta</a>}</div>
+                <div className="text-[12px] text-text-secondary">{t.fonte} · {t.checkedAt ? new Date(t.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''}{t.apiUrl ? ' · ' : ''}{t.apiUrl && <a href={t.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">consulta</a>}</div>
               </div>
               <span className={cn('text-[12px] font-semibold shrink-0', TRAIL_TONE[t.status] || 'text-text-secondary')}>{t.resultado}</span>
             </div>
