@@ -409,9 +409,12 @@ ${dil ? `
   </section>
 
   <footer>
-    <b>ASSOCIAÇÃO CASA HACKER</b> · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
-    Relatório consolidado gerado pela plataforma Auditoria (Casa Hacker) em ${escH(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }))} (BRT) · documento de diligência para fins de prestação de contas.<br>
-    Todos os horários deste documento estão no fuso de Brasília (BRT, UTC−3).
+    <div style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#393939">Confidencial — Uso Interno</div>
+    Relatório consolidado gerado pela plataforma Auditoria da Associação Casa Hacker em ${escH(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }).replace(", ", " às "))} (BRT). Documento de diligência para fins de contratação. Todos os horários deste documento estão no fuso de Brasília (UTC−3).<br><br>
+    <b>Associação Casa Hacker</b> · CNPJ 36.038.079/0001-97<br>
+    R. Dr. Renato Paes de Barros, 618 – Itaim Bibi, São Paulo/SP – CEP 04530-000<br>
+    operacoes@casahacker.org · auditoria.casahacker.org<br>
+    © ${new Date().getFullYear()} Associação Casa Hacker. Todos os direitos reservados.
   </footer>
 </div>
 <script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},500)})</script>

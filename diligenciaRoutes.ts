@@ -462,7 +462,7 @@ export async function consultaTCESP(cnpjDigits: string): Promise<any> {
   const fmtData = (a: any) => Array.isArray(a) && a.length === 3 ? `${String(a[2]).padStart(2, "0")}/${String(a[1]).padStart(2, "0")}/${a[0]}` : "";
   const t0 = Date.now();
   try {
-    const r = await limitedFetch(apiUrl, { headers: { Accept: "application/json", "User-Agent": "casahacker-auditoria/1.0" }, signal: AbortSignal.timeout(20000) });
+    const r = await limitedFetch(apiUrl, { headers: { Accept: "application/json", "User-Agent": "casahacker-auditoria/1.0" }, signal: AbortSignal.timeout(30000) });
     base.http = r.status; base.ms = Date.now() - t0;
     if (!r.ok) return { ...base, status: "ERRO", hits: [] };
     const arr = await r.json();
