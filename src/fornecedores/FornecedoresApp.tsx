@@ -491,7 +491,6 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <div className="text-[14px] font-semibold flex items-center gap-1.5"><ShieldCheck size={15} className="text-primary" aria-hidden /> Diligência — listas de restrição</div>
           <div className="flex items-center gap-2">
-            {dil && <Btn variant="ghost" size="sm" onClick={() => window.open(`/api/diligencia/${doc}/report.html`, '_blank')}>Relatório (PDF)</Btn>}
             {doc.length === 14 && <Btn variant="secondary" size="sm" onClick={onReconsultar} disabled={busy}>{busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} Reconsultar</Btn>}
           </div>
         </div>
