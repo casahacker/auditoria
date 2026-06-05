@@ -15,13 +15,14 @@ import {
   Building2, BookOpen, Link2, Loader2, Search, RefreshCw, ChevronRight, ChevronLeft,
   ShieldCheck, ShieldAlert, AlertTriangle, Upload, FileUp, History, BadgeCheck,
   ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature, Pencil, Check, Printer, DownloadCloud,
-  Landmark, Globe2, Scale, ListChecks, HelpCircle,
+  Landmark, Globe2, Scale, ListChecks, HelpCircle, ExternalLink,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
 import { Btn, IconBtn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput, Modal } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
 import { ConvitesView, DetailView as KycDetailView } from '../kyc/KycApp';
+import { provTechLine, COMPLEMENTARY_SOURCES_UI } from '../diligencia/DiligenciaApp';
 import { onlyDigits, maskDoc, KYC_STATUS_LABEL } from '../kyc/kycTypes';
 import type { KycStatus } from '../kyc/kycTypes';
 
@@ -505,11 +506,13 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         {dil ? (
           <div className="space-y-2.5">
             <div>{dilChip(dil)}{dil.checkedAt && <span className="text-[12px] text-text-secondary ml-2">consultada em {new Date(dil.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span>}</div>
+            {(dil.fontesCount || dil.diligenciaId) && <div className="text-[12px] text-text-secondary break-all">{dil.fontesCount ? `${dil.fontesCount} fontes${dil.fontesVersao ? ` (conjunto v${dil.fontesVersao})` : ''}` : ''}{dil.diligenciaId ? ` · ID ${dil.diligenciaId}` : ''}{dil.tempoTotalMs != null ? ` · tempo ${(dil.tempoTotalMs / 1000).toFixed(1)} s` : ''}{dil.integridadeHash ? ` · SHA-256 ${String(dil.integridadeHash).slice(0, 16)}…` : ''}</div>}
             {(dil.sancoes || []).map((s: any, i: number) => (
               <div key={i} className="border-b border-line pb-2 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-semibold">{s.fonte}</span>
                   <Chip tone={s.status === 'CONSTA' ? 'error' : s.status === 'NADA_CONSTA' ? 'success' : s.status === 'ATENCAO' ? 'warning' : 'neutral'} size="sm">{sancaoLabel(s)}</Chip></div>
                 {(s.hits || []).map((h: any, j: number) => <div key={j} className="mt-1 text-[12px] bg-error/5 border border-error/20 rounded px-2 py-1.5"><div className="font-semibold text-error">{h.tipo}</div><div className="text-text-secondary">{h.orgao} · vigência {h.dataInicio || '?'}–{h.dataFim || '?'} · processo {h.processo || '—'}</div></div>)}
+                {(s.metodo || s.http != null || s.cache) && <div className="text-[12px] text-text-secondary pl-3 break-all mt-0.5">↳ {provTechLine(s)}{s.apiUrl && <> · <a href={s.apiUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">fonte</a></>}</div>}
               </div>
             ))}
           </div>
@@ -517,6 +520,23 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
           : doc.length === 14 ? <EmptyState icon={ShieldCheck} title="Diligência ainda não realizada" description="Consulte a Receita Federal e as listas de restrição (pode levar alguns segundos)." action={<Btn onClick={onReconsultar}><RefreshCw size={14} aria-hidden /> Consultar agora</Btn>} />
           : <div className="text-[12px] text-text-secondary">A diligência (Receita + listas de restrição) aplica-se a CNPJ. Este registro é pessoa física (CPF).</div>}
       </Card>
+
+      {/* #99 — Fontes complementares (verificação manual; não alteram o veredito) */}
+      {doc.length === 14 && (
+        <Card className="p-5">
+          <div className="text-[14px] font-semibold flex items-center gap-1.5 mb-1"><ExternalLink size={15} className="text-primary" aria-hidden /> Fontes complementares — verificação manual</div>
+          <div className="text-[12px] text-text-secondary mb-3">Sem consulta automática confiável; não alteram o veredito. Verifique manualmente quando o risco exigir.</div>
+          <div className="space-y-2.5">
+            {COMPLEMENTARY_SOURCES_UI.map((s, i) => (
+              <div key={i} className="border-b border-line pb-2.5 last:border-0 last:pb-0">
+                <div className="text-[12px] font-semibold">{s.nome}</div>
+                <div className="text-[12px] text-text-secondary">{s.nota}</div>
+                <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-primary hover:underline inline-flex items-center gap-1 mt-0.5 break-all"><ExternalLink size={10} aria-hidden /> consultar manualmente</a>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* KYS / KYG */}
       <div>

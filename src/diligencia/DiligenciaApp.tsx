@@ -460,7 +460,7 @@ function HistoricoView({ history, openSaved }: any) {
 
 const ST_LABEL = (s: any) => s.status === 'CONSTA' ? `Consta (${s.hits?.length || 0})` : s.status === 'NADA_CONSTA' ? 'Nada consta' : s.status === 'ERRO' ? 'Erro' : 'Pendente';
 // #103 — sub-linha técnica de proveniência (espelha provTech do backend; a URL já aparece como link na linha principal).
-const provTechLine = (s: any): string => {
+export const provTechLine = (s: any): string => {
   const out = [s.metodo || 'GET'];
   if (s.http != null) out.push(`HTTP ${s.http}`);
   if (s.cache) { const a = s.cacheAge != null ? (s.cacheAge < 172800000 ? `${Math.round(s.cacheAge / 3600000)} h` : `${Math.round(s.cacheAge / 86400000)} d`) : '?'; const up = s.sourceUpdatedAt ? new Date(s.sourceUpdatedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''; out.push(`cache${s.stale ? ' (vencido)' : ''} (idade ${a}${up ? ` · cópia de ${up}` : ''})`); }
@@ -469,7 +469,7 @@ const provTechLine = (s: any): string => {
   return out.join(' · ');
 };
 // #99 — fontes sem consulta automática confiável (espelha COMPLEMENTARY_SOURCES do backend; manter em sincronia).
-const COMPLEMENTARY_SOURCES_UI = [
+export const COMPLEMENTARY_SOURCES_UI = [
   { nome: 'e-Sanções BEC-SP — Sanções administrativas (Estado de SP)', url: 'https://www.bec.sp.gov.br/sancoes_ui/aspx/consultaadministrativafornecedor.aspx', nota: 'Consulta automática indisponível (ASP.NET ViewState + WAF F5). Cobertura parcial via CEIS/CNEP e TCE-SP.' },
   { nome: 'IBAMA — Embargos e autuações ambientais', url: 'https://servicos.ibama.gov.br/ctf/publico/areasembargadas/ConsultaPublicaAreasEmbargadas.php', nota: 'Download automatizado bloqueado pelo órgão; verifique quando o risco ambiental exigir.' },
 ];
