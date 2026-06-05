@@ -507,6 +507,23 @@ export function collectSuppliers(DATA_DIR: string): any[] {
 const VLABEL: Record<string, string> = { ALERTA: "ALERTA — RESTRIÇÕES ENCONTRADAS", NADA_CONSTA: "NADA CONSTA", PENDENTE: "PENDENTE — VERIFICAÇÃO INCOMPLETA" };
 const SLABEL: Record<string, string> = { CONSTA: "CONSTA", NADA_CONSTA: "Nada consta", ERRO: "Erro na consulta", PENDENTE: "Pendente" };
 
+// Base legal de cada lista (nota jurídica). `match` = chave de correspondência usada na
+// consulta — "CNPJ" é exata; "Nome" é conservadora (pode gerar homônimos, exige confirmação).
+const LEGAL_NOTES: Record<string, { orgao: string; base: string; efeito: string; match: string }> = {
+  "ceis": { orgao: "CGU — Portal da Transparência", base: "Lei 8.666/1993 (art. 87) e Lei 14.133/2021; Lei 12.846/2013", efeito: "Inidoneidade/suspensão — impedimento de licitar e contratar com a Administração Pública.", match: "CNPJ" },
+  "cnep": { orgao: "CGU — Portal da Transparência", base: "Lei 12.846/2013 (Lei Anticorrupção), art. 22", efeito: "Empresa punida por ato lesivo à Administração Pública (sanção administrativa ou judicial).", match: "CNPJ" },
+  "cepim": { orgao: "CGU — Portal da Transparência", base: "Lei 8.666/1993; Decreto de transferências voluntárias / IN aplicável", efeito: "Entidade impedida de receber recursos federais por convênio ou transferência voluntária.", match: "CNPJ" },
+  "acordos-leniencia": { orgao: "CGU", base: "Lei 12.846/2013, art. 16", efeito: "Acordo de leniência firmado — colaboração na apuração de ato lesivo (fato relevante de risco).", match: "CNPJ" },
+  "lista-suja": { orgao: "MTE — Inspeção do Trabalho", base: "Portaria Interministerial MTPS/MMFDH nº 4/2016; art. 149 do Código Penal", efeito: "Empregador autuado por submeter trabalhadores a condição análoga à de escravo.", match: "CNPJ" },
+  "pep": { orgao: "CGU / COAF", base: "Lei 9.613/1998; Resolução COAF; regulação do Bacen", efeito: "Pessoa exposta politicamente — não é restrição; exige devida diligência reforçada.", match: "Nome" },
+  "ofac-sdn": { orgao: "OFAC — Departamento do Tesouro dos EUA", base: "IEEPA (50 U.S.C. §1701); Executive Orders; 31 CFR", efeito: "Sanção econômica dos EUA (SDN) — bloqueio de ativos e vedação de transações.", match: "Nome" },
+  "ofac-cons": { orgao: "OFAC — Departamento do Tesouro dos EUA", base: "Programas setoriais (NS-MBS, SSI, FSE etc.); 31 CFR", efeito: "Lista consolidada não-SDN — restrições setoriais/parciais dos EUA.", match: "Nome" },
+  "un-sc": { orgao: "Conselho de Segurança da ONU", base: "Carta da ONU, Cap. VII; resoluções do CSNU; no Brasil, Lei 13.810/2019", efeito: "Sanção internacional vinculante — aplicação imediata em território nacional.", match: "Nome" },
+  "eu-fsf": { orgao: "União Europeia — Conselho", base: "Art. 29 TUE e art. 215 TFUE; regulamentos do Conselho", efeito: "Sanção financeira da UE — congelamento de fundos e recursos econômicos.", match: "Nome" },
+  "uk-sanctions": { orgao: "Reino Unido — FCDO/OFSI", base: "Sanctions and Anti-Money Laundering Act 2018 (SAMLA)", efeito: "Sanção do Reino Unido (designated person) — congelamento de ativos.", match: "Nome" },
+  "idb": { orgao: "Grupo BID (IADB)", base: "Sanctions Procedures do BID; Acordo de Cross-Debarment entre bancos multilaterais (2010)", efeito: "Empresa/indivíduo sancionado por fraude ou corrupção em projetos do Grupo BID.", match: "Nome" },
+};
+
 export function buildReportHtml(rec: any): string {
   const rf = rec.receita || {};
   const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR"); } catch { return s || "—"; } };
@@ -515,12 +532,29 @@ export function buildReportHtml(rec: any): string {
   const ender = [rf.logradouro, rf.numero, rf.complemento, rf.bairro].filter(Boolean).join(", ");
   const sitOk = /ATIVA/i.test(rf.situacao_cadastral || "");
 
-  const consultas = [
-    `<div class="row"><span class="k">${esc(rf.fonte || "Receita Federal")}</span><span class="v">${rf.fetchedAt ? dt(rf.fetchedAt) : "—"} · <a href="${esc(rf.apiUrl || "#")}">${esc(rf.apiUrl || "")}</a></span></div>`,
-    ...(rf.cepFonte ? [`<div class="row"><span class="k">${esc(rf.cepFonte)}</span><span class="v">${rf.cepFetchedAt ? dt(rf.cepFetchedAt) : "—"} · <a href="${esc(rf.cepApiUrl || "#")}">${esc(rf.cepApiUrl || "")}</a></span></div>`] : []),
-    ...(rec.sancoes || []).map((s: any) =>
-      `<div class="row"><span class="k">${esc(s.fonte)}</span><span class="v ${s.status === "CONSTA" ? "bad" : s.status === "NADA_CONSTA" ? "ok" : ""}">${esc(SLABEL[s.status] || s.status)}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""} · ${dt(s.fetchedAt)} · <a href="${esc(s.apiUrl || "#")}">consulta</a></span></div>`),
+  // ── Memória do processo: uma linha por fonte efetivamente consultada, com origem
+  //    técnica, momento, tamanho da base e chave de correspondência (auditável). ──────
+  const hostOf = (u: string) => { try { return new URL(u).host; } catch { return u || "—"; } };
+  const provLinha = (fonte: string, apiUrl: string, at: string, base: string, resultado: string, metodo: string) =>
+    `<tr><td>${esc(fonte)}</td><td>${apiUrl ? `<a href="${esc(apiUrl)}">${esc(hostOf(apiUrl))}</a>` : "—"}</td><td>${at ? dt(at) : "—"}</td><td>${esc(base)}</td><td>${esc(resultado)}</td><td>${esc(metodo)}</td></tr>`;
+  const provRows = [
+    provLinha(rf.fonte || "Receita Federal", rf.apiUrl || "", rf.fetchedAt, "—", rf.situacao_cadastral || "consultado", "CNPJ"),
+    ...(rf.cepFonte ? [provLinha(rf.cepFonte, rf.cepApiUrl || "", rf.cepFetchedAt, "—", "consultado", "CEP")] : []),
+    ...(rec.sancoes || []).map((s: any) => provLinha(
+      s.fonte, s.apiUrl || "", s.fetchedAt,
+      s.registros != null ? `${Number(s.registros).toLocaleString("pt-BR")} reg.` : "—",
+      `${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""}`,
+      (LEGAL_NOTES[s.recurso]?.match) || "—")),
   ].join("");
+
+  // ── Notas jurídicas: base legal de cada lista de restrição efetivamente consultada. ──
+  const recursosUnicos: string[] = [];
+  for (const s of (rec.sancoes || [])) if (s.recurso && !recursosUnicos.includes(s.recurso)) recursosUnicos.push(s.recurso);
+  const notasJuridicas = recursosUnicos.map((r) => {
+    const n = LEGAL_NOTES[r]; if (!n) return "";
+    const f = (rec.sancoes || []).find((s: any) => s.recurso === r);
+    return `<div class="note"><b>${esc(f?.fonte || r)}</b> — ${esc(n.orgao)}<br><span class="nk">Base legal:</span> ${esc(n.base)}<br><span class="nk">Efeito:</span> ${esc(n.efeito)}<br><span class="nk">Correspondência:</span> por ${esc(n.match)}</div>`;
+  }).join("");
 
   const sancoesHtml = (rec.sancoes || []).map((s: any) => {
     const head = `<div class="row"><span class="k">${esc(s.fonte)}</span><span class="v ${s.status === "CONSTA" ? "bad" : s.status === "NADA_CONSTA" ? "ok" : ""}">${esc(SLABEL[s.status] || s.status)}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""}</span></div>`;
@@ -557,6 +591,10 @@ footer{margin-top:40px;border-top:1px solid #000;padding-top:12px;color:#000;fon
 .toolbar{position:fixed;top:12px;right:16px;background:#000;color:#fff;border:none;padding:8px 14px;border-radius:4px;font-family:inherit;font-size:11px;cursor:pointer}
 @media print{.toolbar{display:none}.page{padding:0}}
 @page{margin:16mm}
+table.prov{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}
+table.prov th,table.prov td{border:1px solid #000;padding:4px 6px;text-align:left;vertical-align:top;word-break:break-word}
+table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:9px}
+.note{border:1px solid #000;padding:8px 10px;margin:6px 0}.nk{font-weight:700}
 </style></head><body>
 <button class="toolbar" onclick="window.print()">Salvar em PDF / Imprimir</button>
 <div class="page">
@@ -567,10 +605,9 @@ footer{margin-top:40px;border-top:1px solid #000;padding-top:12px;color:#000;fon
 
   <section><div class="sectitle">Dados da consulta (auditável)</div>
     ${row("Data/hora da consulta", dt(rec.checkedAt))}
-    ${row("Validade (30 dias)", new Date(rec.validUntil).toLocaleDateString("pt-BR"))}
+    ${row("Validade (" + VALIDADE_DIAS + " dias)", new Date(rec.validUntil).toLocaleDateString("pt-BR"))}
     ${row("Solicitante", rec.checkedBy)}
     ${row("IP de origem", rec.ip)}
-    <div style="margin-top:8px"></div>${consultas}
   </section>
 
   <section><div class="sectitle">Receita Federal — cadastro</div>
@@ -590,14 +627,23 @@ footer{margin-top:40px;border-top:1px solid #000;padding-top:12px;color:#000;fon
     ${qsa ? `<div class="row"><span class="k">Quadro societário (QSA)</span><span class="v">${qsa}</span></div>` : ""}
   </section>
 
-  <section><div class="sectitle">Listas de restrição — Portal da Transparência (CGU)</div>
+  <section><div class="sectitle">Listas de restrição — nacionais e internacionais</div>
     ${sancoesHtml || '<div class="sub">Sem consulta.</div>'}
+  </section>
+
+  <section><div class="sectitle">Notas jurídicas — base legal das listas consultadas</div>
+    ${notasJuridicas || '<div class="sub">—</div>'}
+  </section>
+
+  <section><div class="sectitle">Memória do processo — proveniência técnica (auditável)</div>
+    <table class="prov"><thead><tr><th>Fonte</th><th>Origem</th><th>Consulta</th><th>Registros</th><th>Resultado</th><th>Corresp.</th></tr></thead><tbody>${provRows}</tbody></table>
+    <div class="sub" style="margin-top:8px">Fontes públicas oficiais, consultadas em tempo real ou a partir de cópia em cache (com prazo de validade). A correspondência por <b>Nome</b> é conservadora e pode apontar homônimos — confirme a identidade antes de qualquer decisão; a correspondência por <b>CNPJ</b> é exata.</div>
   </section>
 
   <footer>
     <div class="brand">ASSOCIAÇÃO CASA HACKER</div>
     CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
-    Relatório gerado por Stack Audit™ em ${esc(new Date().toLocaleString("pt-BR"))} · documento de diligência para fins de prestação de contas.
+    Relatório gerado pela plataforma Auditoria (Casa Hacker) em ${esc(new Date().toLocaleString("pt-BR"))} · documento de diligência para fins de prestação de contas.
   </footer>
 </div>
 <script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},400)})</script>
@@ -621,7 +667,7 @@ export function buildReportTxt(rec: any): string {
   L.push(`  IP de origem...: ${rec.ip || "-"}`);
   L.push(`  Fonte cadastral: ${rf.fonte || "-"} | ${rf.apiUrl || "-"} | ${rf.fetchedAt ? dt(rf.fetchedAt) : "-"}`);
   if (rf.cepFonte) L.push(`  Endereço (CEP).: ${rf.cepFonte} | ${rf.cepApiUrl || "-"} | ${rf.cepFetchedAt ? dt(rf.cepFetchedAt) : "-"}`);
-  for (const s of rec.sancoes || []) L.push(`  ${s.fonte}: ${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? " (" + s.hits.length + ")" : ""} | ${s.apiUrl || ""} | ${dt(s.fetchedAt)}`);
+  for (const s of rec.sancoes || []) L.push(`  ${s.fonte}: ${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? " (" + s.hits.length + ")" : ""} | ${s.apiUrl || ""} | ${dt(s.fetchedAt)}${s.registros != null ? " | " + s.registros + " reg." : ""} | corresp. ${LEGAL_NOTES[s.recurso]?.match || "-"}`);
   L.push("");
   L.push("RECEITA FEDERAL — CADASTRO");
   L.push(`  Situação.......: ${rf.situacao_cadastral || "-"}${rf.data_situacao ? " (desde " + rf.data_situacao + ")" : ""}`);
@@ -638,7 +684,7 @@ export function buildReportTxt(rec: any): string {
   L.push(`  E-mail.........: ${rf.email || "-"}`);
   for (const s of rf.qsa || []) L.push(`  Sócio..........: ${s.nome}${s.qual ? " (" + s.qual + ")" : ""}`);
   L.push("");
-  L.push("LISTAS DE RESTRIÇÃO — PORTAL DA TRANSPARÊNCIA (CGU)");
+  L.push("LISTAS DE RESTRIÇÃO — NACIONAIS E INTERNACIONAIS");
   for (const s of rec.sancoes || []) {
     L.push(`  [${SLABEL[s.status] || s.status}] ${s.fonte}`);
     for (const h of s.hits || []) {
@@ -646,9 +692,22 @@ export function buildReportTxt(rec: any): string {
       if (h.fundamentacao) L.push(`       ${h.fundamentacao}`);
     }
   }
+  const recursosTxt: string[] = [];
+  for (const s of rec.sancoes || []) if (s.recurso && !recursosTxt.includes(s.recurso)) recursosTxt.push(s.recurso);
+  if (recursosTxt.length) {
+    L.push("");
+    L.push("NOTAS JURÍDICAS — BASE LEGAL DAS LISTAS");
+    for (const r of recursosTxt) {
+      const n = LEGAL_NOTES[r]; if (!n) continue;
+      const f = (rec.sancoes || []).find((s: any) => s.recurso === r);
+      L.push(`  ${f?.fonte || r} — ${n.orgao}`);
+      L.push(`     Base legal: ${n.base}`);
+      L.push(`     Efeito: ${n.efeito} | Correspondência: por ${n.match}`);
+    }
+  }
   L.push("");
   L.push("ASSOCIAÇÃO CASA HACKER · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org");
-  L.push(`Gerado por Stack Audit™ em ${new Date().toLocaleString("pt-BR")}.`);
+  L.push(`Gerado pela plataforma Auditoria (Casa Hacker) em ${new Date().toLocaleString("pt-BR")}.`);
   return L.join("\n");
 }
 
