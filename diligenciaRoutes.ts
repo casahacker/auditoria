@@ -669,7 +669,7 @@ table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font
 
   <footer>
     <div class="brand">ASSOCIAÇÃO CASA HACKER</div>
-    CNPJ 36.038.079/0001-97 · São Paulo · SP · auditoria@casahacker.org · casahacker.org<br>
+    CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
     Relatório gerado pela plataforma Auditoria (Casa Hacker) em ${esc(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }))} (BRT) · documento de diligência para fins de prestação de contas.<br>
     Todos os horários deste documento estão no fuso de Brasília (BRT, UTC−3).
   </footer>
@@ -734,7 +734,7 @@ export function buildReportTxt(rec: any): string {
     }
   }
   L.push("");
-  L.push("ASSOCIAÇÃO CASA HACKER · CNPJ 36.038.079/0001-97 · São Paulo · SP · auditoria@casahacker.org");
+  L.push("ASSOCIAÇÃO CASA HACKER · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org");
   L.push(`Gerado pela plataforma Auditoria (Casa Hacker) em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (BRT).`);
   L.push("Todos os horários deste documento estão no fuso de Brasília (BRT, UTC-3).");
   return L.join("\n");
