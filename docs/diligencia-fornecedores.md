@@ -11,14 +11,26 @@ Guia do usuário. A Diligência verifica, a partir de um **CNPJ**, a situação 
 | Fonte | O que verifica | Como |
 |---|---|---|
 | **Receita Federal** (BrasilAPI) | Situação cadastral (Ativa/Baixada/Inapta/Suspensa), natureza, porte, CNAE, quadro societário (QSA) | Tempo real, por CNPJ |
-| **CEIS** (CGU) | Empresas inidôneas e suspensas | Portal da Transparência |
-| **CNEP** (CGU) | Empresas punidas (Lei Anticorrupção) | Portal da Transparência |
-| **CEPIM** (CGU) | Entidades sem fins lucrativos impedidas | Portal da Transparência |
-| **Acordos de Leniência** (CGU) | Acordos firmados | Portal da Transparência |
+| **CEIS** (CGU) | Empresas inidôneas e suspensas | Portal da Transparência · por CNPJ |
+| **CNEP** (CGU) | Empresas punidas (Lei Anticorrupção) | Portal da Transparência · por CNPJ |
+| **CEPIM** (CGU) | Entidades sem fins lucrativos impedidas | Portal da Transparência · por CNPJ |
+| **Acordos de Leniência** (CGU) | Acordos firmados | Portal da Transparência · por CNPJ |
+| **Cadastro de Empregadores / "Lista Suja"** (MTE) | Trabalho análogo ao de escravo | CSV oficial · por CNPJ/CPF |
+| **TCU — Licitantes Inidôneos** | Inidoneidade para licitar (art. 46, Lei 8.443/92) | Webservice público · por CNPJ |
+| **PEP** (CGU) | Pessoas Expostas Politicamente (sócios do QSA) | Portal da Transparência · por nome |
+| **OFAC SDN** (Tesouro/EUA) | Sanções dos EUA | Lista oficial · por nome |
+| **OFAC Consolidated** (Tesouro/EUA) | Sanções setoriais não-SDN | Lista oficial · por nome |
+| **UN Security Council** | Sanções da ONU | Lista consolidada · por nome |
+| **EU CFSP/FSF** (UE) | Sanções financeiras da União Europeia | Lista consolidada · por nome |
+| **UK Sanctions** (FCDO) | Sanções do Reino Unido | Lista oficial · por nome |
+| **IDB / BID** | Sancionados pelo Banco Interamericano | Lista oficial · por nome |
 
-As listas do Portal da Transparência são consultadas por **razão social** (obtida na Receita) e os resultados são filtrados pelo **CNPJ exato** do fornecedor — percorrendo **todas as páginas** da resposta (15 registros por página), para não perder uma sanção que esteja além da primeira página. O filtro por CNPJ da API oficial é inoperante (devolve a lista inteira), então este método de **nome + CNPJ** é o que garante precisão.
+São **13 listas de restrição automatizadas**. As listas do **Portal da Transparência (CGU)** são consultadas por **razão social** (obtida na Receita) e filtradas pelo **CNPJ exato**, percorrendo **todas as páginas** da resposta (o filtro por CNPJ da API oficial é inoperante, devolve a lista inteira).
 
-**Fontes complementares** (Lista Suja do Trabalho Escravo / MTE, IBAMA — autuações e embargos, TCU — consulta consolidada de PJ) são listadas no relatório com **link para verificação manual**, pois o download automatizado é bloqueado pelos órgãos.
+- **Correspondência por CNPJ/CPF exato** (CEIS, CNEP, CEPIM, Leniência, Lista Suja, TCU): quando consta, é **definitivo** → eleva o veredito para **Alerta**.
+- **Correspondência por nome** (OFAC, ONU, UE, Reino Unido, BID e PEP): casa razão social + sócios de forma **conservadora** → gera **"Atenção"** (possível homônimo; **confirme a identidade** antes de decidir), sem reprovar automaticamente.
+
+> A consulta ambiental do **IBAMA** segue **manual** (link no relatório) — o órgão bloqueia o download automatizado.
 
 ---
 
@@ -47,8 +59,9 @@ Em seguida:
 
 - **Dados da consulta (auditável)**: data-hora, validade, solicitante e IP.
 - **Receita Federal**: situação cadastral e dados do CNPJ.
-- **Listas de restrição**: status de cada lista; quando "Consta", exibe tipo de sanção, órgão, vigência, processo e fundamentação. Há link para a consulta pública oficial.
-- **Fontes complementares**: links para verificação manual.
+- **Listas de restrição**: status de cada lista (**Nada consta** / **Consta** / **Atenção** — correspondência por nome a confirmar). Quando "Consta", exibe tipo de sanção, órgão, vigência, processo e fundamentação, com link para a consulta pública oficial.
+- **Notas jurídicas**: a base legal de cada lista consultada (lei/ato, órgão e efeito).
+- **Memória do processo (proveniência técnica)**: tabela auditável de cada fonte — origem, data-hora, nº de registros processados, resultado e tipo de correspondência (CNPJ exato / nome). Permite a um terceiro reproduzir a verificação.
 
 Clique em **Exportar PDF** para abrir o relatório auditável (documento **monocromático preto**, com os metadados da consulta) — a janela já chama a impressão do navegador; escolha *Salvar como PDF*. **Baixar dados (TXT)** exporta os mesmos dados em texto. Use **Reconsultar** para forçar uma nova consulta antes do vencimento.
 
@@ -77,4 +90,4 @@ O sistema gera as diligências **sozinho, em segundo plano**:
 - Faça a diligência **antes de contratar** e **antes de pagar** fornecedores relevantes.
 - Para serviços ambientais, **sempre** verifique manualmente o IBAMA (link no relatório).
 - Guarde o PDF da diligência junto à prestação de contas — ele é auditável (traz data-hora, IP e fontes).
-- Um veredito "Nada consta" cobre as fontes automatizadas; complemente com as fontes manuais quando o risco exigir.
+- Um veredito "Nada consta" cobre as **13 listas automatizadas**; complemente com o IBAMA (manual) quando o risco ambiental exigir.
