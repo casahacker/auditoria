@@ -756,6 +756,22 @@ export function provenanceTableHtml(rec: any): string {
   return `${provCaption(rec)}<table class="prov"><thead><tr><th>Fonte</th><th>Origem</th><th>Consulta</th><th>Registros</th><th>Resultado</th><th>Corresp.</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+// #99 — Fontes complementares: consulta automática inviável/frágil (ViewState+WAF F5 na BEC-SP;
+// download bloqueado pelo órgão no IBAMA). Referência com link p/ verificação MANUAL, status NEUTRO
+// (não entram no sancoes[] nem alteram o veredito). A lacuna é mitigada por CEIS/CNEP + TCE-SP/COBES.
+export const COMPLEMENTARY_SOURCES = [
+  { nome: "e-Sanções BEC-SP — Sanções administrativas (Estado de São Paulo)", url: "https://www.bec.sp.gov.br/sancoes_ui/aspx/consultaadministrativafornecedor.aspx", nota: "Sanções administrativas estaduais (Decreto 61.751/2015; Lei 8.666/93; Lei 14.133/21). Consulta automática indisponível (ASP.NET ViewState + WAF F5); verificação manual recomendada. Compras estaduais já parcialmente cobertas por CEIS/CNEP e pelo TCE-SP (Apenados)." },
+  { nome: "IBAMA — Embargos e autuações ambientais", url: "https://servicos.ibama.gov.br/ctf/publico/areasembargadas/ConsultaPublicaAreasEmbargadas.php", nota: "Áreas embargadas e autuações ambientais. Download automatizado bloqueado pelo órgão; verificação manual quando o risco ambiental exigir." },
+];
+export function complementarySourcesHtml(): string {
+  // Inline-styled (depende só de .sectitle, comum aos dois relatórios) p/ renderizar igual no
+  // relatório mono da diligência e no consolidado colorido do cockpit.
+  return `<section><div class="sectitle">Fontes complementares — verificação manual</div>
+    <div style="font-size:11px;margin-bottom:8px">Fontes sem consulta automática confiável (portais com proteção anti-automação ou download bloqueado pelo órgão). <b>Não alteram o veredito acima</b>; verifique manualmente quando o risco exigir.</div>
+    ${COMPLEMENTARY_SOURCES.map((s) => `<div style="border:1px solid #000;padding:8px 10px;margin:6px 0"><b>${esc(s.nome)}</b><br><a href="${esc(s.url)}" style="word-break:break-all">${esc(s.url)}</a><br><span style="font-weight:700">Nota:</span> ${esc(s.nota)}</div>`).join("")}
+  </section>`;
+}
+
 export function buildReportHtml(rec: any): string {
   const rf = rec.receita || {};
   const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
@@ -850,6 +866,8 @@ table.prov td.tech{font-size:9px;padding:2px 6px 4px;border-top:0;word-break:bre
     <div class="sub" style="margin-top:8px">Fontes públicas oficiais, consultadas em tempo real ou a partir de cópia em cache (com prazo de validade). A correspondência por <b>Nome</b> é conservadora e pode apontar homônimos — confirme a identidade antes de qualquer decisão; a correspondência por <b>CNPJ</b> é exata.</div>
   </section>
 
+  ${complementarySourcesHtml()}
+
   <footer>
     <div class="brand">ASSOCIAÇÃO CASA HACKER</div>
     CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
@@ -925,6 +943,13 @@ export function buildReportTxt(rec: any): string {
       L.push(`     Base legal: ${n.base}`);
       L.push(`     Efeito: ${n.efeito} | Correspondência: por ${n.match}`);
     }
+  }
+  L.push("");
+  L.push("FONTES COMPLEMENTARES — VERIFICAÇÃO MANUAL (não alteram o veredito)");
+  for (const s of COMPLEMENTARY_SOURCES) {
+    L.push(`  ${s.nome}`);
+    L.push(`     ${s.url}`);
+    L.push(`     ${s.nota}`);
   }
   L.push("");
   L.push("ASSOCIAÇÃO CASA HACKER · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org");
