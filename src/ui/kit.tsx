@@ -119,7 +119,7 @@ export function Select({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={ariaLabel || label}
-        className="bg-card border border-line rounded-none px-2.5 py-1.5 text-[14px] text-text hover:border-primary focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+        className="h-10 bg-field border border-line rounded-none px-3 text-[14px] text-text transition-colors hover:border-primary focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
       >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
@@ -131,7 +131,7 @@ export function SearchInput({
   value, onChange, placeholder, className,
 }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
   return (
-    <div className={cn('inline-flex items-center gap-2 bg-card border border-line rounded-none px-2.5 py-1.5 focus-within:border-primary', className)}>
+    <div className={cn('inline-flex items-center h-10 gap-2 bg-field border border-line rounded-none px-3 transition-colors focus-within:border-primary', className)}>
       <Search size={16} className="text-text-secondary shrink-0" aria-hidden />
       <input
         value={value}

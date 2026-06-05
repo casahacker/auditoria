@@ -13,6 +13,8 @@
   --color-text-secondary: #525252;
   --color-surface: #ffffff;
   --color-surface-hover: #f4f4f4;
+  /* Carbon $field (gray-10 no claro) — fundo dos campos de formulário (#105). */
+  --color-field: #f4f4f4;
   --color-success: #198038;
   /* Amarelo Carbon (#f1c21b) reprova em contraste como TEXTO sobre fundo claro
      (~1.6:1). Usamos um âmbar escuro (≥4.5:1, WCAG AA) p/ texto/ícones/bordas no
@@ -79,6 +81,7 @@
   --color-text-secondary: #a8a8a8;
   --color-surface: #262626;
   --color-surface-hover: #393939;
+  --color-field: #393939; /* Carbon $field no escuro (gray-80) */
   /* No escuro o amarelo vivo tem ótimo contraste (≈9:1) e lê melhor que o âmbar do claro */
   --color-warning: #f1c21b;
 }
@@ -102,6 +105,7 @@
   --color-warning: #ffff00 !important;
   --color-surface: #000000 !important;
   --color-surface-hover: #1a1a1a !important;
+  --color-field: #1a1a1a !important; /* Carbon $field em alto contraste (borda branca dá a definição) */
 }
 .high-contrast *,
 .ch-a11y-high-contrast * {
