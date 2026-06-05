@@ -51,27 +51,27 @@ Cada conformidade vale por **ano fiscal** (ano civil). Registros assinados em an
 
 ## Setup do Documenso (uma vez)
 
-A assinatura usa **template + `formValues`** (o Documenso desta instalação usa armazenamento local; este é o caminho que não exige S3). Passos:
+A assinatura usa a **API do Documenso com armazenamento S3**: a cada envio, o app **gera o PDF de conformidade já pré-preenchido** e o manda para assinatura — **sem templates** e **sem `formValues`**. O setup é mínimo:
 
-1. **Gere os PDFs-template fillable:**
-   ```bash
-   npx tsx scripts/gen-kyc-templates.ts
-   # saída: kyc-templates/KYS_template.pdf e KYG_template.pdf
-   ```
-   Os campos AcroForm são nomeados exatamente como o `formValues` que o backend envia.
-2. No **Documenso** (documenso.casahacker.org), em **Templates → New Template**, suba cada PDF. Adicione **1 recipient** ("Signatário") e coloque **1 campo SIGNATURE** (e, se quiser, NAME/DATE) na área *"ASSINADO ELETRONICAMENTE"* da última página. Salve/abilite.
-3. Em **Settings → API Tokens**, crie um token.
-4. No `.env` do Auditoria, preencha e recrie o container:
+1. **Configure o Documenso com S3.** A instância (documenso.casahacker.org) precisa estar com armazenamento S3 habilitado (`NEXT_PUBLIC_UPLOAD_TRANSPORT=s3`). É o que destrava a criação de documentos e o campo de assinatura via API.
+2. Em **Settings → API Tokens**, crie um token.
+3. No `.env` do Auditoria, preencha e recrie o container:
    ```ini
+   DOCUMENSO_URL=https://documenso.casahacker.org
    DOCUMENSO_API_TOKEN=api_...
-   DOCUMENSO_KYS_TEMPLATE_ID=<id do template KYS>
-   DOCUMENSO_KYG_TEMPLATE_ID=<id do template KYG>
    ```
 
-> Sem essas variáveis o wizard ainda funciona e **grava o registro** (status "aguardando assinatura"), mas a etapa de assinatura fica desabilitada.
+> Com o token preenchido, **KYS e KYG ficam ambos habilitados**. Sem ele, o wizard ainda funciona e **grava o registro** (status "aguardando assinatura"), mas a etapa de assinatura fica desabilitada.
 
 ### Como funciona por baixo
-Por submissão, o backend chama `POST /api/v1/templates/<id>/create-document` com os `recipients` (signatário + CC solicitante) e os `formValues` (que o Documenso insere nos campos do PDF), depois `POST /api/v1/documents/<id>/send`. O **token** do signatário volta na resposta e alimenta o iframe `/embed/sign/<token>` do modal. A conclusão é confirmada via `GET /api/v1/documents/<id>` (status `COMPLETED`).
+Por submissão, o backend:
+1. **Gera o PDF** de conformidade pré-preenchido (`kycPdf.ts`) e calcula a posição do campo de assinatura.
+2. `POST /api/v1/documents` — cria o documento com **2 recipients** na ordem **`[0]` CC (solicitante da Casa Hacker)** e **`[1]` SIGNER (representante do fornecedor)**; o Documenso devolve uma **URL de upload S3** (presigned).
+3. **`PUT`** do PDF na URL presigned.
+4. `POST /api/v1/documents/<id>/fields` — adiciona **1 campo SIGNATURE** no recipient SIGNER, na posição devolvida pelo gerador.
+5. `POST /api/v1/documents/<id>/send` — dispara o fluxo de assinatura.
+
+O **token** do signatário (recipient com `role === "SIGNER"`) alimenta o iframe `/embed/sign/<token>` do modal. Uma **varredura no servidor** (a cada `KYC_SIGN_SWEEP_MS`, padrão 1 min) consulta `GET /api/v1/documents/<id>` e marca o registro como **assinado** quando o Documenso conclui; o PDF assinado é baixado via `GET /api/v1/documents/<id>/download`.
 
 ---
 
