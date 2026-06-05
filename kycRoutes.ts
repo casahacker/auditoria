@@ -621,7 +621,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const { documensoToken: _t, ...kycSafe } = (kyc || {}) as any;
     const kycValida = !!(kyc && kyc.status === "assinado" && isFiscalValid(kyc));
     const faixa = faixaOf(dil?.verdict, !!(kycValida && kyc!.elegibilidade?.elegivel === true), cadastro.situacaoCadastral);
-    return { doc, docFmt: fmtCnpj(doc), tipo: doc.length === 14 ? "pj" : "pf", cadastro, manual, fontes, qsa, faixa, diligencia: dil, kyc: kyc ? { ...kycSafe, valida: kycValida } : null };
+    return { doc, docFmt: fmtCnpj(doc), tipo: doc.length === 14 ? "pj" : "pf", cadastro, manual, fontes, qsa, faixa, diligencia: dil ? { ...dil, valida: !!(dil.validUntil && new Date(dil.validUntil).getTime() > Date.now()) } : null, kyc: kyc ? { ...kycSafe, valida: kycValida } : null };
   };
   const docParam = (req: any, res: any): string | null => {
     const d = onlyDigits(sanitizeSegment(String(req.params.doc || "")) || "");
@@ -684,7 +684,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const dir = path.join(DATA_DIR, "diligencia"); fs.mkdirSync(dir, { recursive: true });
     const p = path.join(dir, `${doc}.json`);
     let dil: any; try { dil = JSON.parse(fs.readFileSync(p, "utf-8")); }
-    catch { dil = { cnpj: doc, sancoes: [], verdict: "PENDENTE", checkedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 30 * 86400000).toISOString(), checkedBy: "atualização em massa", ip: "sistema" }; }
+    catch { dil = { cnpj: doc, sancoes: [], verdict: "PENDENTE", checkedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 30 * 86400000).toISOString(), checkedBy: "Associação Casa Hacker", ip: process.env.SERVER_IP || "sistema" }; }
     dil.receita = receita;
     dil.razaoSocial = receita.razao_social || dil.razaoSocial || "—";
     dil.nomeFantasia = receita.nome_fantasia || dil.nomeFantasia || "";

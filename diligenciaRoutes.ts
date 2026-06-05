@@ -553,7 +553,7 @@ const LEGAL_NOTES: Record<string, { orgao: string; base: string; efeito: string;
 
 export function buildReportHtml(rec: any): string {
   const rf = rec.receita || {};
-  const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR"); } catch { return s || "—"; } };
+  const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
   const vClass = rec.verdict === "ALERTA" ? "v-bad" : rec.verdict === "NADA_CONSTA" ? "v-ok" : "v-pend";
   const row = (k: string, v: any) => `<div class="row"><span class="k">${esc(k)}</span><span class="v">${esc(v || "—")}</span></div>`;
   const ender = [rf.logradouro, rf.numero, rf.complemento, rf.bairro].filter(Boolean).join(", ");
@@ -632,7 +632,7 @@ table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font
 
   <section><div class="sectitle">Dados da consulta (auditável)</div>
     ${row("Data/hora da consulta", dt(rec.checkedAt))}
-    ${row("Validade (" + VALIDADE_DIAS + " dias)", new Date(rec.validUntil).toLocaleDateString("pt-BR"))}
+    ${row("Validade (" + VALIDADE_DIAS + " dias)", new Date(rec.validUntil).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }))}
     ${row("Solicitante", rec.checkedBy)}
     ${row("IP de origem", rec.ip)}
   </section>
@@ -669,8 +669,9 @@ table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font
 
   <footer>
     <div class="brand">ASSOCIAÇÃO CASA HACKER</div>
-    CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
-    Relatório gerado pela plataforma Auditoria (Casa Hacker) em ${esc(new Date().toLocaleString("pt-BR"))} · documento de diligência para fins de prestação de contas.
+    CNPJ 36.038.079/0001-97 · São Paulo · SP · auditoria@casahacker.org · casahacker.org<br>
+    Relatório gerado pela plataforma Auditoria (Casa Hacker) em ${esc(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }))} (BRT) · documento de diligência para fins de prestação de contas.<br>
+    Todos os horários deste documento estão no fuso de Brasília (BRT, UTC−3).
   </footer>
 </div>
 <script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},400)})</script>
@@ -679,7 +680,7 @@ table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font
 
 export function buildReportTxt(rec: any): string {
   const rf = rec.receita || {};
-  const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR"); } catch { return s || "-"; } };
+  const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "-"; } };
   const L: string[] = [];
   L.push("RELATÓRIO DE DILIGÊNCIA DE FORNECEDOR");
   L.push("=".repeat(60));
@@ -689,7 +690,7 @@ export function buildReportTxt(rec: any): string {
   L.push("");
   L.push("DADOS DA CONSULTA (auditável)");
   L.push(`  Data/hora......: ${dt(rec.checkedAt)}`);
-  L.push(`  Validade.......: ${new Date(rec.validUntil).toLocaleDateString("pt-BR")} (30 dias)`);
+  L.push(`  Validade.......: ${new Date(rec.validUntil).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} (${VALIDADE_DIAS} dias)`);
   L.push(`  Solicitante....: ${rec.checkedBy || "-"}`);
   L.push(`  IP de origem...: ${rec.ip || "-"}`);
   L.push(`  Fonte cadastral: ${rf.fonte || "-"} | ${rf.apiUrl || "-"} | ${rf.fetchedAt ? dt(rf.fetchedAt) : "-"}`);
@@ -733,8 +734,9 @@ export function buildReportTxt(rec: any): string {
     }
   }
   L.push("");
-  L.push("ASSOCIAÇÃO CASA HACKER · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org");
-  L.push(`Gerado pela plataforma Auditoria (Casa Hacker) em ${new Date().toLocaleString("pt-BR")}.`);
+  L.push("ASSOCIAÇÃO CASA HACKER · CNPJ 36.038.079/0001-97 · São Paulo · SP · auditoria@casahacker.org");
+  L.push(`Gerado pela plataforma Auditoria (Casa Hacker) em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (BRT).`);
+  L.push("Todos os horários deste documento estão no fuso de Brasília (BRT, UTC-3).");
   return L.join("\n");
 }
 
@@ -784,7 +786,7 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
         const cnpj = queue.shift() as string;
         queued.delete(cnpj); processing = cnpj;
         const force = forceSet.delete(cnpj);
-        try { await runDiligence(DATA_DIR, cnpj, { checkedBy: force ? "reconsulta forçada (sistema)" : "automático (sistema)", ip: "sistema", force }); counters.done++; }
+        try { await runDiligence(DATA_DIR, cnpj, { checkedBy: "Associação Casa Hacker", ip: process.env.SERVER_IP || "sistema", force }); counters.done++; }
         catch (e: any) { counters.failed++; counters.lastError = e?.message || String(e); console.warn("[Diligência] auto falhou", cnpj, e?.message || e); }
         finally { processing = null; }
       }
