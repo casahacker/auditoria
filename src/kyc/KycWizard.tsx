@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ShieldCheck, Loader2, CheckCircle2, AlertTriangle, ChevronRight, ChevronLeft,
-  Building2, UserCheck, FileSignature, Info, Check,
+  Building2, UserCheck, FileSignature, Info, Check, Paperclip, X,
 } from 'lucide-react';
 import {
   KycType, KysData, KygData, KycAddress, emptyAddress, emptyBank,
@@ -150,6 +150,8 @@ export default function KycWizard() {
   const [error, setError] = useState('');
   const [sign, setSign] = useState<{ id: string; token: string; host: string } | null>(null);
   const [done, setDone] = useState<{ id: string; needsSetup: boolean } | null>(null);
+  const [comprovante, setComprovante] = useState<File | null>(null); // #96 — comprovante de conta corrente (opcional)
+  const [compErr, setCompErr] = useState('');
 
   // carrega bancos + prefill de convite
   useEffect(() => {
@@ -231,6 +233,10 @@ export default function KycWizard() {
       const r = await fetch('/api/public/kyc/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) { setError(j.error || 'Falha ao enviar.'); setSubmitting(false); return; }
+      // #96 — anexa o comprovante bancário ao registro recém-criado (best-effort: não bloqueia a assinatura).
+      if (comprovante && j.id) {
+        try { const fd = new FormData(); fd.append('file', comprovante); await fetch(`/api/public/kyc/${j.id}/comprovante`, { method: 'POST', body: fd }); } catch { /* segue mesmo se o anexo falhar */ }
+      }
       if (j.documenso?.token) setSign({ id: j.id, token: j.documenso.token, host: j.documenso.host });
       else setDone({ id: j.id, needsSetup: !!j.needsDocumensoSetup });
     } catch (e: any) { setError(e.message || 'Falha de rede.'); }
@@ -303,6 +309,7 @@ export default function KycWizard() {
               </div>
               <SectionTitle>Dados bancários</SectionTitle>
               <BankRow banks={bankOptions} value={kys.banco} onChange={(b) => setKys({ ...kys, banco: b })} required />
+              <ComprovanteField file={comprovante} onPick={(f, err) => { setComprovante(f); setCompErr(err); }} error={compErr} />
             </div>
           )}
 
@@ -380,6 +387,7 @@ export default function KycWizard() {
               </div>
               <SectionTitle>Dados bancários (recebimento)</SectionTitle>
               <BankRow banks={bankOptions} value={kyg.banco} onChange={(b) => setKyg({ ...kyg, banco: b })} />
+              <ComprovanteField file={comprovante} onPick={(f, err) => { setComprovante(f); setCompErr(err); }} error={compErr} />
             </div>
           )}
 
@@ -411,6 +419,7 @@ export default function KycWizard() {
             <div className="space-y-5">
               <SectionTitle icon={FileSignature}>Revisão e assinatura</SectionTitle>
               <ReviewSummary type={type} kys={kys} kyg={kyg} requester={requester} />
+              {comprovante && <div className="flex items-center gap-2 text-[12px] text-text-secondary"><Paperclip size={14} className="text-primary shrink-0" aria-hidden /> Comprovante bancário anexado: <span className="text-text font-medium truncate">{comprovante.name}</span></div>}
 
               {type === 'kys' && (
                 <div className="bg-card border border-line rounded-lg overflow-hidden">
@@ -480,6 +489,39 @@ function BankRow({ banks, value, onChange, required }: { banks: { value: string;
       <Field label="Agência" value={value.agencia} onChange={(v) => onChange({ ...value, agencia: v })} required={required} />
       <Field label="Conta-corrente" value={value.conta} onChange={(v) => onChange({ ...value, conta: v })} required={required} />
       <Field label="Chave PIX" value={value.chavePix} onChange={(v) => onChange({ ...value, chavePix: v })} />
+    </div>
+  );
+}
+
+// #96 — anexo opcional do comprovante de conta corrente (PDF/imagem) para conferência dos dados bancários.
+const COMP_MAX = 10 * 1024 * 1024; // 10 MB
+const COMP_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
+function ComprovanteField({ file, onPick, error }: { file: File | null; onPick: (f: File | null, err: string) => void; error: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const handle = (f?: File | null) => {
+    if (!f) { onPick(null, ''); return; }
+    if (!COMP_TYPES.includes(f.type)) { onPick(null, 'Formato não suportado — envie um PDF, PNG ou JPEG.'); return; }
+    if (f.size > COMP_MAX) { onPick(null, 'Arquivo muito grande (máximo 10 MB).'); return; }
+    onPick(f, '');
+  };
+  return (
+    <div>
+      <span className="text-[12px] font-semibold text-text-secondary">Comprovante de conta corrente <span className="font-normal text-text-secondary">(opcional — PDF ou imagem, até 10 MB)</span></span>
+      <p className="text-[12px] text-text-secondary mt-0.5 mb-1.5">Anexe um comprovante bancário (cabeçalho de extrato, cartão da conta ou comprovante de PIX) para conferência dos dados informados.</p>
+      {!file ? (
+        <>
+          <input ref={inputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
+          <button type="button" onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-2 px-3 py-2 rounded border border-line text-[12px] font-semibold text-text hover:border-primary">
+            <Paperclip size={14} aria-hidden /> Anexar comprovante
+          </button>
+        </>
+      ) : (
+        <div className="flex items-center justify-between gap-3 border border-line rounded px-3 py-2 bg-card">
+          <span className="flex items-center gap-2 text-[12px] text-text min-w-0"><Paperclip size={14} className="text-primary shrink-0" aria-hidden /><span className="truncate">{file.name}</span><span className="text-text-secondary shrink-0">({(file.size / 1024).toFixed(0)} KB)</span></span>
+          <button type="button" onClick={() => { handle(null); if (inputRef.current) inputRef.current.value = ''; }} className="text-text-secondary hover:text-error shrink-0" aria-label="Remover comprovante"><X size={15} /></button>
+        </div>
+      )}
+      {error && <div className="text-[12px] text-error mt-1.5">{error}</div>}
     </div>
   );
 }

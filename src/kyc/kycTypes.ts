@@ -99,6 +99,8 @@ export interface KycRecord {
   createdAt: string;
   ip?: string;
   userAgent?: string;
+  /** #96 — comprovante de conta corrente (PDF/imagem) anexado no wizard; arquivo guardado em DATA_DIR/kyc-uploads/{id}.<ext>. */
+  comprovante?: { path: string; name: string; mime: string; size: number; uploadedAt: string };
 }
 
 /** Resumo enviado ao painel (sem PII sensível / sem token). */

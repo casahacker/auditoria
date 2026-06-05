@@ -20,6 +20,7 @@ import type { Express, RequestHandler } from "express";
 import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
+import multer from "multer";
 import crypto from "node:crypto";
 import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml } from "./diligenciaRoutes";
 import { generateKycPdf } from "./kycPdf";
@@ -424,6 +425,23 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
   const INVITES_FILE = path.join(DATA_DIR, "kyc-invites.json");
   fs.mkdirSync(KYC_DIR, { recursive: true });
 
+  // #96 — comprovante de conta corrente (PDF/imagem) anexado pelo fornecedor no wizard.
+  const UPLOAD_DIR = path.join(DATA_DIR, "kyc-uploads");
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  const COMPROVANTE_MIME_EXT: Record<string, string> = { "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg" };
+  const COMPROVANTE_MAX = 10 * 1024 * 1024; // 10 MB
+  const comprovanteRel = (id: string, ext: string) => path.join("kyc-uploads", `${id}.${ext}`);
+  const comprovanteUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: COMPROVANTE_MAX, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const ok = !!COMPROVANTE_MIME_EXT[file.mimetype] && [".pdf", ".png", ".jpg", ".jpeg"].includes(ext);
+      if (ok) return cb(null, true);
+      cb(new Error("Formato não suportado — envie um PDF, PNG ou JPEG."));
+    },
+  });
+
   const recPath = (id: string) => path.join(KYC_DIR, `${id}.json`);
   const readRec = (id: string): KycRecord | null => { try { return JSON.parse(fs.readFileSync(recPath(id), "utf-8")); } catch { return null; } };
   const writeRec = (rec: KycRecord) => fs.writeFileSync(recPath(rec.id), JSON.stringify(rec, null, 2));
@@ -590,6 +608,31 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     }
     if (completed) { rec.status = "assinado"; rec.signedAt = nowIso(); delete rec.documensoToken; writeRec(rec); }
     res.json({ ok: true, status: rec.status });
+  });
+
+  // #96 — anexa o comprovante de conta corrente (multipart) ao registro recém-criado pelo wizard.
+  app.post("/api/public/kyc/:id/comprovante", publicLimiter, (req: any, res) => {
+    comprovanteUpload.single("file")(req, res, (err: any) => {
+      if (err) {
+        const tooBig = err?.code === "LIMIT_FILE_SIZE";
+        return res.status(400).json({ error: tooBig ? "Arquivo muito grande (máximo 10 MB)." : (err?.message || "Falha no upload do comprovante.") });
+      }
+      const id = idParam(req, res); if (!id) return;
+      const rec = readRec(id); if (!rec) return res.status(404).json({ error: "Registro não encontrado" });
+      // janela de envio: o wizard envia logo após o submit; recusa anexos tardios a um id vazado.
+      if (Date.now() - new Date(rec.createdAt).getTime() > 24 * 3600_000) return res.status(409).json({ error: "Janela de envio do comprovante expirada." });
+      const file = req.file; if (!file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
+      const ext = COMPROVANTE_MIME_EXT[file.mimetype]; if (!ext) return res.status(400).json({ error: "Tipo de arquivo não permitido." });
+      const rel = comprovanteRel(id, ext);
+      // remove um comprovante anterior de extensão diferente, se houver
+      if (rec.comprovante?.path && rec.comprovante.path !== rel) { try { fs.unlinkSync(path.join(DATA_DIR, rec.comprovante.path)); } catch { /* */ } }
+      fs.writeFileSync(path.join(DATA_DIR, rel), file.buffer);
+      // multer/busboy decodifica o filename como latin1 → reinterpreta p/ UTF-8 (acentos PT-BR: "março.pdf").
+      const origName = Buffer.from(String(file.originalname || `comprovante.${ext}`), "latin1").toString("utf8").slice(0, 120);
+      rec.comprovante = { path: rel, name: origName, mime: file.mimetype, size: file.size, uploadedAt: nowIso() };
+      writeRec(rec);
+      res.json({ ok: true, name: rec.comprovante.name, size: rec.comprovante.size });
+    });
   });
 
   // ─────────────── AUTENTICADO (painel) ───────────────
@@ -840,6 +883,19 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${rec.type}_${recDoc(rec)}_${rec.fiscalYear}.pdf"`);
     res.send(buf);
+  });
+
+  // #96 — serve o comprovante bancário anexado (dado sensível: restrito ao painel autenticado).
+  app.get("/api/kyc/:id/comprovante", requireAuth, (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const rec = readRec(id); if (!rec) return res.status(404).json({ error: "Registro não encontrado" });
+    if (!rec.comprovante?.path) return res.status(404).json({ error: "Sem comprovante anexado" });
+    const fp = path.join(DATA_DIR, rec.comprovante.path);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: "Arquivo não encontrado" });
+    const ext = rec.comprovante.path.split(".").pop() || "bin";
+    res.setHeader("Content-Type", rec.comprovante.mime || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="comprovante_${recDoc(rec)}_${rec.fiscalYear}.${ext}"`);
+    res.send(fs.readFileSync(fp));
   });
 
   // status da assinatura (poll do painel)
