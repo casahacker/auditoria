@@ -489,6 +489,9 @@ function AjudaFeac({ onNova }: { onNova: () => void }) {
           <FaqItem q="Reabri a prestação e quero mudar um rateio.">Abra-a no Histórico → volte ao Relatório preliminar → ajuste → Tratar documentos de novo. A Observação e os PDFs são regerados.</FaqItem>
           <FaqItem q="Um lançamento ficou “Valor divergente”.">O documento foi localizado, mas o valor difere da planilha. A Observação registra a diferença; confira a NF/comprovante e corrija a origem se preciso.</FaqItem>
           <FaqItem q="Um fornecedor veio sem CNPJ.">O sistema tenta completar o CNPJ pelo documento casado e busca a Razão Social oficial na API da Receita.</FaqItem>
+          <FaqItem q="O que é a “Observação” de cada lançamento?">É uma nota explicativa gerada automaticamente, de forma determinística (sem IA, para garantir auditabilidade): resume a conferência do lançamento (integral, parcial ou divergente), os dados do Pix quando há comprovante (origem, destino, agência/conta, chave e ID da transação), a competência e eventuais ressalvas ou rateio. Aparece no modal do lançamento e nas exportações (CSV e fluxo de caixa).</FaqItem>
+          <FaqItem q="O que é o carimbo e onde ele aparece?">No tratamento, cada página do PDF recebe, na margem esquerda, um carimbo em preto com o nome do projeto e o número do contrato FEAC — sem cobrir o conteúdo. A caixa “Carimbo aplicado…” na etapa 1 mostra o texto exato antes de processar.</FaqItem>
+          <FaqItem q="Por que os documentos viram PDF/A-2b?">PDF/A-2b é o padrão de arquivamento de longo prazo (documentos auto-contidos, com as fontes embutidas), adequado para prestação de contas e guarda. A conversão é automática no tratamento.</FaqItem>
         </div>
       </div>
     </div>
