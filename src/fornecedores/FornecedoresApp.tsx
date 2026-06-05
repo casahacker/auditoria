@@ -225,7 +225,7 @@ type SortKey = 'nome' | 'diligencia' | 'kyc' | 'elegivel';
 function SortTh({ label, k, sort, setSort, className }: { label: string; k: SortKey; sort: { k: SortKey; dir: 1 | -1 }; setSort: (s: { k: SortKey; dir: 1 | -1 }) => void; className?: string }) {
   const active = sort.k === k;
   return (
-    <th scope="col" aria-sort={active ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'} className={cn('px-4 py-2.5 font-semibold', className)}>
+    <th scope="col" aria-sort={active ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'} className={cn('px-4 py-2 font-semibold', className)}>
       <button onClick={() => setSort({ k, dir: active && sort.dir === 1 ? -1 : 1 })}
         className="inline-flex items-center gap-1 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
         {label}{active ? (sort.dir === 1 ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />) : <ArrowUpDown size={11} className="opacity-40" aria-hidden />}
@@ -333,21 +333,21 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
                 <caption className="sr-only">Fornecedores com situação de diligência, KYS/KYG e faixa de elegibilidade. Use o botão no fim de cada linha para abrir a ficha.</caption>
                 <thead className={tableHeadCls}><tr>
                   <SortTh label="Fornecedor" k="nome" sort={sort} setSort={setSort} />
-                  <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ / CPF</th>
+                  <th scope="col" className="px-4 py-2 font-semibold">CNPJ / CPF</th>
                   <SortTh label="Diligência" k="diligencia" sort={sort} setSort={setSort} />
                   <SortTh label="KYS / KYG" k="kyc" sort={sort} setSort={setSort} />
                   <SortTh label="Elegibilidade" k="elegivel" sort={sort} setSort={setSort} />
-                  <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
+                  <th scope="col" className="px-4 py-2 font-semibold text-right">Ação</th>
                 </tr></thead>
                 <tbody>
                   {sorted.map((r: any) => (
                     <tr key={r.doc} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openFornecedor(r.doc)}>
-                      <td className="px-4 py-2.5 max-w-[240px] truncate font-medium uppercase">{r.nome || '—'}</td>
-                      <td className="px-4 py-2.5 font-mono whitespace-nowrap">{r.docFmt}</td>
-                      <td className="px-4 py-2.5">{dilChip(r.diligencia)}</td>
-                      <td className="px-4 py-2.5">{kycChip(r.kyc)}</td>
-                      <td className="px-4 py-2.5">{faixaChip(r.faixa)}</td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-4 py-2 max-w-[240px] truncate font-medium uppercase">{r.nome || '—'}</td>
+                      <td className="px-4 py-2 font-mono whitespace-nowrap">{r.docFmt}</td>
+                      <td className="px-4 py-2">{dilChip(r.diligencia)}</td>
+                      <td className="px-4 py-2">{kycChip(r.kyc)}</td>
+                      <td className="px-4 py-2">{faixaChip(r.faixa)}</td>
+                      <td className="px-4 py-2 text-right">
                         <IconBtn label={`Abrir ficha de ${r.nome || r.docFmt}`} onClick={(e) => { e.stopPropagation(); openFornecedor(r.doc); }}><ChevronRight size={16} aria-hidden /></IconBtn>
                       </td>
                     </tr>
@@ -540,18 +540,18 @@ function HistoricoView({ history, openFornecedor }: any) {
             <table className="w-full text-[14px]">
               <caption className="sr-only">Histórico de diligências realizadas. Use o botão no fim de cada linha para abrir a ficha do fornecedor.</caption>
               <thead className={tableHeadCls}><tr>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Fornecedor</th><th scope="col" className="px-4 py-2.5 font-semibold">CNPJ</th>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Resultado</th><th scope="col" className="px-4 py-2.5 font-semibold">Consulta</th>
-                <th scope="col" className="px-4 py-2.5 font-semibold text-right">Ação</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Fornecedor</th><th scope="col" className="px-4 py-2 font-semibold">CNPJ</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Resultado</th><th scope="col" className="px-4 py-2 font-semibold">Consulta</th>
+                <th scope="col" className="px-4 py-2 font-semibold text-right">Ação</th>
               </tr></thead>
               <tbody>
                 {filtered.map((h: any) => (
                   <tr key={h.cnpj} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openFornecedor(h.cnpj)}>
-                    <td className="px-4 py-2.5 max-w-[280px] truncate">{h.razaoSocial || '—'}</td>
-                    <td className="px-4 py-2.5 font-mono whitespace-nowrap">{maskDoc(h.cnpj)}</td>
-                    <td className="px-4 py-2.5">{h.verdict ? <Chip tone={DIL[h.verdict]?.tone} icon={DIL[h.verdict]?.icon} size="sm">{DIL[h.verdict]?.label || h.verdict}</Chip> : '—'}</td>
-                    <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}{h.valida ? '' : ' · vencida'}</td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-4 py-2 max-w-[280px] truncate">{h.razaoSocial || '—'}</td>
+                    <td className="px-4 py-2 font-mono whitespace-nowrap">{maskDoc(h.cnpj)}</td>
+                    <td className="px-4 py-2">{h.verdict ? <Chip tone={DIL[h.verdict]?.tone} icon={DIL[h.verdict]?.icon} size="sm">{DIL[h.verdict]?.label || h.verdict}</Chip> : '—'}</td>
+                    <td className="px-4 py-2 text-text-secondary whitespace-nowrap">{new Date(h.checkedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}{h.valida ? '' : ' · vencida'}</td>
+                    <td className="px-4 py-2 text-right">
                       <IconBtn label={`Abrir ficha de ${h.razaoSocial || maskDoc(h.cnpj)}`} onClick={(e) => { e.stopPropagation(); openFornecedor(h.cnpj); }}><ChevronRight size={16} aria-hidden /></IconBtn>
                     </td>
                   </tr>
