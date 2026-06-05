@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentação
+    url: https://github.com/casahacker/auditoria/tree/main/docs
+    about: Guias do usuário e arquitetura técnica antes de abrir uma issue.
+  - name: Reportar vulnerabilidade de segurança (privado)
+    url: https://github.com/casahacker/auditoria/blob/main/SECURITY.md
+    about: Não abra issue pública para segurança — siga a política.
