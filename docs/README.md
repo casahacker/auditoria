@@ -12,7 +12,7 @@ um **launcher** com três ferramentas:
 
 Cada ferramenta também tem uma seção **"Como usar"** dentro do próprio app.
 
-> **Para desenvolvedores:** a [arquitetura técnica](arquitetura.md) (módulos, modelo de dados, fluxos e deploy) está documentada à parte.
+> **Para desenvolvedores:** a [arquitetura técnica](arquitetura.md) (módulos, modelo de dados, fluxos e deploy) e a [referência da API](api.md) estão documentadas à parte.
 
 ## URLs
 
