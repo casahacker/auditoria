@@ -117,10 +117,13 @@
   outline-offset: 2px !important;
 }
 
-/* ── Font size ───────────────────────────────────────────────────────────────── */
-.font-small  { font-size: 14px; }
-.font-normal { font-size: 16px; }
-.font-large  { font-size: 20px; }
+/* ── Font size ───────────────────────────────────────────────────────────────────
+   REMOVIDO (2026-06-05): estas 3 classes eram LEGADO e NÃO eram aplicadas por ninguém
+   (a barra de acessibilidade escala a fonte via `zoom` no <html> — ver useAccessibility.ts).
+   Pior: `.font-normal` (unlayered) COLIDIA com a utility `font-normal` do Tailwind
+   (font-weight:400) que o kit usa em TODO Btn/Chip. Por ser unlayered, vencia o
+   `text-[14px]`/`text-[12px]` (em @layer utilities) → inflava botões p/ 16px e chips
+   p/ 16px (deviam ser 14/12). Não recriar classes utilitárias com nomes do Tailwind. */
 
 /* ── Skeleton loading (UX-05) ────────────────────────────────────────────────── */
 @keyframes skeleton-pulse {
