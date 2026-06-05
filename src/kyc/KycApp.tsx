@@ -11,7 +11,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BadgeCheck, BookOpen, Link2, Loader2, Search, FileDown, RefreshCw, ChevronRight,
-  ShieldCheck, ShieldAlert, AlertTriangle, Copy, ExternalLink, ClipboardList,
+  ShieldCheck, ShieldAlert, AlertTriangle, Copy, ExternalLink, ClipboardList, Paperclip,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
@@ -296,6 +296,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload, embedded
     try { const res = await apiFetch(`/api/kyc/${r.id}/signature-status`); const j = await res.json(); addToast('info', `Status: ${j.status}${j.documensoStatus ? ` (Documenso: ${j.documensoStatus})` : ''}`); reload(); } catch { addToast('error', 'Falha ao atualizar.'); } finally { setRefreshing(false); }
   };
   const downloadSigned = async () => { try { await dl(apiFetch, `/api/kyc/${r.id}/signed.pdf`, `${r.type}_${doc}_${r.fiscalYear}.pdf`); } catch (e: any) { addToast('error', e.message); } };
+  const downloadComprovante = async () => { try { await dl(apiFetch, `/api/kyc/${r.id}/comprovante`, r.comprovante?.name || `comprovante_${doc}`); } catch (e: any) { addToast('error', e.message); } };
 
   return (
     <div className="space-y-5 max-w-4xl">
@@ -313,6 +314,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload, embedded
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {r.status === 'assinado' && <Btn onClick={downloadSigned}><FileDown size={14} /> Baixar PDF assinado</Btn>}
+          {r.comprovante && <Btn variant="secondary" onClick={downloadComprovante}><Paperclip size={14} /> Baixar comprovante</Btn>}
           {r.documensoDocumentId && r.status !== 'assinado' && <Btn variant="secondary" onClick={refreshStatus} disabled={refreshing}>{refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Atualizar status</Btn>}
           <Btn variant="secondary" onClick={() => setShowData(true)}><ClipboardList size={14} /> Ver respostas</Btn>
         </div>
@@ -325,6 +327,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload, embedded
           {r.signedAt && <KV k="Assinado em" v={new Date(r.signedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} />}
           {r.requester?.email && <KV k="Solicitante (Casa Hacker)" v={[r.requester.nome, r.requester.email].filter(Boolean).join(' · ')} />}
           {r.ip && <KV k="IP de origem" v={r.ip} />}
+          {r.comprovante && <KV k="Comprovante bancário" v={`${r.comprovante.name}${r.comprovante.size ? ` · ${(r.comprovante.size / 1024).toFixed(0)} KB` : ''}`} />}
         </div>
       </Card>
 
