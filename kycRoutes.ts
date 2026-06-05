@@ -21,7 +21,7 @@ import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml } from "./diligenciaRoutes";
 import { generateKycPdf } from "./kycPdf";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
@@ -97,7 +97,7 @@ async function fetchCep(cep: string): Promise<any> {
 }
 
 // ── régua de conformidade (Receita + listas de restrição), reusa diligenciaRoutes ─
-async function runKycChecks(documento: string): Promise<{ trail: KycVerification[]; verdict: KycVerdict; receita: any; sancoes: any[] }> {
+async function runKycChecks(documento: string, repLegal?: { nome?: string; cpf?: string }): Promise<{ trail: KycVerification[]; verdict: KycVerdict; receita: any; sancoes: any[] }> {
   const cnpj = onlyDigits(documento);
   const trail: KycVerification[] = [];
   // CPF (pessoa física): só checksum — não há base pública gratuita por nome.
@@ -137,7 +137,22 @@ async function runKycChecks(documento: string): Promise<{ trail: KycVerification
         checkedAt: s.fetchedAt || nowIso(), detalhe: s.hits?.length ? s.hits : undefined,
       });
     }
+    // PEP — representante legal informado (nome + CPF) + sócios do QSA (#88).
+    const qsaNomes: string[] = (receita?.qsa || []).map((s: any) => s?.nome).filter(Boolean);
+    const pepNomes = [...qsaNomes, ...(repLegal?.nome ? [repLegal.nome] : [])];
+    const pepCpfs = repLegal?.cpf ? [repLegal.cpf] : [];
+    if (pepNomes.length || pepCpfs.length) {
+      const pep = await consultaPEP(pepNomes, pepCpfs);
+      sancoes.push(pep);
+      trail.push({
+        fonte: pep.fonte, tipo: "PEP — Pessoas Expostas Politicamente (rep. legal + QSA)", apiUrl: pep.apiUrl,
+        resultado: pep.status === "ATENCAO" ? `Atenção (${pep.hits?.length || 0})` : pep.status === "NADA_CONSTA" ? "Nada consta" : pep.status,
+        status: pep.status === "ATENCAO" ? "alerta" : pep.status === "NADA_CONSTA" ? "ok" : pep.status === "ERRO" ? "erro" : "pendente",
+        checkedAt: pep.fetchedAt || nowIso(), detalhe: pep.hits?.length ? pep.hits : undefined,
+      });
+    }
   }
+  // PEP é informativo (ATENCAO) → não reprova; o veredito segue apenas as listas que CONSTAM.
   const anySancao = sancoes.some((s) => s.status === "CONSTA");
   const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
   const erro = !receita || sancoes.some((s) => s.status === "ERRO" || s.status === "PENDENTE");
@@ -289,7 +304,7 @@ function toSummary(rec: KycRecord): KycSummary {
     id: rec.id, type: rec.type, status: rec.status, nome: recNome(rec) || "—",
     documento: doc, documentoFmt: fmtCnpj(doc), requester: rec.requester, verdict: rec.verdict, elegivel: rec.elegibilidade?.elegivel,
     fiscalYear: rec.fiscalYear, validUntil: rec.validUntil, valida: rec.status === "assinado" && isFiscalValid(rec),
-    createdAt: rec.createdAt, signedAt: rec.signedAt,
+    createdAt: rec.createdAt, signedAt: rec.signedAt, origin: rec.origin,
   };
 }
 
@@ -480,6 +495,16 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       if (!k.razaoSocial?.trim()) return res.status(400).json({ error: "Razão social obrigatória." });
       if (!k.repNome?.trim() || !isValidCpf(k.repCpf)) return res.status(400).json({ error: "Representante legal: nome e CPF válido obrigatórios." });
       if (!isEmail(k.repEmail)) return res.status(400).json({ error: "E-mail do representante legal inválido." });
+      // #89 — identificação da empresa, dados bancários e representante legal são obrigatórios.
+      const phoneOk = (s?: string) => { const d = onlyDigits(s); return d.length === 10 || d.length === 11; };
+      const addrOk = (a: any) => !!(a && String(a.cep || "").trim() && String(a.logradouro || "").trim() && String(a.numero || "").trim() && String(a.bairro || "").trim() && String(a.municipio || "").trim() && String(a.uf || "").trim());
+      if (!isEmail(k.email)) return res.status(400).json({ error: "E-mail da empresa obrigatório." });
+      if (!phoneOk(k.telefone)) return res.status(400).json({ error: "Telefone da empresa obrigatório (com DDD)." });
+      if (!addrOk(k.endereco)) return res.status(400).json({ error: "Endereço completo da empresa obrigatório (CEP, logradouro, número, bairro, município e UF)." });
+      if (!k.banco?.banco?.trim() || !k.banco?.agencia?.trim() || !k.banco?.conta?.trim()) return res.status(400).json({ error: "Dados bancários obrigatórios (banco, agência e conta)." });
+      if (!k.repEstadoCivil?.trim() || !k.repProfissao?.trim()) return res.status(400).json({ error: "Estado civil e profissão do representante legal obrigatórios." });
+      if (!phoneOk(k.repTelefone)) return res.status(400).json({ error: "Telefone do representante legal obrigatório (com DDD)." });
+      if (!addrOk(k.repEndereco)) return res.status(400).json({ error: "Endereço completo do representante legal obrigatório (CEP, logradouro, número, bairro, município e UF)." });
       documento = onlyDigits(k.cnpj); signer = { name: k.repNome, email: k.repEmail };
     } else {
       const g = body.kyg as KygData;
@@ -497,9 +522,12 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       ? { nome: String(body.requester.nome || "").trim(), email: String(body.requester.email || "").trim() } : undefined;
     if (requester?.email && !isEmail(requester.email)) return res.status(400).json({ error: "E-mail do solicitante Casa Hacker inválido." });
 
-    // régua de conformidade (Receita + listas)
+    // régua de conformidade (Receita + listas + PEP do rep. legal/QSA)
+    const repLegal = type === "kys"
+      ? { nome: (body.kys as KysData).repNome, cpf: (body.kys as KysData).repCpf }
+      : ((body.kyg as KygData)?.tipoPessoa === "pf" ? { nome: (body.kyg as KygData).nome, cpf: onlyDigits((body.kyg as KygData).documento) } : undefined);
     let checks;
-    try { checks = await runKycChecks(documento); }
+    try { checks = await runKycChecks(documento, repLegal); }
     catch (e: any) { checks = { trail: [{ fonte: "Sistema", tipo: "Régua de check", resultado: e.message, status: "erro" as const, checkedAt: nowIso() }], verdict: "PENDENTE" as KycVerdict, receita: null, sancoes: [] }; }
 
     const y = fiscalYear();
@@ -511,6 +539,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       requester,
       verificationTrail: checks.trail, verdict: checks.verdict,
       inviteToken: body.inviteToken ? String(body.inviteToken) : undefined,
+      origin: body.inviteToken ? "convite" : "self",
       fiscalYear: y, validUntil: fiscalValidUntil(y),
       createdAt: nowIso(), ip: reqIp(req), userAgent: String(req.headers["user-agent"] || ""),
     };
@@ -531,6 +560,10 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       }
     }
     writeRec(rec);
+
+    // #88/#87 — atualiza a diligência em 2º plano (agora inclui o PEP do representante legal, via
+    // latestKysRepLegal) para que a ficha mostre UMA única trilha consolidada. Não bloqueia o envio.
+    if (documento.length === 14) void runDiligence(DATA_DIR, documento, { checkedBy: "KYS/KYG (autodeclaração)", ip: reqIp(req), force: true }).catch((e) => console.warn("[KYC] diligência pós-submit:", e?.message));
 
     // marca convite como usado
     if (rec.inviteToken) { const inv = readInvites(); const i = inv.find((x) => x.token === rec.inviteToken); if (i) { i.usedByRecordId = rec.id; writeInvites(inv); } }
@@ -589,7 +622,7 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       if (!row) { const dr = readDil(d); row = { doc: d, docFmt: fmtCnpj(d), nome: recNome(rec) || dilNome(dr), origens: ["KYS/KYG"], diligencia: dilSummary(dr), kyc: null }; rows.set(d, row); }
       else if (!row.origens.includes("KYS/KYG")) row.origens = [...row.origens, "KYS/KYG"];
       if (!row.nome) row.nome = recNome(rec);
-      row.kyc = { id: rec.id, type: rec.type, status: rec.status, elegivel: rec.elegibilidade?.elegivel, fiscalYear: rec.fiscalYear, valida: rec.status === "assinado" && isFiscalValid(rec), signedAt: rec.signedAt };
+      row.kyc = { id: rec.id, type: rec.type, status: rec.status, elegivel: rec.elegibilidade?.elegivel, fiscalYear: rec.fiscalYear, valida: rec.status === "assinado" && isFiscalValid(rec), signedAt: rec.signedAt, origin: rec.origin };
     }
     for (const row of rows.values()) {
       const kycAprovado = !!(row.kyc && row.kyc.status === "assinado" && row.kyc.valida && row.kyc.elegivel === true);
@@ -813,6 +846,29 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
       res.json({ status: rec.status, documensoStatus: doc?.status });
     } catch (e: any) { res.json({ status: rec.status, error: e.message }); }
   });
+
+  // #86 — varredura periódica: reconhece assinaturas concluídas no Documenso SEM ação manual.
+  // O caminho interativo (/completed, /signature-status) já cobre o clique do usuário; esta
+  // varredura cobre o atraso entre o "concluí" e o selo final do Documenso, e o caso de o
+  // cockpit estar aberto noutra sessão — assim a ficha passa a "Assinado" sozinha.
+  if (DOCUMENSO_TOKEN) {
+    const sweepSignatures = async () => {
+      for (const rec of listRecs()) {
+        if (rec.status !== "aguardando_assinatura" || !rec.documensoDocumentId) continue;
+        try {
+          const doc = await getDocumentStatus(rec.documensoDocumentId);
+          if (doc?.status === "COMPLETED") {
+            const fresh = readRec(rec.id); if (!fresh || fresh.status === "assinado") continue;
+            fresh.status = "assinado"; fresh.signedAt = nowIso(); delete fresh.documensoToken; writeRec(fresh);
+            console.log(`[KYC] assinatura reconhecida automaticamente: ${rec.id} (${recDoc(rec)})`);
+          }
+        } catch { /* tenta no próximo ciclo */ }
+      }
+    };
+    const SWEEP_MS = Math.max(15_000, Number(process.env.KYC_SIGN_SWEEP_MS || 60_000));
+    setTimeout(() => void sweepSignatures(), 15_000);
+    setInterval(() => void sweepSignatures(), SWEEP_MS);
+  }
 
   console.log(`[KYC] routes registered (/api/kyc, /api/public/kyc) — Documenso KYS:${documensoReady("kys") ? "on" : "off"} KYG:${documensoReady("kyg") ? "on" : "off"}`);
 }

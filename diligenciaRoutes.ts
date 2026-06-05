@@ -426,25 +426,58 @@ export async function consultaTCU(cnpjDigits: string): Promise<any> {
   }
 }
 
-async function consultaPEP(qsaNomes: string[]): Promise<any> {
+/**
+ * PEP (Pessoas Expostas Politicamente, CGU). Consulta por NOME (sócios do QSA e/ou
+ * representante legal informado no KYS/KYG) e, opcionalmente, por CPF (representante
+ * legal). A correspondência por nome é conservadora (norm exato); a por CPF só aceita
+ * quando a API devolve o CPF completo e idêntico (evita falso-positivo se o filtro for
+ * ignorado). Resultado é informativo → ATENCAO.
+ */
+export async function consultaPEP(qsaNomes: string[], cpfs: string[] = []): Promise<any> {
   const base = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString() };
   if (!process.env.PORTAL_TRANSPARENCIA_KEY) return { ...base, status: "PENDENTE", hits: [], erro: "Chave da API não configurada" };
   const nomes = Array.from(new Set(qsaNomes.map((n) => String(n || "").trim()).filter((n) => norm(n).split(" ").length >= 2))).slice(0, 12);
-  if (!nomes.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const cpfList = Array.from(new Set(cpfs.map(onlyDigits).filter((c) => c.length === 11))).slice(0, 6);
+  if (!nomes.length && !cpfList.length) return { ...base, status: "NADA_CONSTA", hits: [] };
   const hits: any[] = []; const hoje = new Date();
+  const pushHit = (p: any, via: string) => {
+    const carenciaOk = !p.dt_fim_carencia || new Date(p.dt_fim_carencia) >= hoje;
+    if (carenciaOk) hits.push({ tipo: `PEP: ${String(p.nome).trim()} — ${String(p.descricao_funcao || "").trim()} (${via})`, orgao: `${String(p.nome_orgao || "").trim()} · exercício ${p.dt_inicio_exercicio || "?"}–${p.dt_fim_exercicio || "?"}`, dataFim: p.dt_fim_carencia || "" });
+  };
   try {
     for (const nome of nomes) {
       const r = await limitedFetch(`${PT_BASE}peps?nome=${encodeURIComponent(nome)}&pagina=1`, { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
       if (!r.ok) continue;
       const lista = await r.json();
-      for (const p of Array.isArray(lista) ? lista : []) {
-        if (norm(p.nome) !== norm(nome)) continue;
-        const carenciaOk = !p.dt_fim_carencia || new Date(p.dt_fim_carencia) >= hoje;
-        if (carenciaOk) hits.push({ tipo: `PEP: ${String(p.nome).trim()} — ${String(p.descricao_funcao || "").trim()}`, orgao: `${String(p.nome_orgao || "").trim()} · exercício ${p.dt_inicio_exercicio || "?"}–${p.dt_fim_exercicio || "?"}`, dataFim: p.dt_fim_carencia || "" });
-      }
+      for (const p of Array.isArray(lista) ? lista : []) if (norm(p.nome) === norm(nome)) pushHit(p, "nome");
     }
-  } catch (e: any) { return hits.length ? { ...base, status: "ATENCAO", hits, parcial: true } : { ...base, status: "ERRO", erro: e.message, hits: [] }; }
-  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits };
+    for (const cpf of cpfList) {
+      const r = await limitedFetch(`${PT_BASE}peps?cpf=${cpf}&pagina=1`, { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const lista = await r.json();
+      // só aceita se a API devolveu o CPF COMPLETO e idêntico (o filtro server-side pode ser ignorado).
+      for (const p of Array.isArray(lista) ? lista : []) if (onlyDigits(p.cpf) === cpf) pushHit(p, "CPF");
+    }
+  } catch (e: any) { return hits.length ? { ...base, status: "ATENCAO", hits: dedupHits(hits), parcial: true } : { ...base, status: "ERRO", erro: e.message, hits: [] }; }
+  const uniq = dedupHits(hits);
+  return { ...base, status: uniq.length ? "ATENCAO" : "NADA_CONSTA", hits: uniq };
+}
+const dedupHits = (hits: any[]): any[] => { const seen = new Set<string>(); return hits.filter((h) => { const k = norm(h.tipo); if (seen.has(k)) return false; seen.add(k); return true; }); };
+
+/** Representante legal do KYS mais recente para um CNPJ (p/ incluir na consulta PEP da diligência). */
+export function latestKysRepLegal(DATA_DIR: string, cnpj: string): { nome: string; cpf: string } | null {
+  const KYC_DIR = path.join(DATA_DIR, "kyc");
+  let best: any = null;
+  try {
+    for (const f of fs.readdirSync(KYC_DIR)) {
+      if (!f.endsWith(".json")) continue;
+      let rec: any; try { rec = JSON.parse(fs.readFileSync(path.join(KYC_DIR, f), "utf-8")); } catch { continue; }
+      if (rec?.type !== "kys" || onlyDigits(rec?.kys?.cnpj) !== onlyDigits(cnpj)) continue;
+      if (!best || String(rec.createdAt) > String(best.createdAt)) best = rec;
+    }
+  } catch { /* sem diretório kyc ainda */ }
+  if (!best?.kys?.repNome) return null;
+  return { nome: String(best.kys.repNome || "").trim(), cpf: onlyDigits(best.kys.repCpf) };
 }
 
 // ── supplier base ─────────────────────────────────────────────────────────────
@@ -469,6 +502,10 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
   let sancoes: any[] = [];
   if (razao) {
     const qsaNomes: string[] = (receita?.qsa || []).map((s: any) => s?.nome).filter(Boolean);
+    // PEP cobre os sócios do QSA + o representante legal informado no KYS mais recente (#88).
+    const rep = latestKysRepLegal(DATA_DIR, cnpj);
+    const pepNomes = [...qsaNomes, ...(rep?.nome ? [rep.nome] : [])];
+    const pepCpfs = rep?.cpf ? [rep.cpf] : [];
     sancoes = await Promise.all([
       consultaPT("ceis", "CEIS — Inidôneas e Suspensas", razao, cnpj),
       consultaPT("cnep", "CNEP — Empresas Punidas (Lei Anticorrupção)", razao, cnpj),
@@ -482,7 +519,7 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
       consultaIDB(DATA_DIR, [razao, ...qsaNomes]),
       consultaUK(DATA_DIR, [razao, ...qsaNomes]),
       consultaTCU(cnpj),
-      consultaPEP(qsaNomes),
+      consultaPEP(pepNomes, pepCpfs),
     ]);
     apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)", "TCU — Licitantes Inidôneos (art. 46, Lei 8.443/92)");
   }

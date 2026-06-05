@@ -269,9 +269,20 @@ export function ConvitesView({ apiFetch, addToast, initialCnpj }: { apiFetch: Ky
 
 const TRAIL_TONE: Record<string, string> = { ok: 'text-success', alerta: 'text-error', erro: 'text-error', pendente: 'text-warning' };
 
-export function DetailView({ current, busy, apiFetch, addToast, reload }: { current: any; busy: boolean; apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; reload: () => void }) {
+export function DetailView({ current, busy, apiFetch, addToast, reload, embedded }: { current: any; busy: boolean; apiFetch: KycAppProps['apiFetch']; addToast: KycAppProps['addToast']; reload: () => void; embedded?: boolean }) {
   const [showData, setShowData] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // #86 — enquanto a assinatura estiver pendente, verifica o status no Documenso a cada 15s e
+  // recarrega quando ela é concluída — sem o usuário precisar clicar em "Atualizar".
+  useEffect(() => {
+    const id = current?.id, docId = current?.documensoDocumentId, status = current?.status;
+    if (!id || !docId || status === 'assinado') return;
+    let alive = true;
+    const t = setInterval(async () => {
+      try { const res = await apiFetch(`/api/kyc/${id}/signature-status`); const j = await res.json(); if (alive && j.status === 'assinado') { clearInterval(t); reload(); } } catch { /* tenta no próximo ciclo */ }
+    }, 15000);
+    return () => { alive = false; clearInterval(t); };
+  }, [current?.id, current?.documensoDocumentId, current?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   if (busy && !current) return <div className="flex items-center gap-3 text-text-secondary text-[14px]"><Loader2 size={20} className="animate-spin text-primary" aria-hidden /> Carregando…</div>;
   if (!current) return <div className="text-[14px] text-text-secondary">Selecione um registro na lista.</div>;
   const r = current;
@@ -291,7 +302,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload }: { curr
       <Card className="p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2"><span className="text-[12px] font-semibold text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span></div>
+            <div className="flex items-center gap-2"><span className="text-[12px] font-semibold text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span>{r.origin && <Chip tone="neutral" size="sm">{r.origin === 'self' ? 'Autocadastro' : 'Via convite'}</Chip>}</div>
             <div className="text-[16px] font-semibold mt-0.5">{nome || '—'}</div>
             <div className="text-[12px] text-text-secondary font-mono">{maskDoc(doc)}</div>
           </div>
@@ -332,6 +343,9 @@ export function DetailView({ current, busy, apiFetch, addToast, reload }: { curr
         </Card>
       )}
 
+      {/* #87 — no cockpit (embedded) a trilha de restrições é a seção "Diligência" da ficha (fonte única).
+          Aqui mostramos a trilha só no painel standalone para não duplicar a mesma lista. */}
+      {!embedded && (
       <Card className="p-5">
         <div className="text-[12px] font-semibold text-text-secondary mb-3">Trilha de conformidade (verificada por APIs)</div>
         <div className="space-y-2">
@@ -347,6 +361,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload }: { curr
           {!(r.verificationTrail || []).length && <div className="text-[12px] text-text-secondary">Sem verificações registradas.</div>}
         </div>
       </Card>
+      )}
 
       {showData && <DataModal r={r} data={data} onClose={() => setShowData(false)} />}
     </div>
