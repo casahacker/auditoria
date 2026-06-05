@@ -551,6 +551,34 @@ const LEGAL_NOTES: Record<string, { orgao: string; base: string; efeito: string;
   "tcu-inidoneos": { orgao: "Tribunal de Contas da União (TCU)", base: "Lei 8.443/1992, art. 46 (declaração de inidoneidade de licitante)", efeito: "Licitante declarado inidôneo — impedido de participar de licitação na Administração Pública Federal por até 5 anos.", match: "CNPJ" },
 };
 
+// Seções reutilizáveis (report de diligência + report consolidado do cockpit). HTML auto-contido.
+export function legalNotesHtml(rec: any): string {
+  const uniq: string[] = [];
+  for (const s of (rec.sancoes || [])) if (s.recurso && !uniq.includes(s.recurso)) uniq.push(s.recurso);
+  return uniq.map((r) => {
+    const n = LEGAL_NOTES[r]; if (!n) return "";
+    const f = (rec.sancoes || []).find((s: any) => s.recurso === r);
+    return `<div class="note"><b>${esc(f?.fonte || r)}</b> — ${esc(n.orgao)}<br><span class="nk">Base legal:</span> ${esc(n.base)}<br><span class="nk">Efeito:</span> ${esc(n.efeito)}<br><span class="nk">Correspondência:</span> por ${esc(n.match)}</div>`;
+  }).join("");
+}
+export function provenanceTableHtml(rec: any): string {
+  const rf = rec.receita || {};
+  const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
+  const hostOf = (u: string) => { try { return new URL(u).host; } catch { return u || "—"; } };
+  const lin = (fonte: string, apiUrl: string, at: string, base: string, resultado: string, metodo: string) =>
+    `<tr><td>${esc(fonte)}</td><td>${apiUrl ? `<a href="${esc(apiUrl)}">${esc(hostOf(apiUrl))}</a>` : "—"}</td><td>${at ? dt(at) : "—"}</td><td>${esc(base)}</td><td>${esc(resultado)}</td><td>${esc(metodo)}</td></tr>`;
+  const rows = [
+    lin(rf.fonte || "Receita Federal", rf.apiUrl || "", rf.fetchedAt, "—", rf.situacao_cadastral || "consultado", "CNPJ"),
+    ...(rf.cepFonte ? [lin(rf.cepFonte, rf.cepApiUrl || "", rf.cepFetchedAt, "—", "consultado", "CEP")] : []),
+    ...(rec.sancoes || []).map((s: any) => lin(
+      s.fonte, s.apiUrl || "", s.fetchedAt,
+      s.registros != null ? `${Number(s.registros).toLocaleString("pt-BR")} reg.` : "—",
+      `${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""}`,
+      (LEGAL_NOTES[s.recurso]?.match) || "—")),
+  ].join("");
+  return `<table class="prov"><thead><tr><th>Fonte</th><th>Origem</th><th>Consulta</th><th>Registros</th><th>Resultado</th><th>Corresp.</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 export function buildReportHtml(rec: any): string {
   const rf = rec.receita || {};
   const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
@@ -558,30 +586,6 @@ export function buildReportHtml(rec: any): string {
   const row = (k: string, v: any) => `<div class="row"><span class="k">${esc(k)}</span><span class="v">${esc(v || "—")}</span></div>`;
   const ender = [rf.logradouro, rf.numero, rf.complemento, rf.bairro].filter(Boolean).join(", ");
   const sitOk = /ATIVA/i.test(rf.situacao_cadastral || "");
-
-  // ── Memória do processo: uma linha por fonte efetivamente consultada, com origem
-  //    técnica, momento, tamanho da base e chave de correspondência (auditável). ──────
-  const hostOf = (u: string) => { try { return new URL(u).host; } catch { return u || "—"; } };
-  const provLinha = (fonte: string, apiUrl: string, at: string, base: string, resultado: string, metodo: string) =>
-    `<tr><td>${esc(fonte)}</td><td>${apiUrl ? `<a href="${esc(apiUrl)}">${esc(hostOf(apiUrl))}</a>` : "—"}</td><td>${at ? dt(at) : "—"}</td><td>${esc(base)}</td><td>${esc(resultado)}</td><td>${esc(metodo)}</td></tr>`;
-  const provRows = [
-    provLinha(rf.fonte || "Receita Federal", rf.apiUrl || "", rf.fetchedAt, "—", rf.situacao_cadastral || "consultado", "CNPJ"),
-    ...(rf.cepFonte ? [provLinha(rf.cepFonte, rf.cepApiUrl || "", rf.cepFetchedAt, "—", "consultado", "CEP")] : []),
-    ...(rec.sancoes || []).map((s: any) => provLinha(
-      s.fonte, s.apiUrl || "", s.fetchedAt,
-      s.registros != null ? `${Number(s.registros).toLocaleString("pt-BR")} reg.` : "—",
-      `${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""}`,
-      (LEGAL_NOTES[s.recurso]?.match) || "—")),
-  ].join("");
-
-  // ── Notas jurídicas: base legal de cada lista de restrição efetivamente consultada. ──
-  const recursosUnicos: string[] = [];
-  for (const s of (rec.sancoes || [])) if (s.recurso && !recursosUnicos.includes(s.recurso)) recursosUnicos.push(s.recurso);
-  const notasJuridicas = recursosUnicos.map((r) => {
-    const n = LEGAL_NOTES[r]; if (!n) return "";
-    const f = (rec.sancoes || []).find((s: any) => s.recurso === r);
-    return `<div class="note"><b>${esc(f?.fonte || r)}</b> — ${esc(n.orgao)}<br><span class="nk">Base legal:</span> ${esc(n.base)}<br><span class="nk">Efeito:</span> ${esc(n.efeito)}<br><span class="nk">Correspondência:</span> por ${esc(n.match)}</div>`;
-  }).join("");
 
   const sancoesHtml = (rec.sancoes || []).map((s: any) => {
     const head = `<div class="row"><span class="k">${esc(s.fonte)}</span><span class="v ${s.status === "CONSTA" ? "bad" : s.status === "NADA_CONSTA" ? "ok" : ""}">${esc(SLABEL[s.status] || s.status)}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""}</span></div>`;
@@ -659,11 +663,11 @@ table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font
   </section>
 
   <section><div class="sectitle">Notas jurídicas — base legal das listas consultadas</div>
-    ${notasJuridicas || '<div class="sub">—</div>'}
+    ${legalNotesHtml(rec) || '<div class="sub">—</div>'}
   </section>
 
   <section><div class="sectitle">Memória do processo — proveniência técnica (auditável)</div>
-    <table class="prov"><thead><tr><th>Fonte</th><th>Origem</th><th>Consulta</th><th>Registros</th><th>Resultado</th><th>Corresp.</th></tr></thead><tbody>${provRows}</tbody></table>
+    ${provenanceTableHtml(rec)}
     <div class="sub" style="margin-top:8px">Fontes públicas oficiais, consultadas em tempo real ou a partir de cópia em cache (com prazo de validade). A correspondência por <b>Nome</b> é conservadora e pode apontar homônimos — confirme a identidade antes de qualquer decisão; a correspondência por <b>CNPJ</b> é exata.</div>
   </section>
 

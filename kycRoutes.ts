@@ -21,7 +21,7 @@ import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT, collectSuppliers, runDiligence, lookupCep } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml } from "./diligenciaRoutes";
 import { generateKycPdf } from "./kycPdf";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
@@ -300,9 +300,9 @@ const FAIXA_LABEL: Record<string, string> = {
   inelegivel: "INELEGÍVEL", ate_2sm: "ELEGÍVEL — contratos até 2 salários mínimos",
   acima_2sm: "ELEGÍVEL — contratos a partir de 2 salários mínimos", pendente: "PENDENTE — diligência não concluída",
 };
-function buildFornecedorReportHtml(p: any): string {
+export function buildFornecedorReportHtml(p: any): string {
   const c = p.cadastro || {}; const dil = p.diligencia; const kyc = p.kyc;
-  const dt = (s: any) => { try { return new Date(s).toLocaleString("pt-BR"); } catch { return s || "—"; } };
+  const dt = (s: any) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
   const row = (k: string, v: any) => v ? `<div class="row"><span class="k">${escH(k)}</span><span class="v">${escH(v)}</span></div>` : "";
   const ender = [c.logradouro, c.numero, c.complemento, c.bairro].filter(Boolean).join(", ");
   const cnaesSec = String(c.cnaesSecundarios || "").split("\n").filter(Boolean);
@@ -332,6 +332,10 @@ section{margin-top:22px;break-inside:avoid}
 .list{margin:2px 0 0 0;padding-left:16px}.list li{font-size:11.5px;padding:1px 0}
 .hit{border:1px solid #ffd7d9;background:#fff1f1;border-radius:4px;padding:6px 9px;margin:4px 0;font-size:11px}
 .muted{color:#6f6f6f;font-size:11px}
+.note{border:1px solid #e0e0e0;background:#f9f9f9;border-radius:4px;padding:8px 10px;margin:5px 0;font-size:11px}.nk{font-weight:700;color:#393939}
+table.prov{width:100%;border-collapse:collapse;font-size:10px;margin-top:4px}
+table.prov th,table.prov td{border:1px solid #e0e0e0;padding:4px 6px;text-align:left;vertical-align:top;word-break:break-word}
+table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:9px;color:#6f6f6f;background:#f4f4f4}
 footer{margin-top:34px;border-top:1px solid #e0e0e0;padding-top:12px;color:#6f6f6f;font-size:10px;line-height:1.7}
 .toolbar{position:fixed;top:12px;right:16px;background:#0f62fe;color:#fff;border:none;padding:8px 14px;border-radius:4px;font:inherit;font-size:11px;cursor:pointer}
 @media print{.toolbar{display:none}.page{padding:0}}@page{margin:14mm}
@@ -341,7 +345,7 @@ footer{margin-top:34px;border-top:1px solid #e0e0e0;padding-top:12px;color:#6f6f
   <div class="top">
     <div><div class="eyebrow">Perfil de Fornecedor</div><h1>${escH(c.razaoSocial || "—")}</h1>
       <div class="sub">${escH(p.docFmt)}${c.nomeFantasia ? ` · ${escH(c.nomeFantasia)}` : ""}${c.tipo ? ` · ${escH(c.tipo)}` : ""}</div></div>
-    <div style="text-align:right"><div class="brandtag">Casa Hacker</div><div class="muted">Stack Audit™</div></div>
+    <div style="text-align:right"><div class="brandtag">Casa Hacker</div><div class="muted">Auditoria</div></div>
   </div>
   <div class="faixa ${faixaCls}">${escH(FAIXA_LABEL[p.faixa] || "—")}</div>
 
@@ -366,17 +370,31 @@ footer{margin-top:34px;border-top:1px solid #e0e0e0;padding-top:12px;color:#6f6f
     ${c.observacoes ? `<div style="margin-top:6px"><div class="k">Observações</div><div class="v">${escH(c.observacoes)}</div></div>` : ""}
   </section>
 
-  <section><div class="sectitle">Diligência — listas de restrição (CGU)</div>
-    ${dil ? `<div class="row"><span class="k">Veredito</span><span class="v ${dil.verdict === "ALERTA" ? "bad" : ""}">${escH(dil.verdict)}</span></div>${row("Consultada em", dt(dil.checkedAt))}${sancHtml}` : `<div class="muted">Diligência ainda não realizada para este fornecedor.</div>`}
+  <section><div class="sectitle">Diligência — dados da consulta (auditável)</div>
+    ${dil ? `<div class="grid"><div class="row"><span class="k">Veredito</span><span class="v ${dil.verdict === "ALERTA" ? "bad" : ""}">${escH(dil.verdict)}</span></div>${row("Data/hora da consulta", dt(dil.checkedAt))}${row("Validade", dil.validUntil ? dt(dil.validUntil) : "—")}${row("Solicitante", dil.checkedBy)}${row("IP de origem", dil.ip)}</div>` : `<div class="muted">Diligência ainda não realizada para este fornecedor.</div>`}
   </section>
+${dil ? `
+  <section><div class="sectitle">Listas de restrição — nacionais e internacionais</div>
+    ${sancHtml || '<div class="muted">Sem consulta.</div>'}
+  </section>
+
+  <section><div class="sectitle">Notas jurídicas — base legal das listas consultadas</div>
+    ${legalNotesHtml(dil) || '<div class="muted">—</div>'}
+  </section>
+
+  <section><div class="sectitle">Memória do processo — proveniência técnica (auditável)</div>
+    ${provenanceTableHtml(dil)}
+    <div class="muted" style="margin-top:8px">Fontes públicas oficiais, consultadas em tempo real ou a partir de cópia em cache. A correspondência por <b>Nome</b> é conservadora (pode apontar homônimos — confirme a identidade); por <b>CNPJ</b> é exata.</div>
+  </section>` : ""}
 
   <section><div class="sectitle">Conformidade KYS / KYG</div>
     ${kyc ? `${row("Tipo", String(kyc.type || "").toUpperCase())}${row("Status", kyc.status === "assinado" ? (kyc.valida ? "Assinado (válido)" : "Assinado (vencido)") : kyc.status)}${row("Ano fiscal", kyc.fiscalYear)}${kyc.signedAt ? row("Assinado em", dt(kyc.signedAt)) : ""}${row("Elegibilidade interna", kyc.elegibilidade?.elegivel ? "Aprovado" : "Reprovado")}${kycMot.length ? `<div style="margin-top:4px"><div class="k">Motivos</div><ul class="list">${kycMot.map((m) => `<li>${escH(m)}</li>`).join("")}</ul></div>` : ""}` : `<div class="muted">Sem KYS/KYG preenchido. Exigido apenas para contratações específicas.</div>`}
   </section>
 
   <footer>
-    <b>ASSOCIAÇÃO CASA HACKER</b> · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org<br>
-    Perfil consolidado gerado por Stack Audit™ em ${escH(new Date().toLocaleString("pt-BR"))}. Fontes: ${escH(p.fontes?.receita?.fonte || "Receita")}${p.fontes?.cep ? ` · ${escH(p.fontes.cep.fonte)}` : ""} · Portal da Transparência/CGU.
+    <b>ASSOCIAÇÃO CASA HACKER</b> · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
+    Relatório consolidado gerado pela plataforma Auditoria (Casa Hacker) em ${escH(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }))} (BRT) · documento de diligência para fins de prestação de contas.<br>
+    Todos os horários deste documento estão no fuso de Brasília (BRT, UTC−3).
   </footer>
 </div>
 <script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},500)})</script>
