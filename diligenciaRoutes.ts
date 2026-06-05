@@ -19,9 +19,16 @@
 import type { Express, RequestHandler } from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "node:crypto";
 
 const PT_BASE = "https://api.portaldatransparencia.gov.br/api-de-dados/";
 const VALIDADE_DIAS = 30;
+// #104: conjunto canônico das fontes de restrição consultadas por runDiligence. SOURCES_VERSION é
+// um hash curto desse conjunto — muda sozinho quando uma fonte entra/sai (ordem não importa).
+// Um registro gravado sob versão ANTERIOR é tratado como DESATUALIZADO (re-rodado pelo sweep mesmo
+// dentro dos 30 dias), então toda fonte nova faz backfill automático da base, sem ação manual.
+export const DILIGENCE_SOURCES = ["ceis", "cnep", "cepim", "acordos-leniencia", "lista-suja", "ofac-sdn", "ofac-cons", "un-sc", "eu-fsf", "idb", "uk-sanctions", "tcu-inidoneos", "pep"];
+export const SOURCES_VERSION = crypto.createHash("sha1").update([...DILIGENCE_SOURCES].sort().join(",")).digest("hex").slice(0, 8);
 // fornecedores importados manualmente (lista/CSV), em DATA_DIR (fora de diligencia/)
 const EXTRA_SUPPLIERS_FILE = "diligencia-extra-suppliers.json";
 // A API do Portal devolve 15 registros por página e ignora `tamanhoPagina`. Como o
@@ -494,7 +501,9 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
   const readRec = (): any => { try { return JSON.parse(fs.readFileSync(recPath, "utf-8")); } catch { return null; } };
   const isValid = (rec: any) => rec && rec.validUntil && new Date(rec.validUntil).getTime() > Date.now();
   const cached = readRec();
-  if (cached && isValid(cached) && !opts.force) return { ...cached, fromCache: true };
+  // #104: além de vencido/forçado, re-roda quando o registro foi gerado sob uma VERSÃO ANTERIOR
+  // do conjunto de fontes (senão o sweep enfileiraria mas o cache devolveria o registro velho).
+  if (cached && isValid(cached) && cached.fontesVersao === SOURCES_VERSION && !opts.force) return { ...cached, fromCache: true };
   const receita = await fetchReceita(cnpj);
   const razao = receita?.razao_social || cached?.razaoSocial || "";
   const apis: string[] = [];
@@ -533,6 +542,7 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
     checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
     checkedBy: opts.checkedBy || "—", ip: opts.ip || "—",
     receita, sancoes, verdict,
+    fontesVersao: SOURCES_VERSION, fontesCount: DILIGENCE_SOURCES.length, // #104
     metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString() },
   };
   fs.writeFileSync(recPath, JSON.stringify(rec, null, 2));
@@ -797,7 +807,10 @@ export function registerDiligenciaRoutes(app: Express, ctx: DiligenciaCtx) {
   };
 
   // ── execução da diligência (interativa e automática) ────────────────────────
-  const hasValidRec = (cnpj: string) => { const r = readRec(cnpj); return !!(r && isValid(r)); };
+  // #104: "ainda atual" = dentro dos 30 dias E gravado sob a versão corrente do conjunto de fontes.
+  // Um registro válido-no-tempo mas de versão antiga é re-enfileirado pelo sweep (backfill automático);
+  // a etiqueta "vencida" da UI continua sendo só temporal (isValid) — versão antiga não vira "vencida".
+  const hasValidRec = (cnpj: string) => { const r = readRec(cnpj); return !!(r && isValid(r) && r.fontesVersao === SOURCES_VERSION); };
 
   // runDiligence vive em escopo de módulo (export) p/ reuso pelo cockpit — chamado abaixo com (DATA_DIR, cnpj, opts).
 
