@@ -120,7 +120,7 @@
 /* ── Font size ───────────────────────────────────────────────────────────────── */
 .font-small  { font-size: 14px; }
 .font-normal { font-size: 16px; }
-.font-large  { font-size: 18px; }
+.font-large  { font-size: 20px; }
 
 /* ── Skeleton loading (UX-05) ────────────────────────────────────────────────── */
 @keyframes skeleton-pulse {

@@ -172,7 +172,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
       <main id="main-content" className="ml-[256px] flex-1 min-w-[820px] flex flex-col">
         <ToolHeader light={HEADERS[section][0]} accent={HEADERS[section][1]} right={
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 bg-card border border-line rounded px-3 py-1.5 focus-within:border-primary">
+            <label className="flex items-center gap-2 bg-card border border-line px-3 h-10 focus-within:border-primary">
               <Search size={14} className="text-text-secondary" aria-hidden />
               <input value={cnpjInput} onChange={(e) => setCnpjInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && consultarTopo(cnpjInput)}
                 aria-label="CNPJ a consultar" placeholder="CNPJ a consultar" className="bg-transparent text-[14px] outline-none w-[150px] sm:w-[170px]" />
@@ -205,7 +205,7 @@ function Stat({ icon: Icon, label, value, tone, active, onClick }: { icon: React
   const ring: Record<ChipTone, string> = { success: 'text-success', error: 'text-error', warning: 'text-warning', info: 'text-primary', neutral: 'text-text-secondary' };
   return (
     <button onClick={onClick} aria-pressed={active}
-      className={cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+      className={cn('flex items-center gap-3 rounded-none border bg-card px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         active ? 'border-primary ring-1 ring-primary' : 'border-line hover:border-primary/50')}>
       <Icon size={18} className={ring[tone]} aria-hidden />
       <div><div className="text-[20px] font-semibold leading-none">{value}</div><div className="text-[12px] text-text-secondary mt-1">{label}</div></div>
@@ -227,12 +227,11 @@ function SortTh({ label, k, sort, setSort, className }: { label: string; k: Sort
 }
 
 function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce, onImport, onConvites, mass, onRefreshAll }: any) {
-  const [q, setQ] = useState(''); const [df, setDf] = useState('all'); const [kf, setKf] = useState('all'); const [tf, setTf] = useState('all'); const [ef, setEf] = useState('all'); const [origem, setOrigem] = useState('all');
+  const [q, setQ] = useState(''); const [df, setDf] = useState('all'); const [kf, setKf] = useState('all'); const [tf, setTf] = useState('all'); const [ef, setEf] = useState('all');
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: 'nome', dir: 1 });
   const qd = onlyDigits(q);
-  const origens: string[] = (Array.from(new Set(rows.flatMap((r: any) => r.origens || []))) as string[]).sort();
-  const clear = () => { setQ(''); setDf('all'); setKf('all'); setTf('all'); setEf('all'); setOrigem('all'); };
-  const hasFilter = q || df !== 'all' || kf !== 'all' || tf !== 'all' || ef !== 'all' || origem !== 'all';
+  const clear = () => { setQ(''); setDf('all'); setKf('all'); setTf('all'); setEf('all'); };
+  const hasFilter = q || df !== 'all' || kf !== 'all' || tf !== 'all' || ef !== 'all';
 
   const stats = useMemo(() => ({
     total: rows.length,
@@ -249,9 +248,8 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
     if (kf !== 'all') { if (kf === 'none') { if (r.kyc) return false; } else if (kf === 'assinado') { if (!(r.kyc?.status === 'assinado' && r.kyc?.valida)) return false; } else if (kf === 'vencido') { if (!(r.kyc?.status === 'assinado' && !r.kyc?.valida)) return false; } else if (r.kyc?.status !== kf) return false; }
     if (tf !== 'all' && (tf === 'pj' ? r.doc.length !== 14 : r.doc.length !== 11)) return false;
     if (ef !== 'all' && (r.faixa || 'pendente') !== ef) return false;
-    if (origem !== 'all' && !(r.origens || []).includes(origem)) return false;
     return true;
-  }), [rows, q, qd, df, kf, tf, ef, origem]);
+  }), [rows, q, qd, df, kf, tf, ef]);
 
   const sorted = useMemo(() => {
     const dRank = (r: any) => r.diligencia ? ({ ALERTA: 0, PENDENTE: 1, NADA_CONSTA: 2 } as any)[r.diligencia.verdict] ?? 3 : 4;
@@ -318,7 +316,6 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
             <Select ariaLabel="Filtrar por KYS/KYG" value={kf} onChange={setKf} options={[{ value: 'all', label: 'KYS/KYG: todos' }, { value: 'assinado', label: 'Assinado (válido)' }, { value: 'aguardando_assinatura', label: 'Aguardando' }, { value: 'vencido', label: 'Vencido' }, { value: 'none', label: 'Sem KYS/KYG' }]} />
             <Select ariaLabel="Filtrar por tipo" value={tf} onChange={setTf} options={[{ value: 'all', label: 'Tipo: todos' }, { value: 'pj', label: 'PJ (CNPJ)' }, { value: 'pf', label: 'PF (CPF)' }]} />
             <Select ariaLabel="Filtrar por elegibilidade" value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'acima_2sm', label: 'Elegível 2 SM+' }, { value: 'ate_2sm', label: 'Elegível até 2 SM' }, { value: 'inelegivel', label: 'Inelegível' }, { value: 'pendente', label: 'Pendente' }]} />
-            {origens.length > 1 && <Select ariaLabel="Filtrar por origem" value={origem} onChange={setOrigem} options={[{ value: 'all', label: 'Todas as origens' }, ...origens.map((o) => ({ value: o, label: o }))]} />}
             {hasFilter && <Btn variant="ghost" size="sm" onClick={clear}><X size={13} aria-hidden /> Limpar</Btn>}
             <span className="text-[12px] text-text-secondary ml-auto whitespace-nowrap">{sorted.length} de {rows.length}</span>
           </div>
@@ -329,7 +326,6 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
                 <thead className={tableHeadCls}><tr>
                   <SortTh label="Fornecedor" k="nome" sort={sort} setSort={setSort} />
                   <th scope="col" className="px-4 py-2.5 font-semibold">CNPJ / CPF</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Origem</th>
                   <SortTh label="Diligência" k="diligencia" sort={sort} setSort={setSort} />
                   <SortTh label="KYS / KYG" k="kyc" sort={sort} setSort={setSort} />
                   <SortTh label="Elegibilidade" k="elegivel" sort={sort} setSort={setSort} />
@@ -340,7 +336,6 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
                     <tr key={r.doc} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => openFornecedor(r.doc)}>
                       <td className="px-4 py-2.5 max-w-[240px] truncate font-medium uppercase">{r.nome || '—'}</td>
                       <td className="px-4 py-2.5 font-mono whitespace-nowrap">{r.docFmt}</td>
-                      <td className="px-4 py-2.5 text-text-secondary">{(r.origens || []).join(', ')}</td>
                       <td className="px-4 py-2.5">{dilChip(r.diligencia)}</td>
                       <td className="px-4 py-2.5">{kycChip(r.kyc)}</td>
                       <td className="px-4 py-2.5">{faixaChip(r.faixa)}</td>
@@ -420,7 +415,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
   return (
     <div className="space-y-5 max-w-4xl">
       <div className="flex items-center justify-between gap-2">
-        <button onClick={onBack} className="inline-flex items-center gap-1 text-[12px] text-text-secondary hover:text-primary rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronLeft size={13} aria-hidden /> Fornecedores</button>
+        <Btn variant="ghost" size="sm" onClick={onBack}><ChevronLeft size={14} aria-hidden /> Fornecedores</Btn>
         <Btn variant="secondary" size="sm" onClick={() => window.open(`/api/fornecedores/${doc}/report.html`, '_blank')}><Printer size={13} aria-hidden /> Imprimir / PDF</Btn>
       </div>
 
@@ -429,9 +424,9 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         <h2 ref={headingRef} tabIndex={-1} className="text-[20px] font-semibold leading-tight outline-none">{nome}</h2>
         <div className="font-mono text-[14px] text-text-secondary mt-0.5">{maskDoc(doc)}</div>
         <div className="grid sm:grid-cols-3 gap-3 mt-4">
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}{kyc && <span className="block text-[12px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}</div>
-          <div className="rounded-lg border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">Elegibilidade</div>{faixaChip(profile.faixa, true)}</div>
+          <div className="rounded-none border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">Diligência</div>{dilChip(dil)}</div>
+          <div className="rounded-none border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">KYS / KYG</div>{kycChip(kyc)}{kyc && <span className="block text-[12px] text-text-secondary mt-1">ano fiscal {kyc.fiscalYear}</span>}</div>
+          <div className="rounded-none border border-line bg-bg/40 px-3 py-2.5"><div className="text-[12px] text-text-secondary mb-1.5">Elegibilidade</div>{faixaChip(profile.faixa, true)}</div>
         </div>
       </Card>
 
@@ -462,12 +457,12 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
                       </label>
                     ) : f.multi ? (
                       <div>
-                        <div className="text-[12px] text-text-secondary mb-1">{f.label}{manual[f.k] && <span className="ml-1.5 text-[12px] text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</div>
+                        <div className="text-[12px] text-text-secondary mb-1">{f.label}{manual[f.k] && <Chip tone="info" size="sm" className="ml-1.5">manual</Chip>}</div>
                         {c[f.k] ? <ul className="space-y-0.5">{String(c[f.k]).split('\n').filter(Boolean).map((x: string, i: number) => <li key={i} className="text-[12px] text-text flex gap-1.5"><span className="text-text-secondary shrink-0">•</span><span className="break-words">{x}</span></li>)}</ul> : <span className="text-[12px] text-text-secondary">—</span>}
                       </div>
                     ) : (
                       <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{f.label}</span>
-                        <span className="font-medium break-words">{c[f.k] || '—'}{manual[f.k] && <span className="ml-1.5 text-[12px] text-primary border border-primary/40 rounded px-1 py-0.5">manual</span>}</span></div>
+                        <span className="font-medium break-words">{c[f.k] || '—'}{manual[f.k] && <Chip tone="info" size="sm" className="ml-1.5">manual</Chip>}</span></div>
                     )}
                   </div>
                 ))}
@@ -506,7 +501,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
             {(dil.sancoes || []).map((s: any, i: number) => (
               <div key={i} className="border-b border-line pb-2 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between gap-2"><span className="text-[12px] font-semibold">{s.fonte}</span>
-                  <span className={cn('text-[12px] font-semibold px-2 py-0.5 rounded border', s.status === 'CONSTA' ? 'bg-error/10 text-error border-error/30' : s.status === 'NADA_CONSTA' ? 'bg-success/10 text-success border-success/30' : 'bg-warning/10 text-warning border-warning/40')}>{sancaoLabel(s)}</span></div>
+                  <Chip tone={s.status === 'CONSTA' ? 'error' : s.status === 'NADA_CONSTA' ? 'success' : s.status === 'ATENCAO' ? 'warning' : 'neutral'} size="sm">{sancaoLabel(s)}</Chip></div>
                 {(s.hits || []).map((h: any, j: number) => <div key={j} className="mt-1 text-[12px] bg-error/5 border border-error/20 rounded px-2 py-1.5"><div className="font-semibold text-error">{h.tipo}</div><div className="text-text-secondary">{h.orgao} · vigência {h.dataInicio || '?'}–{h.dataFim || '?'} · processo {h.processo || '—'}</div></div>)}
               </div>
             ))}
@@ -588,7 +583,7 @@ function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (te
 function AjudaFornecedores() {
   const blocks = [
     { t: 'O que é o cockpit', d: 'Reúne, por fornecedor (CNPJ/CPF), a Diligência (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) e o KYS/KYG (cadastro verificado + assinatura eletrônica) numa só visão. A base lista todos os fornecedores das prestações de contas (Auditoria + FEAC), dos CNPJs importados e dos KYS/KYG preenchidos.' },
-    { t: 'Painel e filtros', d: 'Os cartões no topo (Fornecedores, Elegível 2 SM+, Elegível até 2 SM, Inelegíveis, Pendentes) filtram a base com um clique. Há ainda filtros por diligência, KYS/KYG, tipo (PJ/PF), elegibilidade e origem, busca por nome/CNPJ/CPF e ordenação clicando nos cabeçalhos. Cada linha tem um botão para abrir a ficha (acessível por teclado).' },
+    { t: 'Painel e filtros', d: 'Os cartões no topo (Fornecedores, Elegível 2 SM+, Elegível até 2 SM, Inelegíveis, Pendentes) filtram a base com um clique. Há ainda filtros por diligência, KYS/KYG, tipo (PJ/PF), elegibilidade, busca por nome/CNPJ/CPF e ordenação clicando nos cabeçalhos. Cada linha tem um botão para abrir a ficha (acessível por teclado).' },
     { t: 'Diligência', d: 'Consulta automática por CNPJ na Receita (situação cadastral, endereço com CEP, quadro societário) e nas listas de restrição. Roda sozinha para novos e vencidos (validade 30 dias) e pode ser forçada no botão "Consultar não consultados" ou no campo do topo.' },
     { t: 'Atualizar tudo das APIs', d: 'O botão "Atualizar tudo das APIs" recarrega de uma vez os dados cadastrais (Receita Federal + CEP) de toda a base — a lista e as fichas. Roda em segundo plano, com barra de progresso, e preserva os campos editados manualmente (marcados como "manual"). É a atualização cadastral leve; as listas de restrição continuam pelo fluxo de diligência.' },
     { t: 'KYS / KYG', d: 'Fichas de conformidade preenchidas pelo próprio fornecedor numa página pública (/kys, /kyg) e assinadas via Documenso, exigidas apenas para contratações específicas. Use o botão "Convites" para gerar links rastreáveis. A elegibilidade indica quem está sem restrições + respostas adequadas + impostos/previdência em dia.' },
