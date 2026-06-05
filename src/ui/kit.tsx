@@ -8,7 +8,7 @@
  * pelo launcher, para que toda a suíte tenha o MESMO design: mesma barra lateral,
  * cabeçalho, botões, chips de status, cartões e modais. Tokens de cor em index.css.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useId } from 'react';
 import { Layers, LogOut, X, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
@@ -141,6 +141,65 @@ export function SearchInput({
         className="bg-transparent text-[14px] text-text outline-none w-full min-w-[120px]"
       />
       {value && <IconBtn label="Limpar busca" className="p-0.5" onClick={() => onChange('')}><X size={13} /></IconBtn>}
+    </div>
+  );
+}
+
+// Combobox acessível (campo de busca + lista filtrável) — p/ filtros com muitas opções (#117).
+// role=combobox/listbox/option, aria-expanded/-controls, navegação por setas/Enter/Esc.
+export function Combobox({
+  value, onChange, options, placeholder, ariaLabel, className,
+}: {
+  value: string; onChange: (v: string) => void;
+  options: { value: string; label: string }[]; placeholder?: string; ariaLabel?: string; className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [active, setActive] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+  const selected = options.find((o) => o.value === value);
+  const ql = query.trim().toLowerCase();
+  const filtered = ql ? options.filter((o) => o.label.toLowerCase().includes(ql)) : options;
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQuery(''); } };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  const choose = (v: string) => { onChange(v); setQuery(''); setOpen(false); };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, filtered.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (open && filtered[active]) choose(filtered[active].value); else setOpen(true); }
+    else if (e.key === 'Escape') { setOpen(false); setQuery(''); }
+  };
+  return (
+    <div ref={wrapRef} className={cn('relative', className)}>
+      <div className="inline-flex items-center h-10 gap-2 bg-field border border-line rounded-none px-3 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary w-full">
+        <Search size={16} className="text-text-secondary shrink-0" aria-hidden />
+        <input
+          role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-label={ariaLabel}
+          value={open ? query : (selected?.label || '')}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); setActive(0); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKey}
+          placeholder={placeholder}
+          className="bg-transparent text-[14px] text-text outline-none w-full min-w-[120px]"
+        />
+        {value && <IconBtn label="Limpar seleção" className="p-0.5" onClick={() => { onChange(''); setQuery(''); }}><X size={13} /></IconBtn>}
+      </div>
+      {open && filtered.length > 0 && (
+        <ul id={listId} role="listbox" className="absolute z-50 mt-1 max-h-64 w-full min-w-[260px] overflow-y-auto bg-card border border-line shadow-lg custom-scrollbar">
+          {filtered.slice(0, 200).map((o, i) => (
+            <li
+              key={o.value} role="option" aria-selected={o.value === value}
+              className={cn('px-3 py-2 text-[14px] cursor-pointer leading-snug', i === active ? 'bg-primary/10 text-text' : 'text-text hover:bg-surface-hover')}
+              onMouseDown={(e) => { e.preventDefault(); choose(o.value); }}
+              onMouseEnter={() => setActive(i)}
+            >{o.label}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

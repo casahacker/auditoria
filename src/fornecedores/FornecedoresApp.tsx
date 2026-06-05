@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
-import { Btn, IconBtn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput, Modal } from '../ui/kit';
+import { Btn, IconBtn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SkipLink, EmptyState, tableHeadCls, Select, SearchInput, Combobox, Modal } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
 import { ConvitesView, DetailView as KycDetailView } from '../kyc/KycApp';
 import { provTechLine } from '../diligencia/DiligenciaApp';
@@ -235,12 +235,20 @@ function SortTh({ label, k, sort, setSort, className }: { label: string; k: Sort
   );
 }
 
+// #117 — filtros novos: CNAE (combobox), lista de restrição, sócio/QSA
+const normTxt = (s: string) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const RECURSO_LABEL: Record<string, string> = { ceis: 'CEIS', cnep: 'CNEP', cepim: 'CEPIM', 'acordos-leniencia': 'Leniência', 'lista-suja': 'Lista Suja (MTE)', 'ofac-sdn': 'OFAC SDN', 'ofac-cons': 'OFAC Consolidated', 'un-sc': 'ONU', 'eu-fsf': 'União Europeia', idb: 'BID', 'uk-sanctions': 'Reino Unido', 'tcu-inidoneos': 'TCU (Inidôneos)', 'tce-sp-apenados': 'TCE-SP (Apenados)', 'cobes-sp': 'Prefeitura SP (COBES)', pep: 'PEP' };
+const DILIGENCE_RECURSOS = ['ceis', 'cnep', 'cepim', 'acordos-leniencia', 'lista-suja', 'ofac-sdn', 'ofac-cons', 'un-sc', 'eu-fsf', 'idb', 'uk-sanctions', 'tcu-inidoneos', 'tce-sp-apenados', 'cobes-sp', 'pep'];
+
 function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce, onImport, onConvites, mass, onRefreshAll }: any) {
   const [q, setQ] = useState(''); const [df, setDf] = useState('all'); const [kf, setKf] = useState('all'); const [tf, setTf] = useState('all'); const [ef, setEf] = useState('all');
+  const [cnaeF, setCnaeF] = useState(''); const [restF, setRestF] = useState('all'); const [socioF, setSocioF] = useState('');
   const [sort, setSort] = useState<{ k: SortKey; dir: 1 | -1 }>({ k: 'nome', dir: 1 });
   const qd = onlyDigits(q);
-  const clear = () => { setQ(''); setDf('all'); setKf('all'); setTf('all'); setEf('all'); };
-  const hasFilter = q || df !== 'all' || kf !== 'all' || tf !== 'all' || ef !== 'all';
+  const clear = () => { setQ(''); setDf('all'); setKf('all'); setTf('all'); setEf('all'); setCnaeF(''); setRestF('all'); setSocioF(''); };
+  const hasFilter = q || df !== 'all' || kf !== 'all' || tf !== 'all' || ef !== 'all' || cnaeF || restF !== 'all' || socioF;
+  const cnaeOptions = useMemo(() => { const m = new Map<string, string>(); rows.forEach((r: any) => (r.cnaes || []).forEach((c: any) => { if (c.cod && !m.has(c.cod)) m.set(c.cod, c.desc ? `${c.cod} — ${c.desc}` : c.cod); })); return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ value, label })); }, [rows]);
+  const restOptions = useMemo(() => { const present = new Set<string>(); rows.forEach((r: any) => (r.restricoes || []).forEach((x: any) => present.add(x.recurso))); return [{ value: 'all', label: 'Restrição: todas' }, { value: 'any', label: 'Consta em qualquer lista' }, ...DILIGENCE_RECURSOS.filter((k) => present.has(k)).map((k) => ({ value: k, label: RECURSO_LABEL[k] || k }))]; }, [rows]);
 
   const stats = useMemo(() => ({
     total: rows.length,
@@ -257,8 +265,11 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
     if (kf !== 'all') { if (kf === 'none') { if (r.kyc) return false; } else if (kf === 'assinado') { if (!(r.kyc?.status === 'assinado' && r.kyc?.valida)) return false; } else if (kf === 'vencido') { if (!(r.kyc?.status === 'assinado' && !r.kyc?.valida)) return false; } else if (r.kyc?.status !== kf) return false; }
     if (tf !== 'all' && (tf === 'pj' ? r.doc.length !== 14 : r.doc.length !== 11)) return false;
     if (ef !== 'all' && (r.faixa || 'pendente') !== ef) return false;
+    if (cnaeF && !(r.cnaes || []).some((c: any) => c.cod === cnaeF)) return false;
+    if (restF !== 'all') { const rs = r.restricoes || []; if (restF === 'any' ? !rs.length : !rs.some((x: any) => x.recurso === restF)) return false; }
+    if (socioF) { const n = normTxt(socioF); if (!(r.socios || []).some((s: string) => normTxt(s).includes(n))) return false; }
     return true;
-  }), [rows, q, qd, df, kf, tf, ef]);
+  }), [rows, q, qd, df, kf, tf, ef, cnaeF, restF, socioF]);
 
   const sorted = useMemo(() => {
     const dRank = (r: any) => r.diligencia ? ({ ALERTA: 0, PENDENTE: 1, NADA_CONSTA: 2 } as any)[r.diligencia.verdict] ?? 3 : 4;
@@ -325,6 +336,9 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
             <Select ariaLabel="Filtrar por KYS/KYG" value={kf} onChange={setKf} options={[{ value: 'all', label: 'KYS/KYG: todos' }, { value: 'assinado', label: 'Assinado (válido)' }, { value: 'aguardando_assinatura', label: 'Aguardando' }, { value: 'vencido', label: 'Vencido' }, { value: 'none', label: 'Sem KYS/KYG' }]} />
             <Select ariaLabel="Filtrar por tipo" value={tf} onChange={setTf} options={[{ value: 'all', label: 'Tipo: todos' }, { value: 'pj', label: 'PJ (CNPJ)' }, { value: 'pf', label: 'PF (CPF)' }]} />
             <Select ariaLabel="Filtrar por elegibilidade" value={ef} onChange={setEf} options={[{ value: 'all', label: 'Elegibilidade' }, { value: 'acima_2sm', label: 'Elegível 2 SM+' }, { value: 'ate_2sm', label: 'Elegível até 2 SM' }, { value: 'inelegivel', label: 'Inelegível' }, { value: 'pendente', label: 'Pendente' }]} />
+            {cnaeOptions.length > 0 && <Combobox ariaLabel="Filtrar por CNAE" value={cnaeF} onChange={setCnaeF} options={cnaeOptions} placeholder="CNAE (atividade)…" className="w-full sm:w-[240px]" />}
+            {restOptions.length > 2 && <Select ariaLabel="Filtrar por lista de restrição" value={restF} onChange={setRestF} options={restOptions} />}
+            <SearchInput value={socioF} onChange={setSocioF} placeholder="Sócio (QSA)" className="w-full sm:w-[180px]" />
             {hasFilter && <Btn variant="ghost" size="sm" onClick={clear}><X size={13} aria-hidden /> Limpar</Btn>}
             <span className="text-[12px] text-text-secondary ml-auto whitespace-nowrap">{sorted.length} de {rows.length}</span>
           </div>
@@ -632,7 +646,7 @@ function AjudaFornecedores() {
         <div className="space-y-3">
           <div>
             <div className="text-[12px] font-semibold text-text-secondary mb-1.5">Cartões do topo (clique para filtrar)</div>
-            <p className="text-[12px] text-text-secondary leading-relaxed">Os números <b className="text-text">Fornecedores</b>, <b className="text-text">Elegível 2 SM+</b>, <b className="text-text">Elegível até 2 SM</b>, <b className="text-text">Inelegíveis</b> e <b className="text-text">Pendentes</b> são atalhos: um clique filtra a lista por aquela situação. Há ainda filtros por diligência, KYS/KYG e tipo (PJ/PF), busca por nome ou CNPJ/CPF e ordenação clicando nos cabeçalhos das colunas.</p>
+            <p className="text-[12px] text-text-secondary leading-relaxed">Os números <b className="text-text">Fornecedores</b>, <b className="text-text">Elegível 2 SM+</b>, <b className="text-text">Elegível até 2 SM</b>, <b className="text-text">Inelegíveis</b> e <b className="text-text">Pendentes</b> são atalhos: um clique filtra a lista por aquela situação. Há ainda filtros por diligência, KYS/KYG, tipo (PJ/PF), elegibilidade, <b className="text-text">CNAE</b> (atividade, com busca), <b className="text-text">lista de restrição</b> (quem consta em CEIS/TCU/TCE-SP/etc.) e <b className="text-text">sócio (QSA)</b>, além da busca por nome ou CNPJ/CPF e da ordenação clicando nos cabeçalhos das colunas.</p>
           </div>
           <div>
             <div className="text-[12px] font-semibold text-text-secondary mb-1.5">Botões da base</div>

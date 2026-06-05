@@ -649,6 +649,17 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const dilSummary = (r: any) => r ? { verdict: r.verdict, valida: dilValid(r), checkedAt: r.checkedAt, situacao: r.receita?.situacao_cadastral || "" } : null;
     // importados entram sem nome; a razão social vem do registro de diligência (Receita)
     const dilNome = (r: any) => (r?.razaoSocial && r.razaoSocial !== "—" ? r.razaoSocial : "");
+    // #117 — campos p/ os filtros do cockpit (CNAE / lista de restrição / sócio do QSA)
+    const dilExtra = (r: any) => {
+      const rec = r?.receita || {};
+      const cnaes: any[] = [];
+      const addCnae = (s: any) => { const str = String(s || "").trim(); if (!str) return; const i = str.indexOf(" - "); cnaes.push(i > 0 ? { cod: str.slice(0, i).trim(), desc: str.slice(i + 3).trim() } : { cod: str, desc: "" }); };
+      if (rec.cnae_principal) addCnae(rec.cnae_principal);
+      for (const c of rec.cnaes_secundarios || []) addCnae(c);
+      const restricoes = (r?.sancoes || []).filter((s: any) => s.status === "CONSTA" || s.status === "ATENCAO").map((s: any) => ({ recurso: s.recurso, fonte: s.fonte, status: s.status }));
+      const socios = (rec.qsa || []).map((q: any) => String(q.nome || "").trim()).filter(Boolean);
+      return { cnaes, restricoes, socios };
+    };
     // KYS/KYG mais recente por documento
     const kycByDoc = new Map<string, KycRecord>();
     for (const rec of listRecs()) {
@@ -659,11 +670,11 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     const rows = new Map<string, any>();
     for (const s of collectSuppliers(DATA_DIR)) {
       const dr = readDil(s.cnpj);
-      rows.set(s.cnpj, { doc: s.cnpj, docFmt: fmtCnpj(s.cnpj), nome: s.nome || dilNome(dr), origens: s.origens || [], diligencia: dilSummary(dr), kyc: null });
+      rows.set(s.cnpj, { doc: s.cnpj, docFmt: fmtCnpj(s.cnpj), nome: s.nome || dilNome(dr), origens: s.origens || [], diligencia: dilSummary(dr), kyc: null, ...dilExtra(dr) });
     }
     for (const [d, rec] of kycByDoc) {
       let row = rows.get(d);
-      if (!row) { const dr = readDil(d); row = { doc: d, docFmt: fmtCnpj(d), nome: recNome(rec) || dilNome(dr), origens: ["KYS/KYG"], diligencia: dilSummary(dr), kyc: null }; rows.set(d, row); }
+      if (!row) { const dr = readDil(d); row = { doc: d, docFmt: fmtCnpj(d), nome: recNome(rec) || dilNome(dr), origens: ["KYS/KYG"], diligencia: dilSummary(dr), kyc: null, ...dilExtra(dr) }; rows.set(d, row); }
       else if (!row.origens.includes("KYS/KYG")) row.origens = [...row.origens, "KYS/KYG"];
       if (!row.nome) row.nome = recNome(rec);
       row.kyc = { id: rec.id, type: rec.type, status: rec.status, elegivel: rec.elegibilidade?.elegivel, fiscalYear: rec.fiscalYear, valida: rec.status === "assinado" && isFiscalValid(rec), signedAt: rec.signedAt, origin: rec.origin };
