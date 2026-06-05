@@ -131,7 +131,7 @@ export function SearchInput({
   value, onChange, placeholder, className,
 }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
   return (
-    <div className={cn('inline-flex items-center h-10 gap-2 bg-field border border-line rounded-none px-3 transition-colors focus-within:border-primary', className)}>
+    <div className={cn('inline-flex items-center h-10 gap-2 bg-field border border-line rounded-none px-3 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary', className)}>
       <Search size={16} className="text-text-secondary shrink-0" aria-hidden />
       <input
         value={value}
