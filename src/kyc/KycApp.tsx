@@ -302,7 +302,7 @@ export function DetailView({ current, busy, apiFetch, addToast, reload, embedded
       <Card className="p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="flex items-center gap-2"><span className="text-[12px] font-semibold text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span>{r.origin && <Chip tone="neutral" size="sm">{r.origin === 'self' ? 'Autocadastro' : 'Via convite'}</Chip>}</div>
+            <div className="flex items-center gap-2"><span className="text-[12px] font-semibold text-primary">{KYC_TYPE_LABEL[r.type as KycType]}</span>{r.origin && <Chip tone="neutral" size="sm">{r.origin === 'self' ? 'Autocadastro' : r.origin === 'legado' ? 'Legado (Documenso)' : 'Via convite'}</Chip>}</div>
             <div className="text-[16px] font-semibold mt-0.5">{nome || '—'}</div>
             <div className="text-[12px] text-text-secondary font-mono">{maskDoc(doc)}</div>
           </div>
