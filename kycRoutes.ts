@@ -193,7 +193,8 @@ async function dso(method: string, urlPath: string, body?: any): Promise<any> {
  *   5. POST /documents/{id}/send → habilita a assinatura (cópia ao CC).
  */
 async function createSignature(rec: KycRecord, signer: { name: string; email: string }): Promise<{ documentId: number; token: string }> {
-  const title = `${rec.type.toUpperCase()} — ${signer.name} (${rec.fiscalYear})`;
+  // Título do documento = RAZÃO SOCIAL (empresa/organização), não o nome do signatário (rep. legal).
+  const title = `${rec.type.toUpperCase()} — ${recNome(rec) || signer.name} (${rec.fiscalYear})`;
   const ccName = rec.requester?.nome || "Associação Casa Hacker";
   const ccEmail = rec.requester?.email && isEmail(rec.requester.email) ? rec.requester.email : "juridico@casahacker.org";
 

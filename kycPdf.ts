@@ -33,8 +33,8 @@ const INK = rgb(0.09, 0.09, 0.09);
 const GRAY = rgb(0.42, 0.42, 0.42);
 const SOFT = rgb(0.6, 0.6, 0.6);
 const LINE = rgb(0.86, 0.86, 0.86);
-const GREEN = rgb(0.196, 0.949, 0.588);
-const BOXBG = rgb(0.975, 0.985, 0.978);
+const ACCENT = rgb(0.09, 0.09, 0.09);   // documento monocromático (preto/branco) — sem acento verde
+const BOXBG = rgb(0.96, 0.96, 0.96);    // caixa em cinza neutro (era verde-claro)
 const VALINK = rgb(0.12, 0.12, 0.12);
 
 /** Campo de assinatura em % da página (origem top-left), p/ POST /documents/{id}/fields. */
@@ -88,7 +88,7 @@ class Filled {
     this.page.drawText(rt, { x: width - M - this.font.widthOfTextAtSize(rt, 7.5), y: height - M - 6, size: 7.5, font: this.font, color: SOFT });
     const ruleY = height - M - this.logoH - 6;
     this.page.drawLine({ start: { x: M, y: ruleY }, end: { x: width - M, y: ruleY }, thickness: 0.6, color: LINE });
-    this.page.drawRectangle({ x: M, y: ruleY - 0.5, width: 34, height: 1.6, color: GREEN });
+    this.page.drawRectangle({ x: M, y: ruleY - 0.5, width: 34, height: 1.6, color: ACCENT });
     this.page.drawText("Associação Casa Hacker · CNPJ 36.038.079/0001-97 · casahacker.org", { x: M, y: M - 24, size: 7, font: this.font, color: SOFT });
     const conf = "CONFIDENCIAL";
     this.page.drawText(conf, { x: (width - this.semibold.widthOfTextAtSize(conf, 7)) / 2, y: M - 24, size: 7, font: this.semibold, color: GRAY });
@@ -107,7 +107,7 @@ class Filled {
 
   section(t: string) {
     this.ensure(34); this.y -= 6;
-    this.page.drawRectangle({ x: M, y: this.y - 1, width: 3, height: 11, color: GREEN });
+    this.page.drawRectangle({ x: M, y: this.y - 1, width: 3, height: 11, color: ACCENT });
     this.page.drawText(safe(t).toUpperCase(), { x: M + 9, y: this.y, size: 9.5, font: this.semibold, color: INK });
     this.y -= 7; this.page.drawLine({ start: { x: M, y: this.y }, end: { x: M + this.W, y: this.y }, thickness: 0.6, color: LINE });
     this.y -= 14;
@@ -178,8 +178,8 @@ class Filled {
   signatureArea() {
     this.ensure(96); this.y -= 8;
     const boxTop = this.y + 6; const boxH = 66; const boxBottom = boxTop - boxH;
-    this.page.drawRectangle({ x: M, y: boxBottom, width: this.W, height: boxH, borderColor: LINE, borderWidth: 0.8, color: rgb(0.985, 0.99, 0.987) });
-    this.page.drawRectangle({ x: M, y: boxTop - 2, width: 90, height: 2, color: GREEN });
+    this.page.drawRectangle({ x: M, y: boxBottom, width: this.W, height: boxH, borderColor: LINE, borderWidth: 0.8, color: rgb(0.97, 0.97, 0.97) });
+    this.page.drawRectangle({ x: M, y: boxTop - 2, width: 90, height: 2, color: ACCENT });
     this.page.drawText("ASSINATURA ELETRÔNICA", { x: M + 14, y: boxTop - 18, size: 10, font: this.bold, color: INK });
     this.page.drawText("Assinado eletronicamente pelo representante legal / proponente.", { x: M + 14, y: boxTop - 32, size: 8, font: this.font, color: GRAY });
     // Caixa do campo SIGNATURE: faixa inferior da área (onde a rubrica aparece).

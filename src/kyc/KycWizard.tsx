@@ -240,7 +240,7 @@ export default function KycWizard() {
   if (done) return <SuccessScreen needsSetup={done.needsSetup} type={type} />;
 
   return (
-    <div className="min-h-screen bg-bg text-text flex flex-col">
+    <div className="min-h-screen bg-bg text-text flex flex-col pt-8">
       <header className="bg-sidebar border-b border-line px-5 sm:px-10 py-4 flex items-center gap-4">
         <img src={CASA_HACKER_LOGO} alt="Casa Hacker" className="h-8 w-auto object-contain invert opacity-90" />
         <div>
@@ -551,7 +551,7 @@ function SignModal({ sign, onClose, onDone }: { sign: { id: string; token: strin
 
 function SuccessScreen({ needsSetup, type }: { needsSetup: boolean; type: KycType }) {
   return (
-    <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center px-6 text-center">
+    <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center px-6 text-center pt-8">
       <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mb-5"><CheckCircle2 size={32} className="text-success" /></div>
       <h1 className="text-[20px] font-light">{needsSetup ? <>Dados <b className="font-semibold text-primary">recebidos</b></> : <>Conformidade <b className="font-semibold text-primary">concluída</b></>}</h1>
       <p className="text-[14px] text-text-secondary mt-3 max-w-md leading-relaxed">

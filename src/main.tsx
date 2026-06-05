@@ -2,6 +2,7 @@ import React, { StrictMode } from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import KycWizard from './kyc/KycWizard';
+import { AccessibilityBar } from './a11y/AccessibilityBar';
 import './index.css';
 
 // Página PÚBLICA do KYS/KYG (sem login): renderiza o wizard direto, desacoplado do App
@@ -46,7 +47,7 @@ class ErrorBoundary extends React.Component<
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      {IS_KYC_PUBLIC ? <KycWizard /> : <App />}
+      {IS_KYC_PUBLIC ? <><AccessibilityBar /><KycWizard /></> : <App />}
     </ErrorBoundary>
   </StrictMode>,
 );
