@@ -828,6 +828,12 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
   app.get("/api/kyc/:id/signed.pdf", requireAuth, async (req: any, res) => {
     const id = idParam(req, res); if (!id) return;
     const rec = readRec(id); if (!rec) return res.status(404).json({ error: "Registro não encontrado" });
+    // Legados (importados do Documenso pré-S3): o PDF assinado fica guardado localmente — a API do Documenso não os serve.
+    if (rec.legacyPdfPath) {
+      const lp = path.join(DATA_DIR, rec.legacyPdfPath);
+      if (fs.existsSync(lp)) { res.setHeader("Content-Type", "application/pdf"); res.setHeader("Content-Disposition", `attachment; filename="${rec.type}_${recDoc(rec)}_${rec.fiscalYear}.pdf"`); return res.send(fs.readFileSync(lp)); }
+      return res.status(404).json({ error: "PDF legado não encontrado" });
+    }
     if (!rec.documensoDocumentId) return res.status(404).json({ error: "Documento ainda não criado no Documenso" });
     const buf = await downloadSigned(rec.documensoDocumentId);
     if (!buf) return res.status(502).json({ error: "Não foi possível obter o PDF assinado do Documenso" });
