@@ -141,7 +141,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
     try { const r = await apiFetch('/api/diligencia/run-all-force', { method: 'POST' }); const j = await r.json(); addToast('info', `${j.queued || 0} fornecedores na fila de reconsulta das listas de restrição.`); } catch { addToast('error', 'Falha ao iniciar a reconsulta.'); }
   };
   const refreshAllApis = async () => {
-    if (!window.confirm('Atualizar os dados cadastrais de TODOS os fornecedores a partir das APIs (Receita Federal + CEP)?\n\nRoda em segundo plano e pode levar vários minutos. Campos editados manualmente são preservados.')) return;
+    if (!window.confirm('Atualizar os dados cadastrais de TODOS os fornecedores a partir das APIs (Receita Federal + CEP)?\n\nRoda em segundo plano e pode levar vários minutos. Onde a fonte tiver dado novo, o campo é atualizado — inclusive os editados à mão; o que a API não trouxer é mantido.')) return;
     try {
       const r = await apiFetch('/api/fornecedores/refresh-all', { method: 'POST' }); const j = await r.json();
       if (j.alreadyRunning) addToast('info', 'Já há uma atualização em massa em andamento.');
@@ -489,7 +489,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         </div>
         {(fontes.receita || fontes.cep) && (
           <div className="mt-4 pt-3 border-t border-line text-[12px] text-text-secondary leading-relaxed">
-            Fontes: {fontes.receita && <span>{fontes.receita.fonte}{fontes.receita.fetchedAt ? ` (${new Date(fontes.receita.fetchedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })})` : ''}</span>}{fontes.cep && <span> · {fontes.cep.fonte}</span>}. Campos marcados como <b>manual</b> não são sobrescritos ao atualizar das APIs.
+            Fontes: {fontes.receita && <span>{fontes.receita.fonte}{fontes.receita.fetchedAt ? ` (${new Date(fontes.receita.fetchedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })})` : ''}</span>}{fontes.cep && <span> · {fontes.cep.fonte}</span>}. Campos marcados como <b>manual</b> foram editados à mão; ao atualizar das APIs eles são sobrescritos quando a fonte traz dado novo (o que a API não trouxer é mantido).
           </div>
         )}
       </Card>
@@ -638,7 +638,7 @@ function AjudaFornecedores() {
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Importar CNPJs</b> — cole uma lista (um por linha) ou envie um <span className="font-mono">.csv</span>/<span className="font-mono">.txt</span>; eles entram na base e a diligência é gerada automaticamente.</span></li>
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Consultar não consultados (N)</b> — enfileira só quem ainda não tem diligência.</span></li>
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Reconsultar listas de restrição</b> — refaz a diligência de toda a base, ignorando o cache de 30 dias (use depois de incluir uma lista nova de fontes).</span></li>
-              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Atualizar dados cadastrais</b> — recarrega só o <b className="text-text">cadastro</b> (Receita + CEP) de toda a base; rápido, em segundo plano e <b className="text-text">preservando os campos editados à mão</b>.</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Atualizar dados cadastrais</b> — recarrega só o <b className="text-text">cadastro</b> (Receita + CEP) de toda a base; rápido e em segundo plano. Onde a fonte traz dado novo, atualiza <b className="text-text">inclusive os campos editados à mão</b>; o que a API não trouxer é mantido.</span></li>
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Convites</b> — gera links rastreáveis de KYS/KYG para enviar ao fornecedor.</span></li>
             </ul>
           </div>
@@ -697,7 +697,7 @@ function AjudaFornecedores() {
         <p className="text-[12px] text-text-secondary leading-relaxed mb-3">Clique em qualquer fornecedor (ou no botão ao fim da linha) para abrir a ficha — <b className="text-text">tudo numa só tela</b>:</p>
         <ul className="space-y-1.5 text-[12px] text-text-secondary">
           <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Status no topo</b> — três indicadores: Diligência, KYS/KYG (com o ano fiscal) e Elegibilidade.</span></li>
-          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Dados cadastrais</b> — Receita + CEP consolidados e <b className="text-text">editáveis</b>. Os campos que você corrige ganham a marca <b className="text-text">“manual”</b> e <b className="text-text">não são sobrescritos</b> ao atualizar das APIs. <b className="text-text">Atualizar das APIs</b> recarrega só este fornecedor.</span></li>
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Dados cadastrais</b> — Receita + CEP consolidados e <b className="text-text">editáveis</b>. Os campos que você corrige ganham a marca <b className="text-text">“manual”</b>; ao atualizar das APIs, são <b className="text-text">sobrescritos quando a fonte traz dado novo</b> (o que a API não trouxer é mantido). <b className="text-text">Atualizar das APIs</b> recarrega só este fornecedor.</span></li>
           <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Diligência</b> — as listas de restrição detalhadas; <b className="text-text">Reconsultar</b> força uma nova consulta antes do vencimento.</span></li>
           <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Conformidade KYS/KYG</b> — respostas, trilha de verificação e o PDF assinado; se não houver, um botão gera o convite.</span></li>
           <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Imprimir / PDF</b> — um relatório <b className="text-text">único e completo</b>: cadastro, dados da consulta (auditável: data-hora, validade, solicitante e IP), as 13 listas, notas jurídicas, memória do processo e o KYS/KYG.</span></li>
@@ -710,7 +710,7 @@ function AjudaFornecedores() {
         <div className="space-y-2">
           <FaqF q="De onde vêm os fornecedores da base?">Dos fornecedores citados nas prestações de contas (Auditoria e FEAC), dos CNPJs importados e de quem preencheu um KYS/KYG. Não é preciso cadastrar ninguém à mão.</FaqF>
           <FaqF q="Qual a diferença entre “Atualizar das APIs” e “Reconsultar”?">“Atualizar das APIs” recarrega só o cadastro (Receita + CEP) — rápido. “Reconsultar” refaz a diligência completa (as 13 listas de restrição), que é mais demorada.</FaqF>
-          <FaqF q="Editei um campo na ficha. Ele some quando atualizo das APIs?">Não. Os campos editados à mão ficam marcados como “manual” e são preservados em todas as atualizações automáticas.</FaqF>
+          <FaqF q="Editei um campo na ficha. Ele some quando atualizo das APIs?">Quando a fonte oficial (Receita/CEP) tem um dado novo para aquele campo, sim — a atualização passa a valer a fonte e a marca “manual” sai. Se a API não tiver valor para o campo, o seu texto é mantido.</FaqF>
           <FaqF q="O que significa “vencida”?">A diligência tem validade de 30 dias. Passado o prazo, ela aparece como “vencida” até a próxima consulta — que a automação faz sozinha, ou você força em “Reconsultar”.</FaqF>
           <FaqF q="Um fornecedor ficou em “Atenção” por nome. E agora?">As listas internacionais e o PEP casam por nome, de forma conservadora — pode ser homônimo. Confira a identidade (nome completo, sócios) antes de qualquer decisão; “Atenção” não reprova automaticamente.</FaqF>
           <FaqF q="Quando preciso de KYS/KYG?">Para contratações específicas (em geral, contratos a partir de 2 salários mínimos) e para liberar a faixa “Elegível 2 SM+”. Em valores baixos, a diligência “Nada consta” + cadastro ativo já bastam.</FaqF>
