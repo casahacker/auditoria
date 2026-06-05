@@ -348,6 +348,58 @@ async function consultaUN(DATA_DIR: string, nomes: string[]): Promise<any> {
   return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade." } : {}) };
 }
 
+// token público (mesmo que o OpenSanctions usa) — base64 de "token-2017"; sem registro
+const EU_FSF_URL = process.env.EU_FSF_URL || "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw";
+/** EU — Lista Consolidada de Sanções Financeiras (CFSP/FSF, XML) — match por NOME. Conservador → ATENÇÃO. */
+async function consultaEU(DATA_DIR: string, nomes: string[]): Promise<any> {
+  const base = { fonte: "EU — Lista Consolidada de Sanções Financeiras (CFSP)", recurso: "eu-fsf", url: "https://www.sanctionsmap.eu/", apiUrl: EU_FSF_URL, fetchedAt: new Date().toISOString() };
+  const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
+  if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const xml = await cachedSourceFile(DATA_DIR, "eu-fsf.xml", EU_FSF_URL, 3 * 86400000, "utf8");
+  if (!xml) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a lista da UE" };
+  const matched = new Set<string>();
+  for (const m of xml.matchAll(/wholeName="([^"]{3,120})"/g)) { const nm = m[1]; const n = norm(nm); if (n.length < 4) continue; for (const a of alvos) if (n.includes(a)) { matched.add(nm); break; } }
+  const hits = [...matched].slice(0, 20).map((nm) => ({ tipo: `Possível correspondência UE: "${nm}"`, orgao: "EU CFSP · CONFIRMAR identidade" }));
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade." } : {}) };
+}
+
+const IDB_URL = process.env.IDB_URL || "https://data.iadb.org/file/download/f5022f04-a3f1-4604-a099-5d562e3a0aa5";
+/** Inter-American Development Bank (BID) — firmas/indivíduos sancionados (CSV) — match por NOME. Conservador → ATENÇÃO. */
+async function consultaIDB(DATA_DIR: string, nomes: string[]): Promise<any> {
+  const base = { fonte: "Inter-American Development Bank (BID) — Sancionados", recurso: "idb", url: "https://data.iadb.org/dataset/dataset-of-sanctioned-firms-and-individuals", apiUrl: IDB_URL, fetchedAt: new Date().toISOString() };
+  const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
+  if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const csv = await cachedSourceFile(DATA_DIR, "idb.csv", IDB_URL, 7 * 86400000, "utf8");
+  if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a lista do BID" };
+  const hits: any[] = []; const lines = csv.split(/\r?\n/);
+  for (let i = 1; i < lines.length; i++) {
+    const c = parseCsvLine(lines[i].replace(/^﻿/, "")); const nm = norm(c[0]); const other = norm(c[10] || ""); if (nm.length < 4) continue;
+    for (const a of alvos) if (nm.includes(a) || (other.length >= 8 && other.includes(a))) { hits.push({ tipo: `Possível correspondência BID: "${String(c[0] || "").trim()}"`, orgao: `IDB · ${String(c[6] || "").trim()} · ${String(c[4] || "").trim()} · CONFIRMAR identidade`, processo: String(c[7] || "").trim() }); break; }
+  }
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade." } : {}) };
+}
+
+const UK_SANCTIONS_URL = process.env.UK_SANCTIONS_URL || "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv";
+/** UK Sanctions List (FCDO/OFSI, CSV) — match por NOME. Conservador → ATENÇÃO. */
+async function consultaUK(DATA_DIR: string, nomes: string[]): Promise<any> {
+  const base = { fonte: "UK Sanctions List (FCDO)", recurso: "uk-sanctions", url: "https://www.gov.uk/government/publications/the-uk-sanctions-list", apiUrl: UK_SANCTIONS_URL, fetchedAt: new Date().toISOString() };
+  const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
+  if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const csv = await cachedSourceFile(DATA_DIR, "uk-sanctions.csv", UK_SANCTIONS_URL, 3 * 86400000, "utf8");
+  if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a UK Sanctions List" };
+  const lines = csv.split(/\r?\n/);
+  let h = lines.findIndex((l) => l.startsWith("Last Updated")); if (h < 0) h = 0;
+  const matched = new Set<string>();
+  for (let i = h + 1; i < lines.length; i++) {
+    const c = parseCsvLine(lines[i]); if (c.length < 10) continue;
+    const nome = [c[5], c[6], c[7], c[8], c[9], c[4]].map((s) => String(s || "").trim()).filter(Boolean).join(" "); // Name 1..6
+    const n = norm(nome); if (n.length < 4) continue;
+    for (const a of alvos) if (n.includes(a)) { matched.add(nome); break; }
+  }
+  const hits = [...matched].slice(0, 20).map((nm) => ({ tipo: `Possível correspondência Reino Unido: "${nm}"`, orgao: "UK Sanctions List · CONFIRMAR identidade" }));
+  return { ...base, status: hits.length ? "ATENCAO" : "NADA_CONSTA", hits, ...(hits.length ? { nota: "Correspondência por nome — confirme a identidade." } : {}) };
+}
+
 /** PEP (Pessoas Expostas Politicamente) — checa os sócios (QSA) por nome no Portal da Transparência → ATENÇÃO (informativo). */
 async function consultaPEP(qsaNomes: string[]): Promise<any> {
   const base = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString() };
@@ -401,9 +453,12 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
       consultaOFAC(DATA_DIR, [razao, ...qsaNomes]),
       consultaOFACCons(DATA_DIR, [razao, ...qsaNomes]),
       consultaUN(DATA_DIR, [razao, ...qsaNomes]),
+      consultaEU(DATA_DIR, [razao, ...qsaNomes]),
+      consultaIDB(DATA_DIR, [razao, ...qsaNomes]),
+      consultaUK(DATA_DIR, [razao, ...qsaNomes]),
       consultaPEP(qsaNomes),
     ]);
-    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List");
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)");
   }
   const anySancao = sancoes.some((s) => s.status === "CONSTA");
   const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
