@@ -79,6 +79,13 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
   const loadRows = async () => { setLoading(true); try { const r = await apiFetch('/api/fornecedores'); if (r.ok) setRows(await r.json()); } catch { /* */ } finally { setLoading(false); } };
   const loadHistory = async () => { try { const r = await apiFetch('/api/diligencia'); if (r.ok) setHistory(await r.json()); } catch { /* */ } };
   useEffect(() => { loadRows(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // #86 — enquanto houver assinatura pendente, recarrega a base a cada 30s para refletir
+  // automaticamente quando o Documenso concluir (a varredura do servidor marca como assinado).
+  useEffect(() => {
+    if (!rows.some((r) => r.kyc?.status === 'aguardando_assinatura')) return;
+    const t = setInterval(loadRows, 30000);
+    return () => clearInterval(t);
+  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [queue, setQueue] = useState<any>(null); const lastDone = useRef(-1);
   useEffect(() => {
@@ -514,7 +521,7 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
       {/* KYS / KYG */}
       <div>
         <div className="text-[14px] font-semibold flex items-center gap-1.5 mb-3"><BadgeCheck size={15} className="text-primary" aria-hidden /> Conformidade KYS / KYG</div>
-        {kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} />
+        {kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} embedded />
           : <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade (exigida para contratações específicas)." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} aria-hidden /> Gerar convite KYS/KYG</Btn>} />}
       </div>
     </div>

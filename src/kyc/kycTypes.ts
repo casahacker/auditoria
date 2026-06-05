@@ -91,6 +91,7 @@ export interface KycRecord {
   documensoToken?: string;       // token do signatário (uso no embed; nunca exposto na lista)
   signedAt?: string;
   inviteToken?: string;
+  origin?: 'self' | 'convite';   // 'self' = autocadastro pelo link público; 'convite' = via convite rastreável
   fiscalYear: number;
   validUntil: string;            // 31/12 do fiscalYear (ISO)
   createdAt: string;
@@ -104,7 +105,7 @@ export interface KycSummary {
   nome: string; documento: string; documentoFmt: string;
   requester?: KycRequester; verdict?: KycVerdict; elegivel?: boolean;
   fiscalYear: number; validUntil: string; valida: boolean;
-  createdAt: string; signedAt?: string;
+  createdAt: string; signedAt?: string; origin?: 'self' | 'convite';
 }
 
 export interface KycInvite {

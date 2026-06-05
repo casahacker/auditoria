@@ -64,6 +64,9 @@ function Field({ label, value, onChange, placeholder, required, type = 'text', h
 
 const ESTADO_CIVIL_OPCOES = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União estável', 'Separado(a)'];
 const isValidPhone = (s: string) => { const d = onlyDigits(s); return d.length === 10 || d.length === 11; };
+const emailOk = (s: string) => /\S+@\S+\.\S+/.test(String(s || ''));
+const addrComplete = (a: KycAddress) => !!(a.cep.trim() && a.logradouro.trim() && a.numero.trim() && a.bairro.trim() && a.municipio.trim() && a.uf.trim());
+const bankComplete = (b: { banco: string; agencia: string; conta: string }) => !!(b.banco.trim() && b.agencia.trim() && b.conta.trim());
 
 function SelectField({ label, value, onChange, options, required }: { label: string; value: string; onChange: (v: string) => void; options: string[]; required?: boolean }) {
   return (
@@ -78,7 +81,7 @@ function SelectField({ label, value, onChange, options, required }: { label: str
   );
 }
 
-function AddressFields({ addr, onChange, onCep }: { addr: KycAddress; onChange: (a: KycAddress) => void; onCep: (cep: string) => Promise<boolean> }) {
+function AddressFields({ addr, onChange, onCep, required }: { addr: KycAddress; onChange: (a: KycAddress) => void; onCep: (cep: string) => Promise<boolean>; required?: boolean }) {
   const set = (k: keyof KycAddress) => (v: string) => onChange({ ...addr, [k]: v });
   const [cepStatus, setCepStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const onCepChange = async (v: string) => {
@@ -90,15 +93,15 @@ function AddressFields({ addr, onChange, onCep }: { addr: KycAddress; onChange: 
   };
   return (
     <div className="grid sm:grid-cols-6 gap-3">
-      <div className="sm:col-span-2"><Field label="CEP" value={addr.cep} onChange={onCepChange} placeholder="00000-000"
+      <div className="sm:col-span-2"><Field label="CEP" value={addr.cep} onChange={onCepChange} placeholder="00000-000" required={required}
         status={cepStatus === 'idle' ? undefined : cepStatus}
         hint={cepStatus === 'error' ? <span className="text-error">CEP não encontrado</span> : cepStatus === 'ok' ? <span className="text-success">Endereço preenchido automaticamente</span> : 'Preenche o endereço automaticamente'} /></div>
-      <div className="sm:col-span-4"><Field label="Logradouro" value={addr.logradouro} onChange={set('logradouro')} /></div>
-      <div className="sm:col-span-1"><Field label="Número" value={addr.numero} onChange={set('numero')} /></div>
+      <div className="sm:col-span-4"><Field label="Logradouro" value={addr.logradouro} onChange={set('logradouro')} required={required} /></div>
+      <div className="sm:col-span-1"><Field label="Número" value={addr.numero} onChange={set('numero')} required={required} /></div>
       <div className="sm:col-span-3"><Field label="Complemento" value={addr.complemento} onChange={set('complemento')} /></div>
-      <div className="sm:col-span-2"><Field label="Bairro" value={addr.bairro} onChange={set('bairro')} /></div>
-      <div className="sm:col-span-4"><Field label="Município" value={addr.municipio} onChange={set('municipio')} /></div>
-      <div className="sm:col-span-2"><Field label="UF" value={addr.uf} onChange={(v) => set('uf')(v.toUpperCase().slice(0, 2))} /></div>
+      <div className="sm:col-span-2"><Field label="Bairro" value={addr.bairro} onChange={set('bairro')} required={required} /></div>
+      <div className="sm:col-span-4"><Field label="Município" value={addr.municipio} onChange={set('municipio')} required={required} /></div>
+      <div className="sm:col-span-2"><Field label="UF" value={addr.uf} onChange={(v) => set('uf')(v.toUpperCase().slice(0, 2))} required={required} /></div>
     </div>
   );
 }
@@ -201,8 +204,8 @@ export default function KycWizard() {
   const canNext = (): boolean => {
     if (step === 0) return atestacao;
     if (type === 'kys') {
-      if (step === 1) return isValidCnpj(kys.cnpj) && !!kys.razaoSocial.trim();
-      if (step === 2) return !!kys.repNome.trim() && isValidCpf(kys.repCpf) && /\S+@\S+\.\S+/.test(kys.repEmail);
+      if (step === 1) return isValidCnpj(kys.cnpj) && !!kys.razaoSocial.trim() && addrComplete(kys.endereco) && isValidPhone(kys.telefone) && emailOk(kys.email) && bankComplete(kys.banco);
+      if (step === 2) return !!kys.repNome.trim() && isValidCpf(kys.repCpf) && !!kys.repEstadoCivil.trim() && !!kys.repProfissao.trim() && addrComplete(kys.repEndereco) && isValidPhone(kys.repTelefone) && emailOk(kys.repEmail);
       const secIdx = step - 3;
       if (secIdx >= 0 && secIdx < KYS_SECTIONS.length) {
         return KYS_SECTIONS[secIdx].questions.every((q) => {
@@ -291,15 +294,15 @@ export default function KycWizard() {
               </div>
               <Field label="Razão social" value={kys.razaoSocial} required onChange={(v) => setKys({ ...kys, razaoSocial: v })} />
               <Field label="Nome fantasia" value={kys.nomeFantasia} onChange={(v) => setKys({ ...kys, nomeFantasia: v })} />
-              <AddressFields addr={kys.endereco} onChange={(a) => setKys({ ...kys, endereco: a })} onCep={(c) => lookupCep(c, 'empresa')} />
+              <AddressFields addr={kys.endereco} onChange={(a) => setKys({ ...kys, endereco: a })} onCep={(c) => lookupCep(c, 'empresa')} required />
               <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="Telefone (celular/fixo)" value={kys.telefone} onChange={(v) => setKys({ ...kys, telefone: v })} placeholder="(11) 90000-0000"
+                <Field label="Telefone (celular/fixo)" value={kys.telefone} required onChange={(v) => setKys({ ...kys, telefone: v })} placeholder="(11) 90000-0000"
                   status={kys.telefone ? (isValidPhone(kys.telefone) ? 'ok' : 'error') : undefined}
                   hint={kys.telefone && !isValidPhone(kys.telefone) ? <span className="text-error">Telefone inválido — inclua o DDD</span> : undefined} />
-                <Field label="E-mail" type="email" value={kys.email} onChange={(v) => setKys({ ...kys, email: v })} />
+                <Field label="E-mail" type="email" value={kys.email} required onChange={(v) => setKys({ ...kys, email: v })} />
               </div>
               <SectionTitle>Dados bancários</SectionTitle>
-              <BankRow banks={bankOptions} value={kys.banco} onChange={(b) => setKys({ ...kys, banco: b })} />
+              <BankRow banks={bankOptions} value={kys.banco} onChange={(b) => setKys({ ...kys, banco: b })} required />
             </div>
           )}
 
@@ -311,12 +314,12 @@ export default function KycWizard() {
                 <Field label="Nome completo" value={kys.repNome} required onChange={(v) => setKys({ ...kys, repNome: v })} />
                 <Field label="CPF" value={kys.repCpf} required onChange={(v) => setKys({ ...kys, repCpf: v })} placeholder="000.000.000-00"
                   status={kys.repCpf ? (isValidCpf(kys.repCpf) ? 'ok' : 'error') : undefined} hint={kys.repCpf && !isValidCpf(kys.repCpf) ? <span className="text-error">CPF inválido</span> : undefined} />
-                <SelectField label="Estado civil" value={kys.repEstadoCivil} onChange={(v) => setKys({ ...kys, repEstadoCivil: v })} options={ESTADO_CIVIL_OPCOES} />
-                <Field label="Profissão" value={kys.repProfissao} onChange={(v) => setKys({ ...kys, repProfissao: v })} />
+                <SelectField label="Estado civil" value={kys.repEstadoCivil} onChange={(v) => setKys({ ...kys, repEstadoCivil: v })} options={ESTADO_CIVIL_OPCOES} required />
+                <Field label="Profissão" value={kys.repProfissao} required onChange={(v) => setKys({ ...kys, repProfissao: v })} />
               </div>
-              <AddressFields addr={kys.repEndereco} onChange={(a) => setKys({ ...kys, repEndereco: a })} onCep={(c) => lookupCep(c, 'rep')} />
+              <AddressFields addr={kys.repEndereco} onChange={(a) => setKys({ ...kys, repEndereco: a })} onCep={(c) => lookupCep(c, 'rep')} required />
               <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="Telefone (celular/fixo)" value={kys.repTelefone} onChange={(v) => setKys({ ...kys, repTelefone: v })} placeholder="(11) 90000-0000"
+                <Field label="Telefone (celular/fixo)" value={kys.repTelefone} required onChange={(v) => setKys({ ...kys, repTelefone: v })} placeholder="(11) 90000-0000"
                   status={kys.repTelefone ? (isValidPhone(kys.repTelefone) ? 'ok' : 'error') : undefined}
                   hint={kys.repTelefone && !isValidPhone(kys.repTelefone) ? <span className="text-error">Telefone inválido — inclua o DDD (10 ou 11 dígitos)</span> : undefined} />
                 <Field label="E-mail (receberá o documento p/ assinar)" type="email" value={kys.repEmail} required onChange={(v) => setKys({ ...kys, repEmail: v })} />
@@ -465,17 +468,17 @@ function SectionTitle({ icon: Icon, children }: { icon?: React.ElementType; chil
   return <h2 className="text-[14px] font-semibold text-text flex items-center gap-2 border-b border-line pb-2">{Icon && <Icon size={16} className="text-primary" aria-hidden />}{children}</h2>;
 }
 
-function BankRow({ banks, value, onChange }: { banks: { value: string; label: string }[]; value: { banco: string; agencia: string; conta: string; chavePix: string }; onChange: (v: any) => void }) {
+function BankRow({ banks, value, onChange, required }: { banks: { value: string; label: string }[]; value: { banco: string; agencia: string; conta: string; chavePix: string }; onChange: (v: any) => void; required?: boolean }) {
   return (
     <div className="grid sm:grid-cols-2 gap-3">
       <label className="block">
-        <span className="text-[12px] font-semibold text-text-secondary">Banco / Instituição de pagamento</span>
+        <span className="text-[12px] font-semibold text-text-secondary">Banco / Instituição de pagamento{required && <span className="text-error"> *</span>}</span>
         <input list="kyc-banks" value={value.banco} onChange={(e) => onChange({ ...value, banco: e.target.value })} placeholder="Digite ou selecione"
           className="mt-1 w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none" />
         <datalist id="kyc-banks">{banks.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}</datalist>
       </label>
-      <Field label="Agência" value={value.agencia} onChange={(v) => onChange({ ...value, agencia: v })} />
-      <Field label="Conta-corrente" value={value.conta} onChange={(v) => onChange({ ...value, conta: v })} />
+      <Field label="Agência" value={value.agencia} onChange={(v) => onChange({ ...value, agencia: v })} required={required} />
+      <Field label="Conta-corrente" value={value.conta} onChange={(v) => onChange({ ...value, conta: v })} required={required} />
       <Field label="Chave PIX" value={value.chavePix} onChange={(v) => onChange({ ...value, chavePix: v })} />
     </div>
   );
