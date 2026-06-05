@@ -22,7 +22,7 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml, complementarySourcesHtml } from "./diligenciaRoutes";
 import { generateKycPdf } from "./kycPdf";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
@@ -403,6 +403,8 @@ ${dil ? `
     ${provenanceTableHtml(dil)}
     <div class="muted" style="margin-top:8px">Fontes públicas oficiais, consultadas em tempo real ou a partir de cópia em cache. A correspondência por <b>Nome</b> é conservadora (pode apontar homônimos — confirme a identidade); por <b>CNPJ</b> é exata.</div>
   </section>` : ""}
+
+  ${complementarySourcesHtml()}
 
   <section><div class="sectitle">Conformidade KYS / KYG</div>
     ${kyc ? `${row("Tipo", String(kyc.type || "").toUpperCase())}${row("Status", kyc.status === "assinado" ? (kyc.valida ? "Assinado (válido)" : "Assinado (vencido)") : kyc.status)}${row("Ano fiscal", kyc.fiscalYear)}${kyc.signedAt ? row("Assinado em", dt(kyc.signedAt)) : ""}${row("Elegibilidade interna", kyc.elegibilidade?.elegivel ? "Aprovado" : "Reprovado")}${kycMot.length ? `<div style="margin-top:4px"><div class="k">Motivos</div><ul class="list">${kycMot.map((m) => `<li>${escH(m)}</li>`).join("")}</ul></div>` : ""}` : `<div class="muted">Sem KYS/KYG preenchido. Exigido apenas para contratações específicas.</div>`}
