@@ -138,7 +138,7 @@ export default function FornecedoresApp({ user, apiFetch, addToast, onHome, navi
   const runAll = async () => { try { const r = await apiFetch('/api/diligencia/run-all', { method: 'POST' }); const j = await r.json(); addToast(j.queued ? 'info' : 'success', j.queued ? `${j.queued} na fila de diligência.` : 'Tudo em dia.'); } catch { addToast('error', 'Falha ao iniciar.'); } };
   const runAllForce = async () => {
     if (!window.confirm('Reconsultar TODA a base ignorando o cache de 30 dias? Reconsulta todas as listas de restrição de cada fornecedor — pode levar vários minutos (roda em segundo plano).')) return;
-    try { const r = await apiFetch('/api/diligencia/run-all-force', { method: 'POST' }); const j = await r.json(); addToast('info', `${j.queued || 0} fornecedores na fila de reconsulta forçada.`); } catch { addToast('error', 'Falha ao iniciar a reconsulta.'); }
+    try { const r = await apiFetch('/api/diligencia/run-all-force', { method: 'POST' }); const j = await r.json(); addToast('info', `${j.queued || 0} fornecedores na fila de reconsulta das listas de restrição.`); } catch { addToast('error', 'Falha ao iniciar a reconsulta.'); }
   };
   const refreshAllApis = async () => {
     if (!window.confirm('Atualizar os dados cadastrais de TODOS os fornecedores a partir das APIs (Receita Federal + CEP)?\n\nRoda em segundo plano e pode levar vários minutos. Campos editados manualmente são preservados.')) return;
@@ -280,8 +280,8 @@ function CockpitBase({ rows, loading, openFornecedor, queue, runAll, runAllForce
           <Btn variant="secondary" onClick={onConvites}><Link2 size={14} aria-hidden /> Convites</Btn>
           <Btn variant="secondary" onClick={onImport}><Upload size={14} aria-hidden /> Importar CNPJs</Btn>
           <Btn variant="secondary" onClick={runAll} disabled={stats.semDilig === 0}><RefreshCw size={14} aria-hidden /> Consultar não consultados{stats.semDilig ? ` (${stats.semDilig})` : ''}</Btn>
-          <Btn variant="ghost" onClick={runAllForce}><RefreshCw size={14} aria-hidden /> Reconsultar tudo (forçado)</Btn>
-          <Btn variant="secondary" onClick={onRefreshAll} disabled={!!mass?.running}><DownloadCloud size={14} aria-hidden /> Atualizar tudo das APIs</Btn>
+          <Btn variant="ghost" onClick={runAllForce}><RefreshCw size={14} aria-hidden /> Reconsultar listas de restrição</Btn>
+          <Btn variant="secondary" onClick={onRefreshAll} disabled={!!mass?.running}><DownloadCloud size={14} aria-hidden /> Atualizar dados cadastrais</Btn>
         </div>
       </div>
 
@@ -637,8 +637,8 @@ function AjudaFornecedores() {
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Consultar</b> (campo do topo) — faz a diligência de um CNPJ avulso na hora.</span></li>
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Importar CNPJs</b> — cole uma lista (um por linha) ou envie um <span className="font-mono">.csv</span>/<span className="font-mono">.txt</span>; eles entram na base e a diligência é gerada automaticamente.</span></li>
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Consultar não consultados (N)</b> — enfileira só quem ainda não tem diligência.</span></li>
-              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Reconsultar tudo (forçado)</b> — refaz a diligência de toda a base, ignorando o cache de 30 dias (use depois de incluir uma lista nova de fontes).</span></li>
-              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Atualizar tudo das APIs</b> — recarrega só o <b className="text-text">cadastro</b> (Receita + CEP) de toda a base; rápido, em segundo plano e <b className="text-text">preservando os campos editados à mão</b>.</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Reconsultar listas de restrição</b> — refaz a diligência de toda a base, ignorando o cache de 30 dias (use depois de incluir uma lista nova de fontes).</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Atualizar dados cadastrais</b> — recarrega só o <b className="text-text">cadastro</b> (Receita + CEP) de toda a base; rápido, em segundo plano e <b className="text-text">preservando os campos editados à mão</b>.</span></li>
               <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Convites</b> — gera links rastreáveis de KYS/KYG para enviar ao fornecedor.</span></li>
             </ul>
           </div>
