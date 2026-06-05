@@ -22,7 +22,7 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml, buildReportHtml } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml } from "./diligenciaRoutes";
 import { generateKycPdf } from "./kycPdf";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
@@ -317,8 +317,8 @@ const FAIXA_LABEL: Record<string, string> = {
   inelegivel: "INELEGÍVEL", ate_2sm: "ELEGÍVEL — contratos até 2 salários mínimos",
   acima_2sm: "ELEGÍVEL — contratos a partir de 2 salários mínimos", pendente: "PENDENTE — diligência não concluída",
 };
-// Relatório de conformidade simples (trilha de verificação) — usado quando não há diligência por
-// CNPJ (caso KYG-PF). Para CNPJ, servimos a diligência completa (buildReportHtml).
+// Fallback raro (sem documento p/ montar o perfil consolidado): relatório simples da trilha de
+// verificação. Para CNPJ/CPF com documento, servimos o consolidado colorido (buildFornecedorReportHtml).
 function kycTrailReportHtml(rec: any): string {
   const esc = (s: any) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as any)[c]);
   const dt = (s: any) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
@@ -631,17 +631,19 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
 
   // ── Cópia ao fornecedor (gated pelo accessToken do próprio envio) ────────────────
   const kycAccessOk = (rec: any, req: any) => !!(rec && rec.accessToken && String(req.query.token || "") === rec.accessToken);
-  // Relatório de conformidade: para CNPJ, a diligência completa (15 listas, rodada/cacheada on-demand);
-  // para CPF (KYG-PF), a trilha de verificação do envio.
+  // Relatório de conformidade = o MESMO relatório consolidado COLORIDO da ficha do cockpit
+  // (buildFornecedorReportHtml: cadastro + diligência das 15 listas + notas/memória + KYS/KYG).
+  // Para CNPJ, garante a diligência (rodada/cacheada on-demand) antes de montar o perfil.
   app.get("/api/public/kyc/:id/report.html", publicLimiter, async (req: any, res) => {
     const id = idParam(req, res); if (!id) return;
     const rec = readRec(id);
     if (!kycAccessOk(rec, req)) return res.status(403).type("text/plain").send("Acesso negado.");
     const documento = recDoc(rec!);
     if (documento && documento.length === 14) {
-      try { const dil = await runDiligence(DATA_DIR, documento, { checkedBy: "Cópia ao fornecedor (autoconsulta)", ip: reqIp(req) }); if (dil) return res.type("text/html").send(buildReportHtml(dil)); }
+      try { await runDiligence(DATA_DIR, documento, { checkedBy: "Cópia ao fornecedor (autoconsulta)", ip: reqIp(req) }); }
       catch (e: any) { console.warn("[KYC] report.html diligência:", e?.message); }
     }
+    if (documento) return res.type("text/html").send(buildFornecedorReportHtml(profileResponse(documento)));
     return res.type("text/html").send(kycTrailReportHtml(rec!));
   });
   // Documento KYS/KYG: o PDF ASSINADO se a assinatura concluiu; senão o PDF preenchido (cópia do enviado).
