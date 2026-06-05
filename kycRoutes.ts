@@ -22,7 +22,7 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import crypto from "node:crypto";
-import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml } from "./diligenciaRoutes";
+import { fetchReceita, consultaPT, consultaPEP, collectSuppliers, runDiligence, lookupCep, legalNotesHtml, provenanceTableHtml, buildReportHtml } from "./diligenciaRoutes";
 import { generateKycPdf } from "./kycPdf";
 import type {
   KycRecord, KycInvite, KycSummary, KycType, KysData, KygData, KycVerification, KycVerdict, KycEligibility,
@@ -317,6 +317,36 @@ const FAIXA_LABEL: Record<string, string> = {
   inelegivel: "INELEGÍVEL", ate_2sm: "ELEGÍVEL — contratos até 2 salários mínimos",
   acima_2sm: "ELEGÍVEL — contratos a partir de 2 salários mínimos", pendente: "PENDENTE — diligência não concluída",
 };
+// Relatório de conformidade simples (trilha de verificação) — usado quando não há diligência por
+// CNPJ (caso KYG-PF). Para CNPJ, servimos a diligência completa (buildReportHtml).
+function kycTrailReportHtml(rec: any): string {
+  const esc = (s: any) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as any)[c]);
+  const dt = (s: any) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
+  const row = (k: string, v: any) => v ? `<div class="row"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>` : "";
+  const nome = rec.kys?.razaoSocial || rec.kyg?.nome || "—";
+  const elig = rec.elegibilidade?.elegivel ? "Elegível" : "Reprovado";
+  const trail = (rec.verificationTrail || []).map((t: any) => `<div class="row"><span class="k">${esc(t.fonte)}${t.tipo ? " — " + esc(t.tipo) : ""}</span><span class="v">${esc(t.resultado || t.status || "")}</span></div>`).join("") || `<div class="muted">—</div>`;
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Conformidade — ${esc(nome)}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:"IBM Plex Sans",system-ui,sans-serif;color:#161616;background:#fff;font-size:13px;line-height:1.55}.page{max-width:780px;margin:0 auto;padding:40px 48px}.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#525252}h1{font-size:22px;font-weight:600;margin:6px 0 2px}.sub{color:#525252;font-size:12px}.sectitle{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#525252;font-weight:600;border-bottom:1px solid #e0e0e0;padding-bottom:6px;margin:24px 0 10px}.row{display:flex;gap:10px;padding:2px 0}.k{color:#525252;min-width:200px;flex-shrink:0}.v{font-weight:500;word-break:break-word}.muted{color:#6f6f6f}.verdict{display:inline-block;margin-top:10px;padding:5px 12px;border:1px solid #161616;font-weight:600;font-size:12px}footer{margin-top:36px;border-top:1px solid #e0e0e0;padding-top:12px;color:#6f6f6f;font-size:10px;line-height:1.7}.toolbar{position:fixed;top:12px;right:16px;background:#161616;color:#fff;border:none;padding:8px 14px;font-size:12px;cursor:pointer}@media print{.toolbar{display:none}.page{padding:0}}</style></head><body>
+<button class="toolbar" onclick="window.print()">Salvar em PDF / Imprimir</button>
+<div class="page">
+  <div class="eyebrow">Relatório de conformidade · ${esc((rec.type || "").toUpperCase())}</div>
+  <h1>${esc(nome)}</h1>
+  <div class="sub">${esc(fmtCnpj(recDoc(rec) || ""))} · protocolo ${esc(rec.id)}</div>
+  <div class="verdict">${esc(elig)}${rec.verdict ? " · " + esc(rec.verdict) : ""}</div>
+  <div class="sectitle">Dados da consulta</div>
+  ${row("Protocolo", rec.id)}${row("Recebido em", dt(rec.createdAt))}${row("Ano fiscal", rec.fiscalYear)}${row("Validade (ano fiscal)", dt(rec.validUntil))}
+  <div class="sectitle">Verificação de conformidade</div>
+  ${trail}
+  <footer>
+    <b>Associação Casa Hacker</b> · CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · auditoria.casahacker.org<br>
+    Relatório de conformidade gerado em ${esc(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }).replace(", ", " às "))} (BRT). Cópia ao fornecedor dos dados informados e verificados.
+  </footer>
+</div>
+<script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},400)})</script>
+</body></html>`;
+}
+
 export function buildFornecedorReportHtml(p: any): string {
   const c = p.cadastro || {}; const dil = p.diligencia; const kyc = p.kyc;
   const dt = (s: any) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
@@ -569,6 +599,8 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     // guarda os dados crus da régua p/ relatório interno
     (rec as any).receitaSnapshot = checks.receita; (rec as any).sancoesSnapshot = checks.sancoes;
     rec.elegibilidade = computeEligibility(rec);
+    // token de acesso do PRÓPRIO fornecedor p/ baixar a cópia (relatório + documento) na tela final.
+    (rec as any).accessToken = crypto.randomBytes(16).toString("hex");
 
     // assinatura via Documenso (se configurado)
     if (documensoReady(type)) {
@@ -591,10 +623,38 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     if (rec.inviteToken) { const inv = readInvites(); const i = inv.find((x) => x.token === rec.inviteToken); if (i) { i.usedByRecordId = rec.id; writeInvites(inv); } }
 
     res.json({
-      id: rec.id, verdict: rec.verdict,
+      id: rec.id, verdict: rec.verdict, documento, accessToken: (rec as any).accessToken,
       documenso: rec.documensoToken ? { token: rec.documensoToken, host: DOCUMENSO_URL } : null,
       needsDocumensoSetup: !documensoReady(type),
     });
+  });
+
+  // ── Cópia ao fornecedor (gated pelo accessToken do próprio envio) ────────────────
+  const kycAccessOk = (rec: any, req: any) => !!(rec && rec.accessToken && String(req.query.token || "") === rec.accessToken);
+  // Relatório de conformidade: para CNPJ, a diligência completa (15 listas, rodada/cacheada on-demand);
+  // para CPF (KYG-PF), a trilha de verificação do envio.
+  app.get("/api/public/kyc/:id/report.html", publicLimiter, async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const rec = readRec(id);
+    if (!kycAccessOk(rec, req)) return res.status(403).type("text/plain").send("Acesso negado.");
+    const documento = recDoc(rec!);
+    if (documento && documento.length === 14) {
+      try { const dil = await runDiligence(DATA_DIR, documento, { checkedBy: "Cópia ao fornecedor (autoconsulta)", ip: reqIp(req) }); if (dil) return res.type("text/html").send(buildReportHtml(dil)); }
+      catch (e: any) { console.warn("[KYC] report.html diligência:", e?.message); }
+    }
+    return res.type("text/html").send(kycTrailReportHtml(rec!));
+  });
+  // Documento KYS/KYG: o PDF ASSINADO se a assinatura concluiu; senão o PDF preenchido (cópia do enviado).
+  app.get("/api/public/kyc/:id/document.pdf", publicLimiter, async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const rec = readRec(id);
+    if (!kycAccessOk(rec, req)) return res.status(403).type("text/plain").send("Acesso negado.");
+    const fname = `${rec!.type}-${id}.pdf`;
+    if (rec!.status === "assinado" && rec!.documensoDocumentId) {
+      try { const buf = await downloadSigned(rec!.documensoDocumentId); if (buf) { res.set("Content-Type", "application/pdf"); res.set("Content-Disposition", `inline; filename="${fname}"`); return res.send(buf); } } catch { /* cai p/ o preenchido */ }
+    }
+    try { const { pdf } = await generateKycPdf(rec!); res.set("Content-Type", "application/pdf"); res.set("Content-Disposition", `inline; filename="${fname}"`); return res.send(Buffer.from(pdf)); }
+    catch (e: any) { return res.status(500).type("text/plain").send("Falha ao gerar o documento: " + (e?.message || "")); }
   });
 
   // o embed sinaliza conclusão → marca assinado

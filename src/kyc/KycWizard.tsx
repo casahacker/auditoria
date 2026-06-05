@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ShieldCheck, Loader2, CheckCircle2, AlertTriangle, ChevronRight, ChevronLeft,
-  Building2, UserCheck, FileSignature, Info, Check, Paperclip, X,
+  Building2, UserCheck, FileSignature, Info, Check, Paperclip, X, Lock, Search, Download, FileText, Mail, Receipt,
 } from 'lucide-react';
 import {
   KycType, KysData, KygData, KycAddress, emptyAddress, emptyBank,
@@ -41,21 +41,23 @@ const emptyKyg = (): KygData => ({
 type Bank = { code: string; name: string };
 
 // ── primitivos de UI (página pública, tema claro próprio) ───────────────────────
-function Field({ label, value, onChange, placeholder, required, type = 'text', hint, status, autoComplete }: {
+function Field({ label, value, onChange, placeholder, required, type = 'text', hint, status, autoComplete, locked }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; required?: boolean;
-  type?: string; hint?: React.ReactNode; status?: 'ok' | 'error' | 'loading'; autoComplete?: string;
+  type?: string; hint?: React.ReactNode; status?: 'ok' | 'error' | 'loading'; autoComplete?: string; locked?: boolean;
 }) {
   return (
     <label className="block">
-      <span className="text-[12px] font-semibold text-text-secondary">{label}{required && <span className="text-error"> *</span>}</span>
+      <span className="text-[12px] font-semibold text-text-secondary">{label}{required && <span className="text-error"> *</span>}{locked && <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-normal text-text-secondary"><Lock size={11} aria-hidden /> Receita Federal</span>}</span>
       <div className="relative mt-1">
         <input
           type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} autoComplete={autoComplete}
-          className="w-full bg-card border border-line rounded px-3 py-2 text-[14px] text-text focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pr-9"
+          readOnly={locked} aria-readonly={locked} tabIndex={locked ? -1 : undefined}
+          className={`w-full border rounded px-3 py-2 text-[14px] focus:outline-none pr-9 ${locked ? 'bg-surface-hover border-line/70 text-text-secondary cursor-default' : 'bg-card border-line text-text focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/40'}`}
         />
-        {status === 'loading' && <Loader2 size={15} className="animate-spin text-primary absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
-        {status === 'ok' && <CheckCircle2 size={15} className="text-success absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
-        {status === 'error' && <AlertTriangle size={15} className="text-error absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
+        {locked ? <Lock size={14} className="text-text-secondary absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />
+          : <>{status === 'loading' && <Loader2 size={15} className="animate-spin text-primary absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
+            {status === 'ok' && <CheckCircle2 size={15} className="text-success absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}
+            {status === 'error' && <AlertTriangle size={15} className="text-error absolute right-2.5 top-1/2 -translate-y-1/2" aria-hidden />}</>}
       </div>
       {hint && <span className="block mt-1 text-[12px] text-text-secondary">{hint}</span>}
     </label>
@@ -81,7 +83,7 @@ function SelectField({ label, value, onChange, options, required }: { label: str
   );
 }
 
-function AddressFields({ addr, onChange, onCep, required }: { addr: KycAddress; onChange: (a: KycAddress) => void; onCep: (cep: string) => Promise<boolean>; required?: boolean }) {
+function AddressFields({ addr, onChange, onCep, required, locked }: { addr: KycAddress; onChange: (a: KycAddress) => void; onCep: (cep: string) => Promise<boolean>; required?: boolean; locked?: boolean }) {
   const set = (k: keyof KycAddress) => (v: string) => onChange({ ...addr, [k]: v });
   const [cepStatus, setCepStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const onCepChange = async (v: string) => {
@@ -91,17 +93,39 @@ function AddressFields({ addr, onChange, onCep, required }: { addr: KycAddress; 
     setCepStatus('loading');
     setCepStatus((await onCep(v)) ? 'ok' : 'error');
   };
+  // locked: campos da Receita/CEP travados; só os realmente preenchidos travam (MEI sem rua continua editável)
+  const lk = (v: string) => !!(locked && v.trim());
   return (
     <div className="grid sm:grid-cols-6 gap-3">
-      <div className="sm:col-span-2"><Field label="CEP" value={addr.cep} onChange={onCepChange} placeholder="00000-000" required={required}
+      <div className="sm:col-span-2"><Field label="CEP" value={addr.cep} onChange={locked ? () => { } : onCepChange} placeholder="00000-000" required={required} locked={lk(addr.cep)}
         status={cepStatus === 'idle' ? undefined : cepStatus}
-        hint={cepStatus === 'error' ? <span className="text-error">CEP não encontrado</span> : cepStatus === 'ok' ? <span className="text-success">Endereço preenchido automaticamente</span> : 'Preenche o endereço automaticamente'} /></div>
-      <div className="sm:col-span-4"><Field label="Logradouro" value={addr.logradouro} onChange={set('logradouro')} required={required} /></div>
-      <div className="sm:col-span-1"><Field label="Número" value={addr.numero} onChange={set('numero')} required={required} /></div>
-      <div className="sm:col-span-3"><Field label="Complemento" value={addr.complemento} onChange={set('complemento')} /></div>
-      <div className="sm:col-span-2"><Field label="Bairro" value={addr.bairro} onChange={set('bairro')} required={required} /></div>
-      <div className="sm:col-span-4"><Field label="Município" value={addr.municipio} onChange={set('municipio')} required={required} /></div>
-      <div className="sm:col-span-2"><Field label="UF" value={addr.uf} onChange={(v) => set('uf')(v.toUpperCase().slice(0, 2))} required={required} /></div>
+        hint={locked ? undefined : cepStatus === 'error' ? <span className="text-error">CEP não encontrado</span> : cepStatus === 'ok' ? <span className="text-success">Endereço preenchido automaticamente</span> : 'Preenche o endereço automaticamente'} /></div>
+      <div className="sm:col-span-4"><Field label="Logradouro" value={addr.logradouro} onChange={set('logradouro')} required={required} locked={lk(addr.logradouro)} /></div>
+      <div className="sm:col-span-1"><Field label="Número" value={addr.numero} onChange={set('numero')} required={required} locked={lk(addr.numero)} /></div>
+      <div className="sm:col-span-3"><Field label="Complemento" value={addr.complemento} onChange={set('complemento')} locked={lk(addr.complemento)} /></div>
+      <div className="sm:col-span-2"><Field label="Bairro" value={addr.bairro} onChange={set('bairro')} required={required} locked={lk(addr.bairro)} /></div>
+      <div className="sm:col-span-4"><Field label="Município" value={addr.municipio} onChange={set('municipio')} required={required} locked={lk(addr.municipio)} /></div>
+      <div className="sm:col-span-2"><Field label="UF" value={addr.uf} onChange={(v) => set('uf')(v.toUpperCase().slice(0, 2))} required={required} locked={lk(addr.uf)} /></div>
+    </div>
+  );
+}
+
+// CNPJ-first: primeira tela do bloco empresa — só o CNPJ; ao buscar, revela o cadastro pré-preenchido.
+function CnpjGate({ value, onChange, status, situacao, onBuscar, label = 'CNPJ', title = 'Identificação da empresa' }: {
+  value: string; onChange: (v: string) => void; status: 'idle' | 'loading' | 'ok' | 'error'; situacao: string; onBuscar: () => void; label?: string; title?: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <SectionTitle icon={Building2}>{title}</SectionTitle>
+      <p className="text-[14px] text-text-secondary leading-relaxed">Informe o <b className="text-text">{label}</b>. Buscamos os dados na <b className="text-text">Receita Federal</b> e pré-preenchemos o cadastro — você só completa o que faltar (contato e dados bancários).</p>
+      <div className="max-w-sm">
+        <Field label={label} value={value} required status={status === 'idle' ? undefined : status} onChange={onChange} placeholder="00.000.000/0000-00"
+          hint={value && !isValidCnpj(value) ? <span className="text-error">CNPJ inválido</span> : status === 'error' ? <span className="text-error">Não foi possível buscar — verifique o CNPJ e tente de novo</span> : situacao ? <span className={/ATIVA/i.test(situacao) ? 'text-success' : 'text-error'}>Receita: {situacao}</span> : undefined} />
+      </div>
+      <button type="button" onClick={onBuscar} disabled={!isValidCnpj(value) || status === 'loading'}
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
+        {status === 'loading' ? <><Loader2 size={15} className="animate-spin" /> Buscando na Receita…</> : <><Search size={15} /> Buscar na Receita e continuar</>}
+      </button>
     </div>
   );
 }
@@ -146,10 +170,11 @@ export default function KycWizard() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [cnpjStatus, setCnpjStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const [cnpjSituacao, setCnpjSituacao] = useState<string>('');
+  const [empresaLoaded, setEmpresaLoaded] = useState(false); // CNPJ-first: revela o formulário só após puxar a Receita
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [sign, setSign] = useState<{ id: string; token: string; host: string } | null>(null);
-  const [done, setDone] = useState<{ id: string; needsSetup: boolean } | null>(null);
+  const [sign, setSign] = useState<{ id: string; token: string; host: string; info: any } | null>(null);
+  const [done, setDone] = useState<{ id: string; accessToken?: string; documento?: string; needsSetup: boolean } | null>(null);
   const [comprovante, setComprovante] = useState<File | null>(null); // #96 — comprovante de conta corrente (opcional)
   const [compErr, setCompErr] = useState('');
 
@@ -178,7 +203,7 @@ export default function KycWizard() {
       const end: KycAddress = { cep: rf.cep || '', logradouro: rf.logradouro || '', numero: rf.numero || '', complemento: rf.complemento || '', bairro: rf.bairro || '', municipio: rf.municipio || '', uf: rf.uf || '' };
       if (type === 'kys') setKys((k) => ({ ...k, razaoSocial: rf.razao_social || k.razaoSocial, nomeFantasia: rf.nome_fantasia || k.nomeFantasia, endereco: { ...end }, telefone: rf.telefone || k.telefone, email: rf.email || k.email }));
       else setKyg((g) => ({ ...g, nome: rf.razao_social || g.nome, nomeFantasia: rf.nome_fantasia || g.nomeFantasia, endereco: { ...end }, telefone: rf.telefone || g.telefone, email: rf.email || g.email }));
-      setCnpjStatus('ok');
+      setCnpjStatus('ok'); setEmpresaLoaded(true); // CNPJ-first: revela o formulário pré-preenchido
     } catch { setCnpjStatus('error'); }
   };
 
@@ -202,6 +227,8 @@ export default function KycWizard() {
   const kygSteps = ['Início', 'Identificação', 'Declarações', 'Observações', 'Revisão e assinatura'];
   const steps = type === 'kys' ? kysSteps : kygSteps;
   const lastStep = steps.length - 1;
+  // na "tela do CNPJ" (CNPJ-first, antes de puxar a Receita) o avanço é pelo botão "Buscar e continuar"
+  const onCnpjGate = step === 1 && !empresaLoaded && (type === 'kys' || (type === 'kyg' && kyg.tipoPessoa === 'pj'));
 
   const canNext = (): boolean => {
     if (step === 0) return atestacao;
@@ -237,13 +264,14 @@ export default function KycWizard() {
       if (comprovante && j.id) {
         try { const fd = new FormData(); fd.append('file', comprovante); await fetch(`/api/public/kyc/${j.id}/comprovante`, { method: 'POST', body: fd }); } catch { /* segue mesmo se o anexo falhar */ }
       }
-      if (j.documenso?.token) setSign({ id: j.id, token: j.documenso.token, host: j.documenso.host });
-      else setDone({ id: j.id, needsSetup: !!j.needsDocumensoSetup });
+      const info = { id: j.id, accessToken: j.accessToken, documento: j.documento, needsSetup: !!j.needsDocumensoSetup };
+      if (j.documenso?.token) setSign({ id: j.id, token: j.documenso.token, host: j.documenso.host, info });
+      else setDone(info);
     } catch (e: any) { setError(e.message || 'Falha de rede.'); }
     finally { setSubmitting(false); }
   };
 
-  if (done) return <SuccessScreen needsSetup={done.needsSetup} type={type} />;
+  if (done) return <SuccessScreen info={done} type={type} />;
 
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col pt-8">
@@ -288,19 +316,24 @@ export default function KycWizard() {
             </div>
           )}
 
-          {/* KYS — empresa */}
-          {type === 'kys' && step === 1 && (
+          {/* KYS — empresa (CNPJ-first: 1ª tela só o CNPJ; depois o cadastro pré-preenchido) */}
+          {type === 'kys' && step === 1 && !empresaLoaded && (
+            <CnpjGate value={kys.cnpj} onChange={(v) => { setKys({ ...kys, cnpj: v }); setCnpjStatus('idle'); }} status={cnpjStatus} situacao={cnpjSituacao} onBuscar={() => lookupCnpj(kys.cnpj)} />
+          )}
+          {type === 'kys' && step === 1 && empresaLoaded && (
             <div className="space-y-4">
-              <SectionTitle icon={Building2}>Identificação da empresa</SectionTitle>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="CNPJ" value={kys.cnpj} required status={cnpjStatus === 'idle' ? undefined : cnpjStatus}
-                  onChange={(v) => { setKys({ ...kys, cnpj: v }); setCnpjStatus('idle'); }} placeholder="00.000.000/0000-00"
-                  hint={kys.cnpj && !isValidCnpj(kys.cnpj) ? <span className="text-error">CNPJ inválido</span> : cnpjSituacao ? <span className={/ATIVA/i.test(cnpjSituacao) ? 'text-success' : 'text-error'}>Receita: {cnpjSituacao}</span> : 'Ao informar, buscamos os dados na Receita Federal.'} />
-                <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kys.cnpj)} disabled={!isValidCnpj(kys.cnpj) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">Buscar na Receita</button></div>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <SectionTitle icon={Building2}>Identificação da empresa</SectionTitle>
+                <button type="button" onClick={() => { setEmpresaLoaded(false); setCnpjStatus('idle'); }} className="text-[12px] text-primary hover:underline inline-flex items-center gap-1"><ChevronLeft size={13} aria-hidden /> Trocar CNPJ</button>
               </div>
-              <Field label="Razão social" value={kys.razaoSocial} required onChange={(v) => setKys({ ...kys, razaoSocial: v })} />
-              <Field label="Nome fantasia" value={kys.nomeFantasia} onChange={(v) => setKys({ ...kys, nomeFantasia: v })} />
-              <AddressFields addr={kys.endereco} onChange={(a) => setKys({ ...kys, endereco: a })} onCep={(c) => lookupCep(c, 'empresa')} required />
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="CNPJ" value={maskCnpj(kys.cnpj)} locked onChange={() => { }} />
+                <Field label="Situação cadastral" value={cnpjSituacao} locked={!!cnpjSituacao} onChange={() => { }} />
+              </div>
+              <Field label="Razão social" value={kys.razaoSocial} required locked={!!kys.razaoSocial} onChange={(v) => setKys({ ...kys, razaoSocial: v })} />
+              <Field label="Nome fantasia" value={kys.nomeFantasia} locked={!!kys.nomeFantasia} onChange={(v) => setKys({ ...kys, nomeFantasia: v })} />
+              <AddressFields addr={kys.endereco} onChange={(a) => setKys({ ...kys, endereco: a })} onCep={(c) => lookupCep(c, 'empresa')} required locked />
+              <p className="text-[12px] text-text-secondary -mt-1 flex items-start gap-1.5"><Lock size={12} className="text-text-secondary shrink-0 mt-0.5" aria-hidden /> Os campos marcados vêm da Receita Federal e não são editáveis. Complete abaixo o contato e os dados bancários.</p>
               <div className="grid sm:grid-cols-2 gap-3">
                 <Field label="Telefone (celular/fixo)" value={kys.telefone} required onChange={(v) => setKys({ ...kys, telefone: v })} placeholder="(11) 90000-0000"
                   status={kys.telefone ? (isValidPhone(kys.telefone) ? 'ok' : 'error') : undefined}
@@ -359,35 +392,44 @@ export default function KycWizard() {
             </div>
           )}
 
-          {/* KYG — identificação */}
+          {/* KYG — identificação (CNPJ-first p/ PJ; PF segue editável) */}
           {type === 'kyg' && step === 1 && (
             <div className="space-y-4">
               <SectionTitle icon={Building2}>Identificação do proponente</SectionTitle>
               <div className="flex gap-2">
                 {(['pj', 'pf'] as const).map((tp) => (
-                  <button key={tp} type="button" onClick={() => setKyg({ ...kyg, tipoPessoa: tp })}
+                  <button key={tp} type="button" onClick={() => { setKyg({ ...kyg, tipoPessoa: tp }); setEmpresaLoaded(false); setCnpjStatus('idle'); }}
                     className={`px-4 py-1.5 rounded text-[12px] font-semibold border ${kyg.tipoPessoa === tp ? 'bg-primary text-white border-primary' : 'border-line text-text-secondary hover:border-primary'}`}>
                     {tp === 'pj' ? 'Organização (CNPJ)' : 'Pessoa física (CPF)'}
                   </button>
                 ))}
               </div>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <Field label={kyg.tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} value={kyg.documento} required onChange={(v) => { setKyg({ ...kyg, documento: v }); setCnpjStatus('idle'); }}
-                  status={kyg.documento ? ((kyg.tipoPessoa === 'pj' ? isValidCnpj(kyg.documento) : isValidCpf(kyg.documento)) ? 'ok' : 'error') : undefined} />
-                {kyg.tipoPessoa === 'pj' && <div className="flex items-end"><button type="button" onClick={() => lookupCnpj(kyg.documento)} disabled={!isValidCnpj(kyg.documento) || cnpjStatus === 'loading'} className="px-4 py-2 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">{cnpjStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : 'Buscar na Receita'}</button></div>}
-              </div>
-              <Field label={kyg.tipoPessoa === 'pj' ? 'Razão social' : 'Nome completo'} value={kyg.nome} required onChange={(v) => setKyg({ ...kyg, nome: v })} />
-              <Field label="Nome do projeto" value={kyg.projeto} required onChange={(v) => setKyg({ ...kyg, projeto: v })} />
-              <AddressFields addr={kyg.endereco} onChange={(a) => setKyg({ ...kyg, endereco: a })} onCep={(c) => lookupCep(c, 'kyg')} />
-              <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="Telefone" value={kyg.telefone} onChange={(v) => setKyg({ ...kyg, telefone: v })} placeholder="(11) 90000-0000"
-                  status={kyg.telefone ? (isValidPhone(kyg.telefone) ? 'ok' : 'error') : undefined}
-                  hint={kyg.telefone && !isValidPhone(kyg.telefone) ? <span className="text-error">Telefone inválido — inclua o DDD</span> : undefined} />
-                <Field label="E-mail (receberá o documento p/ assinar)" type="email" value={kyg.email} required onChange={(v) => setKyg({ ...kyg, email: v })} />
-              </div>
-              <SectionTitle>Dados bancários (recebimento)</SectionTitle>
-              <BankRow banks={bankOptions} value={kyg.banco} onChange={(b) => setKyg({ ...kyg, banco: b })} />
-              <ComprovanteField file={comprovante} onPick={(f, err) => { setComprovante(f); setCompErr(err); }} error={compErr} />
+              {kyg.tipoPessoa === 'pj' && !empresaLoaded ? (
+                <div className="space-y-4">
+                  <p className="text-[14px] text-text-secondary leading-relaxed">Informe o <b className="text-text">CNPJ</b>. Buscamos os dados na <b className="text-text">Receita Federal</b> e pré-preenchemos o cadastro — você só completa o que faltar.</p>
+                  <div className="max-w-sm"><Field label="CNPJ" value={kyg.documento} required status={cnpjStatus === 'idle' ? undefined : cnpjStatus} onChange={(v) => { setKyg({ ...kyg, documento: v }); setCnpjStatus('idle'); }} placeholder="00.000.000/0000-00"
+                    hint={kyg.documento && !isValidCnpj(kyg.documento) ? <span className="text-error">CNPJ inválido</span> : cnpjStatus === 'error' ? <span className="text-error">Não foi possível buscar — verifique o CNPJ</span> : cnpjSituacao ? <span className={/ATIVA/i.test(cnpjSituacao) ? 'text-success' : 'text-error'}>Receita: {cnpjSituacao}</span> : undefined} /></div>
+                  <button type="button" onClick={() => lookupCnpj(kyg.documento)} disabled={!isValidCnpj(kyg.documento) || cnpjStatus === 'loading'} className="inline-flex items-center gap-2 px-5 py-2.5 rounded text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">{cnpjStatus === 'loading' ? <><Loader2 size={15} className="animate-spin" /> Buscando na Receita…</> : <><Search size={15} /> Buscar na Receita e continuar</>}</button>
+                </div>
+              ) : (
+                <>
+                  {kyg.tipoPessoa === 'pj' && <button type="button" onClick={() => { setEmpresaLoaded(false); setCnpjStatus('idle'); }} className="text-[12px] text-primary hover:underline inline-flex items-center gap-1"><ChevronLeft size={13} aria-hidden /> Trocar CNPJ</button>}
+                  <Field label={kyg.tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} value={kyg.tipoPessoa === 'pj' ? maskCnpj(kyg.documento) : kyg.documento} required={kyg.tipoPessoa !== 'pj'} locked={kyg.tipoPessoa === 'pj'} onChange={(v) => setKyg({ ...kyg, documento: v })}
+                    status={kyg.tipoPessoa === 'pf' && kyg.documento ? (isValidCpf(kyg.documento) ? 'ok' : 'error') : undefined} placeholder="000.000.000-00" />
+                  <Field label={kyg.tipoPessoa === 'pj' ? 'Razão social' : 'Nome completo'} value={kyg.nome} required locked={kyg.tipoPessoa === 'pj' && !!kyg.nome} onChange={(v) => setKyg({ ...kyg, nome: v })} />
+                  <Field label="Nome do projeto" value={kyg.projeto} required onChange={(v) => setKyg({ ...kyg, projeto: v })} />
+                  <AddressFields addr={kyg.endereco} onChange={(a) => setKyg({ ...kyg, endereco: a })} onCep={(c) => lookupCep(c, 'kyg')} locked={kyg.tipoPessoa === 'pj'} />
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Field label="Telefone" value={kyg.telefone} onChange={(v) => setKyg({ ...kyg, telefone: v })} placeholder="(11) 90000-0000"
+                      status={kyg.telefone ? (isValidPhone(kyg.telefone) ? 'ok' : 'error') : undefined}
+                      hint={kyg.telefone && !isValidPhone(kyg.telefone) ? <span className="text-error">Telefone inválido — inclua o DDD</span> : undefined} />
+                    <Field label="E-mail (receberá o documento p/ assinar)" type="email" value={kyg.email} required onChange={(v) => setKyg({ ...kyg, email: v })} />
+                  </div>
+                  <SectionTitle>Dados bancários (recebimento)</SectionTitle>
+                  <BankRow banks={bankOptions} value={kyg.banco} onChange={(b) => setKyg({ ...kyg, banco: b })} />
+                  <ComprovanteField file={comprovante} onPick={(f, err) => { setComprovante(f); setCompErr(err); }} error={compErr} />
+                </>
+              )}
             </div>
           )}
 
@@ -453,7 +495,7 @@ export default function KycWizard() {
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-[12px] font-semibold text-text-secondary hover:text-primary disabled:opacity-30">
               <ChevronLeft size={15} /> Voltar
             </button>
-            {step < lastStep ? (
+            {onCnpjGate ? <span /> : step < lastStep ? (
               <button type="button" onClick={() => canNext() && setStep((s) => s + 1)} disabled={!canNext()}
                 className="inline-flex items-center gap-1.5 px-5 py-2 rounded text-[12px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">
                 Continuar <ChevronRight size={15} />
@@ -468,7 +510,7 @@ export default function KycWizard() {
         </div>
       </main>
 
-      {sign && <SignModal sign={sign} onClose={() => setSign(null)} onDone={() => { setSign(null); setDone({ id: sign.id, needsSetup: false }); }} />}
+      {sign && <SignModal sign={sign} onClose={() => setSign(null)} onDone={() => { setSign(null); setDone({ ...sign.info, needsSetup: false }); }} />}
     </div>
   );
 }
@@ -591,17 +633,65 @@ function SignModal({ sign, onClose, onDone }: { sign: { id: string; token: strin
   );
 }
 
-function SuccessScreen({ needsSetup, type }: { needsSetup: boolean; type: KycType }) {
+function SuccessScreen({ info, type }: { info: { id: string; accessToken?: string; documento?: string; needsSetup: boolean }; type: KycType }) {
+  const { id, accessToken, needsSetup } = info;
+  const T = type.toUpperCase();
+  const reportUrl = accessToken ? `/api/public/kyc/${id}/report.html?token=${encodeURIComponent(accessToken)}` : '';
+  const docUrl = accessToken ? `/api/public/kyc/${id}/document.pdf?token=${encodeURIComponent(accessToken)}` : '';
+  const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const KV = ({ k, v, mono }: { k: string; v: string; mono?: boolean }) => (
+    <div className="flex flex-wrap gap-x-2"><span className="text-text-secondary min-w-[120px]">{k}</span><span className={`text-text font-medium break-all ${mono ? 'font-mono text-[12px]' : ''}`}>{v}</span></div>
+  );
   return (
-    <div className="min-h-screen bg-bg text-text flex flex-col items-center justify-center px-6 text-center pt-8">
-      <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mb-5"><CheckCircle2 size={32} className="text-success" /></div>
-      <h1 className="text-[20px] font-light">{needsSetup ? <>Dados <b className="font-semibold text-primary">recebidos</b></> : <>Conformidade <b className="font-semibold text-primary">concluída</b></>}</h1>
-      <p className="text-[14px] text-text-secondary mt-3 max-w-md leading-relaxed">
-        {needsSetup
-          ? `Recebemos o seu ${type.toUpperCase()}. A etapa de assinatura eletrônica será habilitada em breve e você receberá o documento por e-mail.`
-          : `Obrigado! Seu ${type.toUpperCase()} foi preenchido e assinado eletronicamente. Uma cópia será enviada por e-mail. A validade é por ano fiscal — renove no próximo ano.`}
-      </p>
-      <p className="text-[12px] text-text-secondary mt-8">Associação Casa Hacker · CNPJ 36.038.079/0001-97</p>
+    <div className="min-h-screen bg-bg text-text flex flex-col pt-8">
+      <header className="bg-sidebar border-b border-line px-5 sm:px-10 py-4 flex items-center gap-4">
+        <img src={CASA_HACKER_LOGO} alt="Casa Hacker" className="h-8 w-auto object-contain invert opacity-90" />
+        <div className="text-[12px] text-text-secondary">Associação Casa Hacker · conformidade de fornecedores</div>
+      </header>
+      <main className="flex-1 px-5 sm:px-10 py-10">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-success" aria-hidden /></div>
+            <h1 className="text-[24px] font-light">{needsSetup ? <>Dados <b className="font-semibold text-primary">recebidos</b></> : <>Conformidade <b className="font-semibold text-primary">concluída</b></>}</h1>
+            <p className="text-[14px] text-text-secondary mt-2 max-w-md mx-auto leading-relaxed">
+              {needsSetup
+                ? `Recebemos o seu ${T}. A assinatura eletrônica será habilitada em breve e você receberá o documento por e-mail.`
+                : `Obrigado! Seu ${T} foi preenchido e assinado eletronicamente. Guarde a sua cópia abaixo — uma via também será enviada por e-mail. A validade é por ano fiscal: renove no próximo ano.`}
+            </p>
+          </div>
+
+          <div className="bg-card border border-line rounded-lg p-5">
+            <div className="text-[12px] font-semibold text-text-secondary mb-3 flex items-center gap-1.5"><Receipt size={14} className="text-primary" aria-hidden /> Recibo de envio</div>
+            <div className="space-y-1.5 text-[13px]">
+              <KV k="Protocolo" v={id} mono />
+              <KV k="Formulário" v={`${T} — ${needsSetup ? 'aguardando assinatura' : 'assinado eletronicamente'}`} />
+              <KV k="Recebido em" v={`${now} (BRT)`} />
+            </div>
+          </div>
+
+          {accessToken && (
+            <div className="bg-card border border-line rounded-lg p-5">
+              <div className="text-[12px] font-semibold text-text-secondary mb-1 flex items-center gap-1.5"><Download size={14} className="text-primary" aria-hidden /> Sua cópia</div>
+              <p className="text-[12px] text-text-secondary mb-4">Baixe os documentos com os dados que você forneceu e que processamos.</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <a href={docUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 border border-line rounded-lg p-4 hover:border-primary focus-visible:ring-2 focus-visible:ring-primary outline-none transition-colors group">
+                  <FileText size={22} className="text-primary shrink-0" aria-hidden />
+                  <span className="min-w-0"><span className="block text-[13px] font-semibold text-text">Documento {T}</span><span className="block text-[12px] text-text-secondary">{needsSetup ? 'Cópia preenchida (PDF)' : 'PDF assinado'}</span></span>
+                  <Download size={16} className="text-text-secondary ml-auto group-hover:text-primary shrink-0" aria-hidden />
+                </a>
+                <a href={reportUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 border border-line rounded-lg p-4 hover:border-primary focus-visible:ring-2 focus-visible:ring-primary outline-none transition-colors group">
+                  <ShieldCheck size={22} className="text-primary shrink-0" aria-hidden />
+                  <span className="min-w-0"><span className="block text-[13px] font-semibold text-text">Relatório de conformidade</span><span className="block text-[12px] text-text-secondary">Verificações e diligência (PDF)</span></span>
+                  <Download size={16} className="text-text-secondary ml-auto group-hover:text-primary shrink-0" aria-hidden />
+                </a>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-center gap-2 text-[12px] text-text-secondary"><Mail size={14} className="text-primary shrink-0" aria-hidden /> Uma cópia também será enviada ao e-mail informado.</div>
+          <p className="text-[12px] text-text-secondary text-center pt-4 border-t border-line">Associação Casa Hacker · CNPJ 36.038.079/0001-97 · operacoes@casahacker.org</p>
+        </div>
+      </main>
     </div>
   );
 }
