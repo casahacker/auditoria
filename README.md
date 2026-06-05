@@ -196,10 +196,12 @@ Porta interna `127.0.0.1:18088 → 3000`, volume `/data/auditoria/data → /app/
 
 ## Documentação
 
-- **`docs/README.md`** — índice dos guias do usuário.
-- **`docs/processador-feac-sgpp.md`** — guia do Processador FEAC/SGPP.
-- **`docs/diligencia-fornecedores.md`** — guia da Diligência de Fornecedores.
-- **`docs/conformidade-kys-kyg.md`** — guia do KYS/KYG (inclui o setup do Documenso).
+- **[`docs/arquitetura.md`](docs/arquitetura.md)** — arquitetura técnica (módulos, modelo de dados, fluxos, deploy). **Comece por aqui se for desenvolver.**
+- **[`docs/README.md`](docs/README.md)** — índice dos guias do usuário.
+- **[`docs/processador-feac-sgpp.md`](docs/processador-feac-sgpp.md)** — guia do Processador FEAC/SGPP.
+- **[`docs/diligencia-fornecedores.md`](docs/diligencia-fornecedores.md)** — guia da Diligência de Fornecedores.
+- **[`docs/conformidade-kys-kyg.md`](docs/conformidade-kys-kyg.md)** — guia do KYS/KYG (inclui o setup do Documenso).
+- **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — fluxo de contribuição, validação e deploy.
 - Cada ferramenta também tem uma seção **"Como usar"** dentro do próprio app.
 
 ## Licença
