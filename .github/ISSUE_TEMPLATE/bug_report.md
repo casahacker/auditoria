@@ -31,4 +31,4 @@ assignees: ""
 
 <!-- Screenshots, logs, resposta da API. NÃO cole segredos, tokens ou dados pessoais. -->
 
-> Vulnerabilidade de segurança? **Não** abra issue pública — siga o [SECURITY.md](../SECURITY.md).
+> Vulnerabilidade de segurança? **Não** abra issue pública — siga o [SECURITY.md](../../SECURITY.md).

@@ -197,6 +197,7 @@ Porta interna `127.0.0.1:18088 → 3000`, volume `/data/auditoria/data → /app/
 ## Documentação
 
 - **[`docs/arquitetura.md`](docs/arquitetura.md)** — arquitetura técnica (módulos, modelo de dados, fluxos, deploy). **Comece por aqui se for desenvolver.**
+- **[`docs/api.md`](docs/api.md)** — referência da API REST (endpoints, auth).
 - **[`docs/README.md`](docs/README.md)** — índice dos guias do usuário.
 - **[`docs/processador-feac-sgpp.md`](docs/processador-feac-sgpp.md)** — guia do Processador FEAC/SGPP.
 - **[`docs/diligencia-fornecedores.md`](docs/diligencia-fornecedores.md)** — guia da Diligência de Fornecedores.
