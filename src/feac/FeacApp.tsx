@@ -706,8 +706,8 @@ function TratamentoView({ record, busy, progress }: any) {
 // signed value: + for entrada, − for saída
 const signedValue = (l: FeacLancamento) => (l.entrada && l.entrada > 0 ? l.entrada : l.saida);
 
-const REPORT_COLS: { h: string; get: (l: FeacLancamento) => string | number }[] = [
-  { h: 'ID', get: l => l.rowNum ?? '' },
+const REPORT_COLS: { h: string; get: (l: FeacLancamento, i: number) => string | number }[] = [
+  { h: 'ID', get: (_l, i) => i + 1 },
   { h: 'Categoria', get: l => l.categoria || '' },
   { h: 'Descrição', get: l => l.descricao || '' },
   { h: 'Grupo da natureza orçamentária (FEAC)', get: l => l.grupoNatureza || '' },
@@ -729,7 +729,7 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
   const exportCsv = () => {
     const esc = (s: any) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const lines = [REPORT_COLS.map(c => esc(c.h)).join(';')];
-    for (const l of (record.lancamentos || [])) lines.push(REPORT_COLS.map(c => esc(typeof c.get(l) === 'number' ? String(c.get(l)).replace('.', ',') : c.get(l))).join(';'));
+    (record.lancamentos || []).forEach((l: FeacLancamento, i: number) => lines.push(REPORT_COLS.map(c => { const val = c.get(l, i); return esc(typeof val === 'number' ? String(val).replace('.', ',') : val); }).join(';')));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = `relatorio_prestacao_contas_${record.id.slice(0, 8)}.csv`;
     document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(el.href), 1000);
@@ -775,11 +775,11 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
             </tr>
           </thead>
           <tbody>
-            {record.lancamentos.map((l: FeacLancamento) => {
+            {record.lancamentos.map((l: FeacLancamento, i: number) => {
               const v = signedValue(l);
               return (
                 <tr key={l.id} className="border-t border-line hover:bg-primary/5 cursor-pointer" onClick={() => setSelected(l)}>
-                  <td className="px-2.5 py-2 text-text-secondary">{l.rowNum ?? '—'}</td>
+                  <td className="px-2.5 py-2 text-text-secondary">{i + 1}</td>
                   <td className="px-2.5 py-2 max-w-[140px] truncate" title={l.categoria}>{l.categoria || '—'}</td>
                   <td className="px-2.5 py-2 max-w-[160px] truncate" title={l.descricao}>{l.descricao || '—'}</td>
                   <td className="px-2.5 py-2 max-w-[150px] truncate" title={l.grupoNatureza}>{l.grupoNatureza || '—'}</td>
@@ -794,7 +794,7 @@ function RelatorioView({ record, apiFetch, addToast, setSelected }: any) {
                   <td className="px-2.5 py-2 max-w-[220px] truncate text-text-secondary" title={(l.notaExplicativa || '').replace(/\*\*/g, '')}>{(l.notaExplicativa || '').replace(/\*\*/g, '').replace(/\n+/g, ' · ').slice(0, 70) || '—'}</td>
                   <td className="px-2.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                     {l.treatedPdf
-                      ? <IconBtn label={`Baixar PDF de ${l.razaoSocial || l.fornecedor || 'lançamento'}`} className="text-primary" onClick={() => dl(`/api/feac/${record.id}/items/${l.id}/doc`, `${l.fornecedor}.pdf`)}><FileDown size={12} /></IconBtn>
+                      ? <IconBtn label={`Baixar PDF de ${l.razaoSocial || l.fornecedor || 'lançamento'}`} className="text-primary" onClick={() => dl(`/api/feac/${record.id}/items/${l.id}/doc`, `${i + 1} - ${l.razaoSocial || l.fornecedor || 'documento'}.pdf`)}><FileDown size={12} /></IconBtn>
                       : <span className="text-text-secondary">—</span>}
                   </td>
                 </tr>
