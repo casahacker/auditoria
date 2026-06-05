@@ -679,6 +679,9 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
   const FORN_DIR = path.join(DATA_DIR, "fornecedores");
   fs.mkdirSync(FORN_DIR, { recursive: true });
   const CADASTRO_FIELDS = ["razaoSocial", "nomeFantasia", "tipo", "situacaoCadastral", "dataSituacao", "motivoSituacao", "naturezaJuridica", "porte", "abertura", "capitalSocial", "cnaePrincipal", "cnaesSecundarios", "cep", "logradouro", "numero", "complemento", "bairro", "municipio", "uf", "telefone", "email", "banco", "agencia", "conta", "chavePix", "observacoes"];
+  // #102: campos cujo DONO é o KYS/edição, NÃO as APIs cadastrais (Receita/CEP). A atualização
+  // cadastral não os sobrescreve — preserva o que está gravado (manual ou semeado do KYS).
+  const KYS_OWNED = new Set(["banco", "agencia", "conta", "chavePix", "observacoes"]);
   const cadPath = (doc: string) => path.join(FORN_DIR, `${doc}.json`);
   const readCad = (doc: string): any => { try { return JSON.parse(fs.readFileSync(cadPath(doc), "utf-8")); } catch { return null; } };
   const writeCad = (doc: string, rec: any) => fs.writeFileSync(cadPath(doc), JSON.stringify(rec, null, 2));
@@ -729,13 +732,21 @@ export function registerKycRoutes(app: Express, ctx: KycCtx) {
     res.json(profileResponse(doc));
   });
 
-  // re-semeia os campos NÃO manuais a partir das APIs (mantém os editados manualmente)
+  // #102: atualização das APIs cadastrais — a API VENCE quando traz dado novo (não-vazio):
+  // sobrescreve o campo (inclusive os editados à mão) e LIMPA a flag manual. Se a API vier vazia,
+  // preserva o que estava gravado (não apaga). Os campos KYS_OWNED (banco/observações) não são
+  // tocados pela atualização cadastral — mantêm a regra antiga (preserva manual; semeia do KYS).
   const reseedCadastro = (doc: string, updatedBy?: string) => {
     const { fields: api, fontes } = apiFields(doc);
     const stored = readCad(doc) || { doc, tipo: doc.length === 14 ? "pj" : "pf", fields: {}, manual: {} };
     const fields: Record<string, string> = { ...stored.fields };
-    for (const k of CADASTRO_FIELDS) if (!stored.manual?.[k]) fields[k] = api[k] || fields[k] || "";
-    writeCad(doc, { ...stored, doc, tipo: doc.length === 14 ? "pj" : "pf", fields, fontes, updatedAt: new Date().toISOString(), updatedBy });
+    const manual: Record<string, boolean> = { ...(stored.manual || {}) };
+    for (const k of CADASTRO_FIELDS) {
+      if (KYS_OWNED.has(k)) { if (!manual[k]) fields[k] = api[k] || fields[k] || ""; continue; }
+      if (api[k]) { fields[k] = api[k]; if (manual[k]) delete manual[k]; }   // API com dado novo vence + tira a marca manual
+      else if (fields[k] == null) fields[k] = "";                            // API vazia: mantém o stored (não apaga)
+    }
+    writeCad(doc, { ...stored, doc, tipo: doc.length === 14 ? "pj" : "pf", fields, manual, fontes, updatedAt: new Date().toISOString(), updatedBy });
   };
 
   // "Atualizar das APIs" — refresh RÁPIDO do cadastro (Receita + CEP), SEM as listas de
