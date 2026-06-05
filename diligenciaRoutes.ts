@@ -27,7 +27,7 @@ const VALIDADE_DIAS = 30;
 // um hash curto desse conjunto — muda sozinho quando uma fonte entra/sai (ordem não importa).
 // Um registro gravado sob versão ANTERIOR é tratado como DESATUALIZADO (re-rodado pelo sweep mesmo
 // dentro dos 30 dias), então toda fonte nova faz backfill automático da base, sem ação manual.
-export const DILIGENCE_SOURCES = ["ceis", "cnep", "cepim", "acordos-leniencia", "lista-suja", "ofac-sdn", "ofac-cons", "un-sc", "eu-fsf", "idb", "uk-sanctions", "tcu-inidoneos", "pep"];
+export const DILIGENCE_SOURCES = ["ceis", "cnep", "cepim", "acordos-leniencia", "lista-suja", "ofac-sdn", "ofac-cons", "un-sc", "eu-fsf", "idb", "uk-sanctions", "tcu-inidoneos", "tce-sp-apenados", "pep"];
 export const SOURCES_VERSION = crypto.createHash("sha1").update([...DILIGENCE_SOURCES].sort().join(",")).digest("hex").slice(0, 8);
 // #103: commit da plataforma que gerou o relatório (injetado no build via ARG/ENV APP_COMMIT; vazio se ausente).
 const APP_COMMIT = process.env.APP_COMMIT || "";
@@ -447,6 +447,48 @@ export async function consultaTCU(cnpjDigits: string): Promise<any> {
   }
 }
 
+const TCE_SP_URL = process.env.TCE_SP_URL || "https://www4.tce.sp.gov.br/apenados/webapi/P/impedimento";
+/**
+ * Relação de Apenados do TCE-SP — impedidos de licitar/contratar com a Administração (estadual +
+ * municipal de SP). Consulta JSON AO VIVO por CNPJ: a webapi de leitura não exige o Turnstile do SPA
+ * e o container resolve o host (igual ao TCU). Match exato por CNPJ. Vigência (decisão do Geraldo):
+ * término ≥ hoje ou null → CONSTA (vigente, eleva ALERTA); término < hoje → ATENÇÃO (histórico/
+ * reabilitado, informativo) — evita falso-positivo de empresa já reabilitada.
+ */
+export async function consultaTCESP(cnpjDigits: string): Promise<any> {
+  const apiUrl = `${TCE_SP_URL}?apenadoCnpj=${cnpjDigits}`;
+  const base: any = { fonte: "TCE-SP — Relação de Apenados", recurso: "tce-sp-apenados", url: "https://www.tce.sp.gov.br/apenados", apiUrl, fetchedAt: new Date().toISOString(), metodo: "GET", param: "CNPJ", cache: false };
+  if (cnpjDigits.length !== 14) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const fmtData = (a: any) => Array.isArray(a) && a.length === 3 ? `${String(a[2]).padStart(2, "0")}/${String(a[1]).padStart(2, "0")}/${a[0]}` : "";
+  const t0 = Date.now();
+  try {
+    const r = await limitedFetch(apiUrl, { headers: { Accept: "application/json", "User-Agent": "casahacker-auditoria/1.0" }, signal: AbortSignal.timeout(20000) });
+    base.http = r.status; base.ms = Date.now() - t0;
+    if (!r.ok) return { ...base, status: "ERRO", hits: [] };
+    const arr = await r.json();
+    const lista = Array.isArray(arr) ? arr : [];
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    let algumVigente = false;
+    const hits = lista.filter((h: any) => onlyDigits(h?.apenado?.cnpj) === cnpjDigits).map((h: any) => {
+      const term = Array.isArray(h.termino) && h.termino.length === 3 ? new Date(h.termino[0], h.termino[1] - 1, h.termino[2]) : null; // mês 1-indexado; null = vigente
+      const vigente = !term || term >= hoje;
+      if (vigente) algumVigente = true;
+      return {
+        tipo: `Impedido de licitar/contratar${vigente ? " (vigente)" : " (histórico)"} — ${String(h.tipoApenacao?.descricao || "").trim()}`,
+        orgao: `TCE-SP · ${String(h.apenador?.nome || "").trim()}`,
+        dataInicio: fmtData(h.inicio), dataFim: term ? fmtData(h.termino) : "",
+        processo: String(h.processo || "").trim(),
+        fundamentacao: String(h.razao || "").trim().slice(0, 300),
+      };
+    });
+    if (!hits.length) return { ...base, status: "NADA_CONSTA", hits: [], registros: lista.length };
+    return { ...base, status: algumVigente ? "CONSTA" : "ATENCAO", hits, registros: lista.length, ...(algumVigente ? {} : { nota: "Apenação(ões) com término já decorrido (histórico/reabilitado) — informativo." }) };
+  } catch (e: any) {
+    base.ms = Date.now() - t0;
+    return { ...base, status: "ERRO", erro: e.message, hits: [] };
+  }
+}
+
 /**
  * PEP (Pessoas Expostas Politicamente, CGU). Consulta por NOME (sócios do QSA e/ou
  * representante legal informado no KYS/KYG) e, opcionalmente, por CPF (representante
@@ -546,9 +588,10 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
       consultaIDB(DATA_DIR, [razao, ...qsaNomes]),
       consultaUK(DATA_DIR, [razao, ...qsaNomes]),
       consultaTCU(cnpj),
+      consultaTCESP(cnpj),
       consultaPEP(pepNomes, pepCpfs),
     ]);
-    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)", "TCU — Licitantes Inidôneos (art. 46, Lei 8.443/92)");
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)", "TCU — Licitantes Inidôneos (art. 46, Lei 8.443/92)", "TCE-SP — Relação de Apenados (impedimento de licitar/contratar SP)");
   }
   const anySancao = sancoes.some((s) => s.status === "CONSTA");
   const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
@@ -617,6 +660,7 @@ const LEGAL_NOTES: Record<string, { orgao: string; base: string; efeito: string;
   "uk-sanctions": { orgao: "Reino Unido — FCDO/OFSI", base: "Sanctions and Anti-Money Laundering Act 2018 (SAMLA)", efeito: "Sanção do Reino Unido (designated person) — congelamento de ativos.", match: "Nome" },
   "idb": { orgao: "Grupo BID (IADB)", base: "Sanctions Procedures do BID; Acordo de Cross-Debarment entre bancos multilaterais (2010)", efeito: "Empresa/indivíduo sancionado por fraude ou corrupção em projetos do Grupo BID.", match: "Nome" },
   "tcu-inidoneos": { orgao: "Tribunal de Contas da União (TCU)", base: "Lei 8.443/1992, art. 46 (declaração de inidoneidade de licitante)", efeito: "Licitante declarado inidôneo — impedido de participar de licitação na Administração Pública Federal por até 5 anos.", match: "CNPJ" },
+  "tce-sp-apenados": { orgao: "Tribunal de Contas do Estado de São Paulo (TCE-SP)", base: "Lei 8.666/93 art. 87; Lei 10.520/02 art. 7º; Lei 14.133/21 — impedimento de licitar/contratar; relação publicada mensalmente no DOE-SP", efeito: "Impedido de licitar e contratar com a Administração Pública estadual e municipal de São Paulo (enquanto vigente).", match: "CNPJ exato (vigente) / histórico" },
 };
 
 // #103 — proveniência técnica: idade legível do cache + sub-linha por fonte (reusada no HTML e no TXT;
