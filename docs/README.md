@@ -12,6 +12,8 @@ um **launcher** com três ferramentas:
 
 Cada ferramenta também tem uma seção **"Como usar"** dentro do próprio app.
 
+> **Para desenvolvedores:** a [arquitetura técnica](arquitetura.md) (módulos, modelo de dados, fluxos e deploy) está documentada à parte.
+
 ## URLs
 
 Cada página tem um caminho próprio no navegador (deep-link compartilhável; voltar/avançar do navegador funcionam):
