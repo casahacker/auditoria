@@ -401,6 +401,31 @@ async function consultaUK(DATA_DIR: string, nomes: string[]): Promise<any> {
 }
 
 /** PEP (Pessoas Expostas Politicamente) — checa os sócios (QSA) por nome no Portal da Transparência → ATENÇÃO (informativo). */
+const TCU_INIDONEOS_URL = process.env.TCU_INIDONEOS_URL || "https://certidoes.apps.tcu.gov.br/api/publico/responsaveis-inidoneos";
+// Licitantes declarados inidôneos pelo TCU (art. 46 da Lei 8.443/1992). Consulta pontual por
+// CNPJ no webservice público (filtro server-side, reconferido localmente); match por CNPJ é
+// exato → CONSTA (não ATENCAO). O container resolve certidoes.apps.tcu.gov.br normalmente.
+export async function consultaTCU(cnpjDigits: string): Promise<any> {
+  const base = { fonte: "TCU — Licitantes Inidôneos", recurso: "tcu-inidoneos", url: "https://portal.tcu.gov.br/carta-de-servicos/certidoes/lista-de-licitantes-inidoneos", apiUrl: TCU_INIDONEOS_URL, fetchedAt: new Date().toISOString() };
+  if (cnpjDigits.length !== 14) return { ...base, status: "NADA_CONSTA", hits: [] };
+  try {
+    const r = await limitedFetch(TCU_INIDONEOS_URL, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify({ cnpj: cnpjDigits }), signal: AbortSignal.timeout(20000) });
+    if (!r.ok) return { ...base, status: "ERRO", http: r.status, hits: [] };
+    const arr = await r.json();
+    const lista = Array.isArray(arr) ? arr : [];
+    const hits = lista.filter((x: any) => onlyDigits(x.numeroRegistro) === cnpjDigits).map((x: any) => ({
+      tipo: `Licitante inidôneo — ${x.nome || "?"}`,
+      orgao: `TCU · Acórdão ${x.numeroAcordaoFormatado || "?"}${x.municipio ? ` · ${x.municipio}/${x.uf || ""}` : ""}`,
+      dataInicio: x.dataTransitoEmJulgado || x.dataAcordao || "",
+      dataFim: x.dataFinalSancao || "",
+      processo: x.numeroProcessoFormatado || "",
+    }));
+    return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits, registros: lista.length };
+  } catch (e: any) {
+    return { ...base, status: "ERRO", erro: e.message, hits: [] };
+  }
+}
+
 async function consultaPEP(qsaNomes: string[]): Promise<any> {
   const base = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString() };
   if (!process.env.PORTAL_TRANSPARENCIA_KEY) return { ...base, status: "PENDENTE", hits: [], erro: "Chave da API não configurada" };
@@ -456,9 +481,10 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
       consultaEU(DATA_DIR, [razao, ...qsaNomes]),
       consultaIDB(DATA_DIR, [razao, ...qsaNomes]),
       consultaUK(DATA_DIR, [razao, ...qsaNomes]),
+      consultaTCU(cnpj),
       consultaPEP(qsaNomes),
     ]);
-    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)");
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)", "TCU — Licitantes Inidôneos (art. 46, Lei 8.443/92)");
   }
   const anySancao = sancoes.some((s) => s.status === "CONSTA");
   const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
@@ -522,6 +548,7 @@ const LEGAL_NOTES: Record<string, { orgao: string; base: string; efeito: string;
   "eu-fsf": { orgao: "União Europeia — Conselho", base: "Art. 29 TUE e art. 215 TFUE; regulamentos do Conselho", efeito: "Sanção financeira da UE — congelamento de fundos e recursos econômicos.", match: "Nome" },
   "uk-sanctions": { orgao: "Reino Unido — FCDO/OFSI", base: "Sanctions and Anti-Money Laundering Act 2018 (SAMLA)", efeito: "Sanção do Reino Unido (designated person) — congelamento de ativos.", match: "Nome" },
   "idb": { orgao: "Grupo BID (IADB)", base: "Sanctions Procedures do BID; Acordo de Cross-Debarment entre bancos multilaterais (2010)", efeito: "Empresa/indivíduo sancionado por fraude ou corrupção em projetos do Grupo BID.", match: "Nome" },
+  "tcu-inidoneos": { orgao: "Tribunal de Contas da União (TCU)", base: "Lei 8.443/1992, art. 46 (declaração de inidoneidade de licitante)", efeito: "Licitante declarado inidôneo — impedido de participar de licitação na Administração Pública Federal por até 5 anos.", match: "CNPJ" },
 };
 
 export function buildReportHtml(rec: any): string {
