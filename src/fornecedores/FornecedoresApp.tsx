@@ -15,6 +15,7 @@ import {
   Building2, BookOpen, Link2, Loader2, Search, RefreshCw, ChevronRight, ChevronLeft,
   ShieldCheck, ShieldAlert, AlertTriangle, Upload, FileUp, History, BadgeCheck,
   ChevronUp, ChevronDown, ArrowUpDown, X, Users, FileSignature, Pencil, Check, Printer, DownloadCloud,
+  Landmark, Globe2, Scale, ListChecks, HelpCircle,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
@@ -580,18 +581,146 @@ function ImportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (te
 }
 
 function AjudaFornecedores() {
-  const blocks = [
-    { t: 'O que é o cockpit', d: 'Reúne, por fornecedor (CNPJ/CPF), a Diligência (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) e o KYS/KYG (cadastro verificado + assinatura eletrônica) numa só visão. A base lista todos os fornecedores das prestações de contas (Auditoria + FEAC), dos CNPJs importados e dos KYS/KYG preenchidos.' },
-    { t: 'Painel e filtros', d: 'Os cartões no topo (Fornecedores, Elegível 2 SM+, Elegível até 2 SM, Inelegíveis, Pendentes) filtram a base com um clique. Há ainda filtros por diligência, KYS/KYG, tipo (PJ/PF), elegibilidade, busca por nome/CNPJ/CPF e ordenação clicando nos cabeçalhos. Cada linha tem um botão para abrir a ficha (acessível por teclado).' },
-    { t: 'Diligência', d: 'Consulta automática por CNPJ na Receita (situação cadastral, endereço com CEP, quadro societário) e nas listas de restrição. Roda sozinha para novos e vencidos (validade 30 dias) e pode ser forçada no botão "Consultar não consultados" ou no campo do topo.' },
-    { t: 'Atualizar tudo das APIs', d: 'O botão "Atualizar tudo das APIs" recarrega de uma vez os dados cadastrais (Receita Federal + CEP) de toda a base — a lista e as fichas. Roda em segundo plano, com barra de progresso, e preserva os campos editados manualmente (marcados como "manual"). É a atualização cadastral leve; as listas de restrição continuam pelo fluxo de diligência.' },
-    { t: 'KYS / KYG', d: 'Fichas de conformidade preenchidas pelo próprio fornecedor numa página pública (/kys, /kyg) e assinadas via Documenso, exigidas apenas para contratações específicas. Use o botão "Convites" para gerar links rastreáveis. A elegibilidade indica quem está sem restrições + respostas adequadas + impostos/previdência em dia.' },
-    { t: 'Ficha do fornecedor', d: 'Abra qualquer fornecedor para ver, numa só tela, o status no topo, os dados cadastrais consolidados e editáveis (Receita + CEP), a diligência (listas de restrição) e o KYS/KYG (respostas, trilha de conformidade e PDF assinado), com as ações Atualizar das APIs, Reconsultar, Imprimir / PDF e gerar convite.' },
+  // Fontes da diligência, agrupadas por tipo de correspondência.
+  const dilNacionais = 'CEIS, CNEP, CEPIM e Acordos de Leniência (CGU / Portal da Transparência), Cadastro de Empregadores — a “Lista Suja” do trabalho escravo (MTE) — e TCU — Licitantes Inidôneos.';
+  const dilInternacionais = 'OFAC SDN e Consolidated (Tesouro dos EUA), Conselho de Segurança da ONU, União Europeia (CFSP/FSF), Reino Unido (FCDO) e Banco Interamericano (BID).';
+  const faixas: { tone: ChipTone; label: string; regra: string }[] = [
+    { tone: 'error', label: 'Inelegível', regra: 'Há sanção em alguma lista (diligência em “Alerta”) ou a situação cadastral na Receita não é “Ativa”.' },
+    { tone: 'warning', label: 'Elegível até 2 SM', regra: 'Diligência “Nada consta” e cadastro ativo. Pode ser contratado em valores baixos — até cerca de 2 salários mínimos.' },
+    { tone: 'success', label: 'Elegível 2 SM+', regra: 'Tudo do nível acima e, além disso, um KYS/KYG aprovado e válido. Liberado para contratos a partir de 2 salários mínimos.' },
+    { tone: 'neutral', label: 'Pendente', regra: 'A diligência ainda não foi concluída — aguarde a consulta automática ou force-a pela ficha do fornecedor.' },
   ];
   return (
-    <div className="max-w-3xl space-y-5">
-      <p className="text-[14px] text-text-secondary leading-relaxed">O <b className="text-text">Cockpit de Fornecedores</b> concentra a diligência e a conformidade (KYS/KYG) de todos os fornecedores num único lugar.</p>
-      <div className="space-y-3">{blocks.map((b, i) => <Card key={i} className="p-4"><div className="text-[14px] font-semibold text-primary mb-1">{b.t}</div><div className="text-[12px] text-text-secondary leading-relaxed">{b.d}</div></Card>)}</div>
+    <div className="max-w-3xl space-y-6">
+      {/* intro */}
+      <p className="text-[14px] text-text-secondary leading-relaxed">
+        O <b className="text-text">Cockpit de Fornecedores</b> responde, numa só tela por fornecedor, às duas perguntas de toda contratação:
+        <b className="text-text"> “o fornecedor está limpo?”</b> (a <b className="text-text">Diligência</b> — Receita Federal + listas de restrição) e
+        <b className="text-text"> “está habilitado para este contrato?”</b> (a <b className="text-text">Conformidade KYS/KYG</b> — cadastro
+        declarado e assinado pelo próprio fornecedor). O cruzamento das duas define a <b className="text-text">elegibilidade</b>. A base
+        se preenche sozinha e a maior parte do trabalho é <b className="text-text">automática</b>.
+      </p>
+
+      {/* fluxo em 4 passos */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {[['1', 'Entra na base'], ['2', 'Diligência automática'], ['3', 'KYS / KYG quando exigido'], ['4', 'Elegibilidade']].map(([n, l]) => (
+          <div key={n} className="bg-surface-hover border border-line rounded p-3 text-center">
+            <div className="text-primary font-semibold text-[14px]">{n}</div>
+            <div className="text-[12px] text-text-secondary leading-tight mt-0.5">{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* A BASE */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-1"><Users size={16} className="text-primary shrink-0" aria-hidden /><span className="text-[14px] font-semibold text-text">A base de fornecedores</span></div>
+        <p className="text-[12px] text-text-secondary leading-relaxed mb-4">
+          A base lista <b className="text-text">todos os fornecedores</b> — os citados nas prestações de contas (Auditoria + FEAC), os CNPJs
+          <b className="text-text"> importados</b> e quem preencheu um <b className="text-text">KYS/KYG</b>. Ela se atualiza sozinha; raramente é
+          preciso cadastrar alguém à mão.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <div className="text-[12px] font-semibold text-text-secondary mb-1.5">Cartões do topo (clique para filtrar)</div>
+            <p className="text-[12px] text-text-secondary leading-relaxed">Os números <b className="text-text">Fornecedores</b>, <b className="text-text">Elegível 2 SM+</b>, <b className="text-text">Elegível até 2 SM</b>, <b className="text-text">Inelegíveis</b> e <b className="text-text">Pendentes</b> são atalhos: um clique filtra a lista por aquela situação. Há ainda filtros por diligência, KYS/KYG e tipo (PJ/PF), busca por nome ou CNPJ/CPF e ordenação clicando nos cabeçalhos das colunas.</p>
+          </div>
+          <div>
+            <div className="text-[12px] font-semibold text-text-secondary mb-1.5">Botões da base</div>
+            <ul className="space-y-1.5 text-[12px] text-text-secondary">
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Consultar</b> (campo do topo) — faz a diligência de um CNPJ avulso na hora.</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Importar CNPJs</b> — cole uma lista (um por linha) ou envie um <span className="font-mono">.csv</span>/<span className="font-mono">.txt</span>; eles entram na base e a diligência é gerada automaticamente.</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Consultar não consultados (N)</b> — enfileira só quem ainda não tem diligência.</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Reconsultar tudo (forçado)</b> — refaz a diligência de toda a base, ignorando o cache de 30 dias (use depois de incluir uma lista nova de fontes).</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Atualizar tudo das APIs</b> — recarrega só o <b className="text-text">cadastro</b> (Receita + CEP) de toda a base; rápido, em segundo plano e <b className="text-text">preservando os campos editados à mão</b>.</span></li>
+              <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Convites</b> — gera links rastreáveis de KYS/KYG para enviar ao fornecedor.</span></li>
+            </ul>
+          </div>
+        </div>
+      </Card>
+
+      {/* DILIGÊNCIA */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-1"><ShieldCheck size={16} className="text-primary shrink-0" aria-hidden /><span className="text-[14px] font-semibold text-text">A Diligência — “o fornecedor está limpo?”</span></div>
+        <p className="text-[12px] text-text-secondary leading-relaxed mb-4">
+          Para cada CNPJ, o sistema consulta a <b className="text-text">Receita Federal</b> (situação cadastral, endereço e quadro
+          societário) e <b className="text-text">13 listas de restrição</b> oficiais, e resume tudo num veredito.
+        </p>
+        <div className="space-y-2.5 mb-4">
+          <div className="flex gap-3 rounded border border-line bg-bg p-3"><Landmark size={16} className="text-primary shrink-0 mt-0.5" aria-hidden /><div className="min-w-0"><div className="text-[12px] font-semibold text-text">Listas nacionais — correspondência por CNPJ exato</div><p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">{dilNacionais} Quando consta, é <b className="text-text">definitivo</b> e eleva o veredito para <b className="text-text">Alerta</b>.</p></div></div>
+          <div className="flex gap-3 rounded border border-line bg-bg p-3"><Globe2 size={16} className="text-primary shrink-0 mt-0.5" aria-hidden /><div className="min-w-0"><div className="text-[12px] font-semibold text-text">Listas internacionais — correspondência por nome</div><p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">{dilInternacionais} O casamento por nome é <b className="text-text">conservador</b> → marca <b className="text-text">“Atenção”</b> (possível homônimo; confirme a identidade antes de decidir), sem reprovar sozinho.</p></div></div>
+          <div className="flex gap-3 rounded border border-line bg-bg p-3"><Scale size={16} className="text-primary shrink-0 mt-0.5" aria-hidden /><div className="min-w-0"><div className="text-[12px] font-semibold text-text">PEP — Pessoas Expostas Politicamente (CGU)</div><p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">Verifica os sócios do quadro societário. Também é informativo → <b className="text-text">“Atenção”</b>.</p></div></div>
+        </div>
+        <div className="rounded border border-dashed border-text-secondary/50 bg-bg p-3 mb-4">
+          <p className="text-[12px] text-text-secondary leading-relaxed"><b className="text-text">Como filtramos por CNPJ:</b> o filtro por CNPJ da API do Portal da Transparência é inoperante (devolve a lista inteira). Por isso consultamos pela <b className="text-text">razão social</b> (obtida na Receita) e filtramos pelo <b className="text-text">CNPJ exato</b>, varrendo todas as páginas — na prática, a verificação combina nome + CNPJ.</p>
+        </div>
+        <div className="text-[12px] font-semibold text-text-secondary mb-2">Os três vereditos</div>
+        <div className="space-y-2 mb-3">
+          <div className="flex items-start gap-2"><span className="shrink-0"><Chip tone="success" icon={ShieldCheck} size="sm">Nada consta</Chip></span><span className="text-[12px] text-text-secondary">cadastro ativo e sem registros nas listas.</span></div>
+          <div className="flex items-start gap-2"><span className="shrink-0"><Chip tone="error" icon={ShieldAlert} size="sm">Alerta</Chip></span><span className="text-[12px] text-text-secondary">há sanção em alguma lista, ou o cadastro não está “Ativo”.</span></div>
+          <div className="flex items-start gap-2"><span className="shrink-0"><Chip tone="warning" icon={AlertTriangle} size="sm">Pendente</Chip></span><span className="text-[12px] text-text-secondary">não foi possível concluir todas as verificações.</span></div>
+        </div>
+        <p className="text-[12px] text-text-secondary leading-relaxed">Cada diligência <b className="text-text">vale 30 dias</b>. Fornecedores novos e diligências vencidas são reconsultados <b className="text-text">automaticamente</b>, em segundo plano (respeitando o limite de chamadas das APIs). Depois do prazo, o status mostra <b className="text-text">“vencida”</b> até a próxima consulta.</p>
+      </Card>
+
+      {/* KYS / KYG */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-1"><BadgeCheck size={16} className="text-primary shrink-0" aria-hidden /><span className="text-[14px] font-semibold text-text">KYS / KYG — conformidade declarada e assinada</span></div>
+        <p className="text-[12px] text-text-secondary leading-relaxed mb-3">Enquanto a diligência consulta fontes externas, o KYS/KYG é <b className="text-text">preenchido e assinado pelo próprio fornecedor</b>, e é exigido apenas para contratações específicas.</p>
+        <ul className="space-y-1.5 text-[12px] text-text-secondary mb-3">
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">KYS</b> (<i>Know Your Supplier</i>) — para <b className="text-text">fornecedor pessoa jurídica</b>: dados da empresa e do representante legal e declarações sobre PEP, exposição política, anticorrupção, direitos humanos, sanções e regularidade fiscal.</span></li>
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">KYG</b> (<i>Know Your Grantee</i>) — para <b className="text-text">OSC ou pessoa física que recebe doação com encargos</b>: oito declarações de conformidade.</span></li>
+        </ul>
+        <p className="text-[12px] text-text-secondary leading-relaxed">O fornecedor preenche numa <b className="text-text">página pública</b> (<span className="font-mono">/kys</span>, <span className="font-mono">/kyg</span>), sem login — use <b className="text-text">Convites</b> para gerar um link rastreável. O termo é <b className="text-text">assinado eletronicamente</b> (com validade jurídica) e fica arquivado. A validade é por <b className="text-text">ano fiscal</b> (renovação anual).</p>
+      </Card>
+
+      {/* ELEGIBILIDADE */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-1"><ListChecks size={16} className="text-primary shrink-0" aria-hidden /><span className="text-[14px] font-semibold text-text">Elegibilidade — as três faixas</span></div>
+        <p className="text-[12px] text-text-secondary leading-relaxed mb-3">A elegibilidade resume, num só rótulo, a diligência + o KYS/KYG + a regularidade cadastral. Quanto maior o valor do contrato, mais exigente é a faixa:</p>
+        <div className="space-y-2">
+          {faixas.map((f) => (
+            <div key={f.label} className="flex items-start gap-3"><span className="shrink-0 mt-0.5"><Chip tone={f.tone} size="sm">{f.label}</Chip></span><span className="text-[12px] text-text-secondary leading-relaxed">{f.regra}</span></div>
+          ))}
+        </div>
+      </Card>
+
+      {/* A FICHA */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-1"><Building2 size={16} className="text-primary shrink-0" aria-hidden /><span className="text-[14px] font-semibold text-text">A ficha do fornecedor</span></div>
+        <p className="text-[12px] text-text-secondary leading-relaxed mb-3">Clique em qualquer fornecedor (ou no botão ao fim da linha) para abrir a ficha — <b className="text-text">tudo numa só tela</b>:</p>
+        <ul className="space-y-1.5 text-[12px] text-text-secondary">
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Status no topo</b> — três indicadores: Diligência, KYS/KYG (com o ano fiscal) e Elegibilidade.</span></li>
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Dados cadastrais</b> — Receita + CEP consolidados e <b className="text-text">editáveis</b>. Os campos que você corrige ganham a marca <b className="text-text">“manual”</b> e <b className="text-text">não são sobrescritos</b> ao atualizar das APIs. <b className="text-text">Atualizar das APIs</b> recarrega só este fornecedor.</span></li>
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Diligência</b> — as listas de restrição detalhadas; <b className="text-text">Reconsultar</b> força uma nova consulta antes do vencimento.</span></li>
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Conformidade KYS/KYG</b> — respostas, trilha de verificação e o PDF assinado; se não houver, um botão gera o convite.</span></li>
+          <li className="flex gap-2"><span className="text-primary shrink-0">▸</span><span><b className="text-text">Imprimir / PDF</b> — um relatório <b className="text-text">único e completo</b>: cadastro, dados da consulta (auditável: data-hora, validade, solicitante e IP), as 13 listas, notas jurídicas, memória do processo e o KYS/KYG.</span></li>
+        </ul>
+      </Card>
+
+      {/* DÚVIDAS */}
+      <div>
+        <div className="flex items-center gap-2 mb-2"><HelpCircle size={15} className="text-text-secondary shrink-0" aria-hidden /><div className="text-[12px] font-semibold text-text-secondary">Dúvidas frequentes</div></div>
+        <div className="space-y-2">
+          <FaqF q="De onde vêm os fornecedores da base?">Dos fornecedores citados nas prestações de contas (Auditoria e FEAC), dos CNPJs importados e de quem preencheu um KYS/KYG. Não é preciso cadastrar ninguém à mão.</FaqF>
+          <FaqF q="Qual a diferença entre “Atualizar das APIs” e “Reconsultar”?">“Atualizar das APIs” recarrega só o cadastro (Receita + CEP) — rápido. “Reconsultar” refaz a diligência completa (as 13 listas de restrição), que é mais demorada.</FaqF>
+          <FaqF q="Editei um campo na ficha. Ele some quando atualizo das APIs?">Não. Os campos editados à mão ficam marcados como “manual” e são preservados em todas as atualizações automáticas.</FaqF>
+          <FaqF q="O que significa “vencida”?">A diligência tem validade de 30 dias. Passado o prazo, ela aparece como “vencida” até a próxima consulta — que a automação faz sozinha, ou você força em “Reconsultar”.</FaqF>
+          <FaqF q="Um fornecedor ficou em “Atenção” por nome. E agora?">As listas internacionais e o PEP casam por nome, de forma conservadora — pode ser homônimo. Confira a identidade (nome completo, sócios) antes de qualquer decisão; “Atenção” não reprova automaticamente.</FaqF>
+          <FaqF q="Quando preciso de KYS/KYG?">Para contratações específicas (em geral, contratos a partir de 2 salários mínimos) e para liberar a faixa “Elegível 2 SM+”. Em valores baixos, a diligência “Nada consta” + cadastro ativo já bastam.</FaqF>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function FaqF({ q, children }: { q: string; children: React.ReactNode }) {
+  return (
+    <details className="group bg-card border border-line rounded-lg px-4 py-3">
+      <summary className="flex items-center justify-between cursor-pointer text-[12px] font-semibold text-text list-none">
+        {q}
+        <ChevronRight size={15} className="text-text-secondary transition-transform group-open:rotate-90" aria-hidden />
+      </summary>
+      <p className="text-[12px] text-text-secondary leading-relaxed mt-2">{children}</p>
+    </details>
   );
 }
