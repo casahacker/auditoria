@@ -323,7 +323,7 @@ export default function App() {
   // ── Multi-tool suite + URL routing (tool/section ↔ browser path) ────────────
   const [activeTool, setActiveTool] = useState<Tool>(() => SHARE_TOKEN ? 'launcher' : (PATH_TO_TOOL[pathSegs()[0]] || 'launcher'));
   const [feacInitialId] = useState(() => { const s = pathSegs(); return s[0] === 'feac' && s[1] && s[1] !== 'nova' ? s[1] : ''; });
-  const [fornInitialDoc] = useState(() => { const s = pathSegs(); return (s[0] === 'fornecedores' || s[0] === 'diligencia') ? (s[1] || '') : ''; });
+  const [fornInitialDoc] = useState(() => { const s = pathSegs(); if (s[0] !== 'fornecedores' && s[0] !== 'diligencia') return ''; const a = s[1]; return !a || ['historico', 'ajuda', 'kyc', 'convites', 'detalhe'].includes(a) ? '' : a; });
   const routeFirst = useRef(true);
   const routePop = useRef(false);
   const navigate = useCallback((p: string) => { if (window.location.pathname !== p) window.history.pushState({}, '', p); }, []);
