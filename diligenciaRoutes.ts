@@ -27,7 +27,7 @@ const VALIDADE_DIAS = 30;
 // um hash curto desse conjunto — muda sozinho quando uma fonte entra/sai (ordem não importa).
 // Um registro gravado sob versão ANTERIOR é tratado como DESATUALIZADO (re-rodado pelo sweep mesmo
 // dentro dos 30 dias), então toda fonte nova faz backfill automático da base, sem ação manual.
-export const DILIGENCE_SOURCES = ["ceis", "cnep", "cepim", "acordos-leniencia", "lista-suja", "ofac-sdn", "ofac-cons", "un-sc", "eu-fsf", "idb", "uk-sanctions", "tcu-inidoneos", "tce-sp-apenados", "pep"];
+export const DILIGENCE_SOURCES = ["ceis", "cnep", "cepim", "acordos-leniencia", "lista-suja", "ofac-sdn", "ofac-cons", "un-sc", "eu-fsf", "idb", "uk-sanctions", "tcu-inidoneos", "tce-sp-apenados", "cobes-sp", "pep"];
 export const SOURCES_VERSION = crypto.createHash("sha1").update([...DILIGENCE_SOURCES].sort().join(",")).digest("hex").slice(0, 8);
 // #103: commit da plataforma que gerou o relatório (injetado no build via ARG/ENV APP_COMMIT; vazio se ausente).
 const APP_COMMIT = process.env.APP_COMMIT || "";
@@ -489,6 +489,36 @@ export async function consultaTCESP(cnpjDigits: string): Promise<any> {
   }
 }
 
+const COBES_SP_INDEX = "https://prefeitura.sp.gov.br/web/gestao/w/coordenadoria_de_bens_e_servicos__cobes/empresas_punidas/9255";
+/**
+ * Empresas Apenadas do Município de SP (SEGES/COBES) — impedidas de contratar com o Município.
+ * A lista é um PDF mensal de nomenclatura instável; um cron host-side (refresh_cobes_sp.sh) escolhe
+ * o PDF mais recente, roda pdftotext e normaliza p/ DATA_DIR/sources/cobes-sp.csv. Aqui só lemos o CSV.
+ * NOTA 2 do PDF: apenados com vigência decorrida saem da lista → CNPJ presente = impedimento VIGENTE
+ * → CONSTA. Match exato por CNPJ. Sem o CSV (cron ainda não rodou) → PENDENTE (informativo).
+ */
+export async function consultaCOBES(DATA_DIR: string, cnpj: string): Promise<any> {
+  const base: any = { fonte: "Prefeitura de SP — Empresas Apenadas (SEGES/COBES)", recurso: "cobes-sp", url: COBES_SP_INDEX, apiUrl: COBES_SP_INDEX, fetchedAt: new Date().toISOString(), metodo: "PDF→CSV (cron diário)", cache: true };
+  const fp = path.join(DATA_DIR, "sources", "cobes-sp.csv");
+  let csv: string;
+  try { csv = fs.readFileSync(fp, "utf-8"); const st = fs.statSync(fp); base.cacheAge = Date.now() - st.mtimeMs; base.sourceUpdatedAt = new Date(st.mtimeMs).toISOString(); }
+  catch { return { ...base, status: "PENDENTE", hits: [], erro: "Lista COBES ainda não disponível (atualizada por cron diário)" }; }
+  const alvo = onlyDigits(cnpj);
+  const lines = csv.split(/\r?\n/);
+  const hits: any[] = [];
+  let registros = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(";"); if (!c[0]?.trim()) continue;
+    registros++;
+    if (onlyDigits(c[0]) === alvo) hits.push({
+      tipo: "Empresa apenada — impedida de contratar com o Município de São Paulo (vigente)",
+      orgao: `Prefeitura de SP${c[2] ? ` · ${c[2]}` : ""}${c[1] ? ` · ${c[1]}` : ""}`,
+      dataInicio: c[3] || "", dataFim: c[4] || "",
+    });
+  }
+  return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits, registros };
+}
+
 /**
  * PEP (Pessoas Expostas Politicamente, CGU). Consulta por NOME (sócios do QSA e/ou
  * representante legal informado no KYS/KYG) e, opcionalmente, por CPF (representante
@@ -589,9 +619,10 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
       consultaUK(DATA_DIR, [razao, ...qsaNomes]),
       consultaTCU(cnpj),
       consultaTCESP(cnpj),
+      consultaCOBES(DATA_DIR, cnpj),
       consultaPEP(pepNomes, pepCpfs),
     ]);
-    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)", "TCU — Licitantes Inidôneos (art. 46, Lei 8.443/92)", "TCE-SP — Relação de Apenados (impedimento de licitar/contratar SP)");
+    apis.push("Portal da Transparência/CGU (CEIS, CNEP, CEPIM, Leniência, PEP)", "Cadastro de Empregadores/MTE (trabalho escravo)", "OFAC SDN + Consolidated (EUA, Tesouro)", "UN Security Council Consolidated List", "EU Consolidated Financial Sanctions (CFSP)", "Inter-American Development Bank (BID)", "UK Sanctions List (FCDO)", "TCU — Licitantes Inidôneos (art. 46, Lei 8.443/92)", "TCE-SP — Relação de Apenados (impedimento de licitar/contratar SP)", "Prefeitura de SP — Empresas Apenadas (SEGES/COBES)");
   }
   const anySancao = sancoes.some((s) => s.status === "CONSTA");
   const receitaInativa = receita && !/ATIVA/i.test(receita.situacao_cadastral || "");
@@ -661,6 +692,7 @@ const LEGAL_NOTES: Record<string, { orgao: string; base: string; efeito: string;
   "idb": { orgao: "Grupo BID (IADB)", base: "Sanctions Procedures do BID; Acordo de Cross-Debarment entre bancos multilaterais (2010)", efeito: "Empresa/indivíduo sancionado por fraude ou corrupção em projetos do Grupo BID.", match: "Nome" },
   "tcu-inidoneos": { orgao: "Tribunal de Contas da União (TCU)", base: "Lei 8.443/1992, art. 46 (declaração de inidoneidade de licitante)", efeito: "Licitante declarado inidôneo — impedido de participar de licitação na Administração Pública Federal por até 5 anos.", match: "CNPJ" },
   "tce-sp-apenados": { orgao: "Tribunal de Contas do Estado de São Paulo (TCE-SP)", base: "Lei 8.666/93 art. 87; Lei 10.520/02 art. 7º; Lei 14.133/21 — impedimento de licitar/contratar; relação publicada mensalmente no DOE-SP", efeito: "Impedido de licitar e contratar com a Administração Pública estadual e municipal de São Paulo (enquanto vigente).", match: "CNPJ exato (vigente) / histórico" },
+  "cobes-sp": { orgao: "Prefeitura de São Paulo — SEGES/COBES", base: "Lei 8.666/93; Lei 10.520/02; Lei 14.133/21 — impedimento de contratar com o Município; relação de apenadas publicada no DOC-SP", efeito: "Empresa impedida de contratar com a Administração Pública do Município de São Paulo (apenas vigentes constam na lista).", match: "CNPJ exato (vigente)" },
 };
 
 // #103 — proveniência técnica: idade legível do cache + sub-linha por fonte (reusada no HTML e no TXT;
