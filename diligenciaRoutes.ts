@@ -29,6 +29,8 @@ const VALIDADE_DIAS = 30;
 // dentro dos 30 dias), então toda fonte nova faz backfill automático da base, sem ação manual.
 export const DILIGENCE_SOURCES = ["ceis", "cnep", "cepim", "acordos-leniencia", "lista-suja", "ofac-sdn", "ofac-cons", "un-sc", "eu-fsf", "idb", "uk-sanctions", "tcu-inidoneos", "pep"];
 export const SOURCES_VERSION = crypto.createHash("sha1").update([...DILIGENCE_SOURCES].sort().join(",")).digest("hex").slice(0, 8);
+// #103: commit da plataforma que gerou o relatório (injetado no build via ARG/ENV APP_COMMIT; vazio se ausente).
+const APP_COMMIT = process.env.APP_COMMIT || "";
 // fornecedores importados manualmente (lista/CSV), em DATA_DIR (fora de diligencia/)
 const EXTRA_SUPPLIERS_FILE = "diligencia-extra-suppliers.json";
 // A API do Portal devolve 15 registros por página e ignora `tamanhoPagina`. Como o
@@ -243,14 +245,16 @@ export async function consultaPT(recurso: string, label: string, razaoSocial: st
     ceis: "https://portaldatransparencia.gov.br/sancoes/ceis", cnep: "https://portaldatransparencia.gov.br/sancoes/cnep",
     cepim: "https://portaldatransparencia.gov.br/sancoes/cepim", "acordos-leniencia": "https://portaldatransparencia.gov.br/acordos-leniencia",
   };
-  const base = { fonte: label, recurso, url: consultaPublica[recurso], apiUrl, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: label, recurso, url: consultaPublica[recurso], apiUrl, fetchedAt: new Date().toISOString(), metodo: "GET", param: "Nome", cache: false };
   if (!process.env.PORTAL_TRANSPARENCIA_KEY) return { ...base, status: "PENDENTE", hits: [], erro: "Chave da API não configurada" };
 
   const hits: any[] = [];
   let paginasLidas = 0, registros = 0, truncado = false;
+  const t0 = Date.now();
   try {
     for (let pagina = 1; pagina <= PT_MAX_PAGES; pagina++) {
       const r = await limitedFetch(urlForPage(pagina), { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
+      base.http = r.status; base.ms = Date.now() - t0;
       if (!r.ok) {
         if (paginasLidas === 0) return { ...base, status: "ERRO", http: r.status, hits: [] };
         break; // já lemos páginas; interrompe na falha e usa o que temos
@@ -264,6 +268,7 @@ export async function consultaPT(recurso: string, label: string, razaoSocial: st
     }
     return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits, paginasLidas, registros, ...(truncado ? { truncado: true } : {}) };
   } catch (e: any) {
+    base.ms = Date.now() - t0;
     if (hits.length) return { ...base, status: "CONSTA", hits, paginasLidas, registros, parcial: true, erro: e.message };
     return { ...base, status: "ERRO", erro: e.message, hits: [] };
   }
@@ -272,26 +277,32 @@ export async function consultaPT(recurso: string, label: string, razaoSocial: st
 // ── listas extras: Lista Suja (trabalho escravo), OFAC SDN, PEP ──────────────────
 const norm = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
-/** Baixa e cacheia um arquivo de fonte (SDN, Lista Suja) em DATA_DIR/sources, com TTL; usa cache vencido em caso de falha. */
-async function cachedSourceFile(DATA_DIR: string, name: string, url: string, ttlMs: number, decode: "utf8" | "latin1"): Promise<string | null> {
+/** Baixa e cacheia um arquivo de fonte (SDN, Lista Suja) em DATA_DIR/sources, com TTL; usa cache vencido em caso de falha.
+ *  #103: `meta` (opcional) recebe a proveniência técnica — cache vs ao vivo, idade do cache, data da
+ *  cópia local (frescor da lista), HTTP e latência do download. */
+async function cachedSourceFile(DATA_DIR: string, name: string, url: string, ttlMs: number, decode: "utf8" | "latin1", meta?: any): Promise<string | null> {
   const dir = path.join(DATA_DIR, "sources"); fs.mkdirSync(dir, { recursive: true });
   const fp = path.join(dir, name);
   const enc = decode === "latin1" ? "latin1" : "utf-8";
-  try { if (Date.now() - fs.statSync(fp).mtimeMs < ttlMs) return fs.readFileSync(fp, enc as BufferEncoding); } catch { /* sem cache */ }
+  const stampCache = (stale: boolean) => { try { const st = fs.statSync(fp); if (meta) { meta.cache = true; meta.stale = stale; meta.cacheAge = Date.now() - st.mtimeMs; meta.sourceUpdatedAt = new Date(st.mtimeMs).toISOString(); } } catch { /* */ } };
+  try { if (Date.now() - fs.statSync(fp).mtimeMs < ttlMs) { stampCache(false); return fs.readFileSync(fp, enc as BufferEncoding); } } catch { /* sem cache */ }
+  const t0 = Date.now();
   try {
     const r = await limitedFetch(url, { headers: { "User-Agent": "casahacker-auditoria/1.0", Accept: "*/*" }, signal: AbortSignal.timeout(60000) }, 1);
+    if (meta) { meta.http = r.status; meta.ms = Date.now() - t0; }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const buf = Buffer.from(await r.arrayBuffer());
     fs.writeFileSync(fp, buf);
+    if (meta) { meta.cache = false; meta.stale = false; meta.cacheAge = 0; try { meta.sourceUpdatedAt = new Date(fs.statSync(fp).mtimeMs).toISOString(); } catch { /* */ } }
     return buf.toString(enc as BufferEncoding);
-  } catch { try { return fs.readFileSync(fp, enc as BufferEncoding); } catch { return null; } }
+  } catch { try { const txt = fs.readFileSync(fp, enc as BufferEncoding); stampCache(true); return txt; } catch { return null; } }
 }
 
 const LISTA_SUJA_URL = process.env.LISTA_SUJA_URL || "https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho/areas-de-atuacao/cadastro_de_empregadores.csv";
 /** Cadastro de Empregadores (trabalho análogo ao de escravo) — match por CNPJ/CPF EXATO (definitivo → CONSTA). */
 async function consultaListaSuja(DATA_DIR: string, cnpj: string, cpfsExtras: string[] = []): Promise<any> {
-  const base = { fonte: "Cadastro de Empregadores — trabalho análogo ao de escravo (MTE)", recurso: "lista-suja", url: "https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho", apiUrl: LISTA_SUJA_URL, fetchedAt: new Date().toISOString() };
-  const csv = await cachedSourceFile(DATA_DIR, "lista-suja.csv", LISTA_SUJA_URL, 7 * 86400000, "latin1");
+  const base: any = { fonte: "Cadastro de Empregadores — trabalho análogo ao de escravo (MTE)", recurso: "lista-suja", url: "https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho", apiUrl: LISTA_SUJA_URL, fetchedAt: new Date().toISOString(), metodo: "GET" };
+  const meta: any = {}; const csv = await cachedSourceFile(DATA_DIR, "lista-suja.csv", LISTA_SUJA_URL, 7 * 86400000, "latin1", meta); Object.assign(base, meta);
   if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar o cadastro do MTE" };
   const alvo = new Set([onlyDigits(cnpj), ...cpfsExtras.map(onlyDigits)].filter(Boolean));
   const lines = csv.split(/\r?\n/); const hits: any[] = [];
@@ -307,10 +318,10 @@ const OFAC_SDN_URL = process.env.OFAC_SDN_URL || "https://www.treasury.gov/ofac/
 function parseCsvLine(line: string): string[] { const out: string[] = []; let cur = "", q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; } else { if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch; } } out.push(cur); return out; }
 /** OFAC SDN (sanções dos EUA) — match por NOME (razão social + sócios). Conservador → ATENÇÃO (revisar, não auto-inelegível). */
 async function consultaOFAC(DATA_DIR: string, nomes: string[]): Promise<any> {
-  const base = { fonte: "OFAC SDN — Sanções dos EUA (Tesouro)", recurso: "ofac-sdn", url: "https://sanctionssearch.ofac.treas.gov/", apiUrl: OFAC_SDN_URL, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "OFAC SDN — Sanções dos EUA (Tesouro)", recurso: "ofac-sdn", url: "https://sanctionssearch.ofac.treas.gov/", apiUrl: OFAC_SDN_URL, fetchedAt: new Date().toISOString(), metodo: "GET" };
   const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
   if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
-  const csv = await cachedSourceFile(DATA_DIR, "sdn.csv", OFAC_SDN_URL, 3 * 86400000, "utf8");
+  const meta: any = {}; const csv = await cachedSourceFile(DATA_DIR, "sdn.csv", OFAC_SDN_URL, 3 * 86400000, "utf8", meta); Object.assign(base, meta);
   if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a SDN List" };
   const hits: any[] = []; const lines = csv.split(/\r?\n/);
   for (const line of lines) {
@@ -324,10 +335,10 @@ async function consultaOFAC(DATA_DIR: string, nomes: string[]): Promise<any> {
 const OFAC_CONS_URL = process.env.OFAC_CONS_URL || "https://www.treasury.gov/ofac/downloads/consolidated/cons_prim.csv";
 /** OFAC Consolidated (não-SDN) — mesmo formato do SDN; match por NOME. Conservador → ATENÇÃO. */
 async function consultaOFACCons(DATA_DIR: string, nomes: string[]): Promise<any> {
-  const base = { fonte: "OFAC Consolidated (não-SDN) — EUA (Tesouro)", recurso: "ofac-cons", url: "https://sanctionssearch.ofac.treas.gov/", apiUrl: OFAC_CONS_URL, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "OFAC Consolidated (não-SDN) — EUA (Tesouro)", recurso: "ofac-cons", url: "https://sanctionssearch.ofac.treas.gov/", apiUrl: OFAC_CONS_URL, fetchedAt: new Date().toISOString(), metodo: "GET" };
   const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
   if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
-  const csv = await cachedSourceFile(DATA_DIR, "ofac-cons.csv", OFAC_CONS_URL, 3 * 86400000, "utf8");
+  const meta: any = {}; const csv = await cachedSourceFile(DATA_DIR, "ofac-cons.csv", OFAC_CONS_URL, 3 * 86400000, "utf8", meta); Object.assign(base, meta);
   if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a Consolidated List" };
   const hits: any[] = []; const lines = csv.split(/\r?\n/);
   for (const line of lines) {
@@ -340,10 +351,10 @@ async function consultaOFACCons(DATA_DIR: string, nomes: string[]): Promise<any>
 const UN_SC_URL = process.env.UN_SC_URL || "https://scsanctions.un.org/resources/xml/en/consolidated.xml";
 /** UN Security Council Consolidated List (XML) — match por NOME (razão + sócios). Conservador → ATENÇÃO. */
 async function consultaUN(DATA_DIR: string, nomes: string[]): Promise<any> {
-  const base = { fonte: "UN Security Council Consolidated List", recurso: "un-sc", url: "https://main.un.org/securitycouncil/en/content/un-sc-consolidated-list", apiUrl: UN_SC_URL, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "UN Security Council Consolidated List", recurso: "un-sc", url: "https://main.un.org/securitycouncil/en/content/un-sc-consolidated-list", apiUrl: UN_SC_URL, fetchedAt: new Date().toISOString(), metodo: "GET" };
   const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
   if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
-  const xml = await cachedSourceFile(DATA_DIR, "un-consolidated.xml", UN_SC_URL, 3 * 86400000, "utf8");
+  const meta: any = {}; const xml = await cachedSourceFile(DATA_DIR, "un-consolidated.xml", UN_SC_URL, 3 * 86400000, "utf8", meta); Object.assign(base, meta);
   if (!xml) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a UN Consolidated List" };
   const hits: any[] = [];
   const blocks = xml.match(/<(INDIVIDUAL|ENTITY)>[\s\S]*?<\/\1>/g) || [];
@@ -359,10 +370,10 @@ async function consultaUN(DATA_DIR: string, nomes: string[]): Promise<any> {
 const EU_FSF_URL = process.env.EU_FSF_URL || "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw";
 /** EU — Lista Consolidada de Sanções Financeiras (CFSP/FSF, XML) — match por NOME. Conservador → ATENÇÃO. */
 async function consultaEU(DATA_DIR: string, nomes: string[]): Promise<any> {
-  const base = { fonte: "EU — Lista Consolidada de Sanções Financeiras (CFSP)", recurso: "eu-fsf", url: "https://www.sanctionsmap.eu/", apiUrl: EU_FSF_URL, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "EU — Lista Consolidada de Sanções Financeiras (CFSP)", recurso: "eu-fsf", url: "https://www.sanctionsmap.eu/", apiUrl: EU_FSF_URL, fetchedAt: new Date().toISOString(), metodo: "GET" };
   const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
   if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
-  const xml = await cachedSourceFile(DATA_DIR, "eu-fsf.xml", EU_FSF_URL, 3 * 86400000, "utf8");
+  const meta: any = {}; const xml = await cachedSourceFile(DATA_DIR, "eu-fsf.xml", EU_FSF_URL, 3 * 86400000, "utf8", meta); Object.assign(base, meta);
   if (!xml) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a lista da UE" };
   const matched = new Set<string>();
   for (const m of xml.matchAll(/wholeName="([^"]{3,120})"/g)) { const nm = m[1]; const n = norm(nm); if (n.length < 4) continue; for (const a of alvos) if (n.includes(a)) { matched.add(nm); break; } }
@@ -373,10 +384,10 @@ async function consultaEU(DATA_DIR: string, nomes: string[]): Promise<any> {
 const IDB_URL = process.env.IDB_URL || "https://data.iadb.org/file/download/f5022f04-a3f1-4604-a099-5d562e3a0aa5";
 /** Inter-American Development Bank (BID) — firmas/indivíduos sancionados (CSV) — match por NOME. Conservador → ATENÇÃO. */
 async function consultaIDB(DATA_DIR: string, nomes: string[]): Promise<any> {
-  const base = { fonte: "Inter-American Development Bank (BID) — Sancionados", recurso: "idb", url: "https://data.iadb.org/dataset/dataset-of-sanctioned-firms-and-individuals", apiUrl: IDB_URL, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "Inter-American Development Bank (BID) — Sancionados", recurso: "idb", url: "https://data.iadb.org/dataset/dataset-of-sanctioned-firms-and-individuals", apiUrl: IDB_URL, fetchedAt: new Date().toISOString(), metodo: "GET" };
   const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
   if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
-  const csv = await cachedSourceFile(DATA_DIR, "idb.csv", IDB_URL, 7 * 86400000, "utf8");
+  const meta: any = {}; const csv = await cachedSourceFile(DATA_DIR, "idb.csv", IDB_URL, 7 * 86400000, "utf8", meta); Object.assign(base, meta);
   if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a lista do BID" };
   const hits: any[] = []; const lines = csv.split(/\r?\n/);
   for (let i = 1; i < lines.length; i++) {
@@ -389,10 +400,10 @@ async function consultaIDB(DATA_DIR: string, nomes: string[]): Promise<any> {
 const UK_SANCTIONS_URL = process.env.UK_SANCTIONS_URL || "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv";
 /** UK Sanctions List (FCDO/OFSI, CSV) — match por NOME. Conservador → ATENÇÃO. */
 async function consultaUK(DATA_DIR: string, nomes: string[]): Promise<any> {
-  const base = { fonte: "UK Sanctions List (FCDO)", recurso: "uk-sanctions", url: "https://www.gov.uk/government/publications/the-uk-sanctions-list", apiUrl: UK_SANCTIONS_URL, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "UK Sanctions List (FCDO)", recurso: "uk-sanctions", url: "https://www.gov.uk/government/publications/the-uk-sanctions-list", apiUrl: UK_SANCTIONS_URL, fetchedAt: new Date().toISOString(), metodo: "GET" };
   const alvos = Array.from(new Set(nomes.map(norm))).filter((n) => n.length >= 8 && n.split(" ").length >= 2);
   if (!alvos.length) return { ...base, status: "NADA_CONSTA", hits: [] };
-  const csv = await cachedSourceFile(DATA_DIR, "uk-sanctions.csv", UK_SANCTIONS_URL, 3 * 86400000, "utf8");
+  const meta: any = {}; const csv = await cachedSourceFile(DATA_DIR, "uk-sanctions.csv", UK_SANCTIONS_URL, 3 * 86400000, "utf8", meta); Object.assign(base, meta);
   if (!csv) return { ...base, status: "ERRO", hits: [], erro: "Falha ao baixar a UK Sanctions List" };
   const lines = csv.split(/\r?\n/);
   let h = lines.findIndex((l) => l.startsWith("Last Updated")); if (h < 0) h = 0;
@@ -413,11 +424,13 @@ const TCU_INIDONEOS_URL = process.env.TCU_INIDONEOS_URL || "https://certidoes.ap
 // CNPJ no webservice público (filtro server-side, reconferido localmente); match por CNPJ é
 // exato → CONSTA (não ATENCAO). O container resolve certidoes.apps.tcu.gov.br normalmente.
 export async function consultaTCU(cnpjDigits: string): Promise<any> {
-  const base = { fonte: "TCU — Licitantes Inidôneos", recurso: "tcu-inidoneos", url: "https://portal.tcu.gov.br/carta-de-servicos/certidoes/lista-de-licitantes-inidoneos", apiUrl: TCU_INIDONEOS_URL, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "TCU — Licitantes Inidôneos", recurso: "tcu-inidoneos", url: "https://portal.tcu.gov.br/carta-de-servicos/certidoes/lista-de-licitantes-inidoneos", apiUrl: TCU_INIDONEOS_URL, fetchedAt: new Date().toISOString(), metodo: "POST", param: "CNPJ", cache: false };
   if (cnpjDigits.length !== 14) return { ...base, status: "NADA_CONSTA", hits: [] };
+  const t0 = Date.now();
   try {
     const r = await limitedFetch(TCU_INIDONEOS_URL, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify({ cnpj: cnpjDigits }), signal: AbortSignal.timeout(20000) });
-    if (!r.ok) return { ...base, status: "ERRO", http: r.status, hits: [] };
+    base.http = r.status; base.ms = Date.now() - t0;
+    if (!r.ok) return { ...base, status: "ERRO", hits: [] };
     const arr = await r.json();
     const lista = Array.isArray(arr) ? arr : [];
     const hits = lista.filter((x: any) => onlyDigits(x.numeroRegistro) === cnpjDigits).map((x: any) => ({
@@ -429,6 +442,7 @@ export async function consultaTCU(cnpjDigits: string): Promise<any> {
     }));
     return { ...base, status: hits.length ? "CONSTA" : "NADA_CONSTA", hits, registros: lista.length };
   } catch (e: any) {
+    base.ms = Date.now() - t0;
     return { ...base, status: "ERRO", erro: e.message, hits: [] };
   }
 }
@@ -441,7 +455,7 @@ export async function consultaTCU(cnpjDigits: string): Promise<any> {
  * ignorado). Resultado é informativo → ATENCAO.
  */
 export async function consultaPEP(qsaNomes: string[], cpfs: string[] = []): Promise<any> {
-  const base = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString() };
+  const base: any = { fonte: "PEP — Pessoas Expostas Politicamente (CGU)", recurso: "pep", url: "https://portaldatransparencia.gov.br/pessoa-fisica/pep", apiUrl: `${PT_BASE}peps`, fetchedAt: new Date().toISOString(), metodo: "GET", param: "Nome/CPF", cache: false };
   if (!process.env.PORTAL_TRANSPARENCIA_KEY) return { ...base, status: "PENDENTE", hits: [], erro: "Chave da API não configurada" };
   const nomes = Array.from(new Set(qsaNomes.map((n) => String(n || "").trim()).filter((n) => norm(n).split(" ").length >= 2))).slice(0, 12);
   const cpfList = Array.from(new Set(cpfs.map(onlyDigits).filter((c) => c.length === 11))).slice(0, 6);
@@ -451,15 +465,18 @@ export async function consultaPEP(qsaNomes: string[], cpfs: string[] = []): Prom
     const carenciaOk = !p.dt_fim_carencia || new Date(p.dt_fim_carencia) >= hoje;
     if (carenciaOk) hits.push({ tipo: `PEP: ${String(p.nome).trim()} — ${String(p.descricao_funcao || "").trim()} (${via})`, orgao: `${String(p.nome_orgao || "").trim()} · exercício ${p.dt_inicio_exercicio || "?"}–${p.dt_fim_exercicio || "?"}`, dataFim: p.dt_fim_carencia || "" });
   };
+  const t0 = Date.now();
   try {
     for (const nome of nomes) {
       const r = await limitedFetch(`${PT_BASE}peps?nome=${encodeURIComponent(nome)}&pagina=1`, { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
+      base.http = r.status; base.ms = Date.now() - t0;
       if (!r.ok) continue;
       const lista = await r.json();
       for (const p of Array.isArray(lista) ? lista : []) if (norm(p.nome) === norm(nome)) pushHit(p, "nome");
     }
     for (const cpf of cpfList) {
       const r = await limitedFetch(`${PT_BASE}peps?cpf=${cpf}&pagina=1`, { headers: PT_HEADERS(), signal: AbortSignal.timeout(15000) });
+      base.http = r.status; base.ms = Date.now() - t0;
       if (!r.ok) continue;
       const lista = await r.json();
       // só aceita se a API devolveu o CPF COMPLETO e idêntico (o filtro server-side pode ser ignorado).
@@ -504,6 +521,7 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
   // #104: além de vencido/forçado, re-roda quando o registro foi gerado sob uma VERSÃO ANTERIOR
   // do conjunto de fontes (senão o sweep enfileiraria mas o cache devolveria o registro velho).
   if (cached && isValid(cached) && cached.fontesVersao === SOURCES_VERSION && !opts.force) return { ...cached, fromCache: true };
+  const t0run = Date.now(); // #103: tempo total da execução (só quando roda de fato, não no cache)
   const receita = await fetchReceita(cnpj);
   const razao = receita?.razao_social || cached?.razaoSocial || "";
   const apis: string[] = [];
@@ -537,14 +555,17 @@ export async function runDiligence(DATA_DIR: string, cnpj: string, opts: { check
   const erro = !receita || sancoes.some((s) => s.status === "ERRO" || s.status === "PENDENTE");
   const verdict = anySancao || receitaInativa ? "ALERTA" : (erro && !razao ? "PENDENTE" : "NADA_CONSTA");
   const now = new Date();
-  const rec = {
+  const rec: any = {
     cnpj, razaoSocial: razao || "—", nomeFantasia: receita?.nome_fantasia || "",
     checkedAt: now.toISOString(), validUntil: new Date(now.getTime() + VALIDADE_DIAS * 86400000).toISOString(),
     checkedBy: opts.checkedBy || "—", ip: opts.ip || "—",
     receita, sancoes, verdict,
     fontesVersao: SOURCES_VERSION, fontesCount: DILIGENCE_SOURCES.length, // #104
-    metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString() },
+    diligenciaId: crypto.randomUUID(), tempoTotalMs: Date.now() - t0run, // #103
+    metadata: { apis, userAgent: opts.userAgent || "", geradoEm: now.toISOString(), commit: APP_COMMIT || undefined },
   };
+  // #103: carimbo de integridade (SHA-256 do conteúdo substantivo) — evidência anti-adulteração reproduzível.
+  rec.integridadeHash = crypto.createHash("sha256").update(JSON.stringify({ cnpj: rec.cnpj, verdict: rec.verdict, sancoes: rec.sancoes, receita: rec.receita, fontesVersao: rec.fontesVersao })).digest("hex");
   fs.writeFileSync(recPath, JSON.stringify(rec, null, 2));
   return { ...rec, fromCache: false };
 }
@@ -598,6 +619,35 @@ const LEGAL_NOTES: Record<string, { orgao: string; base: string; efeito: string;
   "tcu-inidoneos": { orgao: "Tribunal de Contas da União (TCU)", base: "Lei 8.443/1992, art. 46 (declaração de inidoneidade de licitante)", efeito: "Licitante declarado inidôneo — impedido de participar de licitação na Administração Pública Federal por até 5 anos.", match: "CNPJ" },
 };
 
+// #103 — proveniência técnica: idade legível do cache + sub-linha por fonte (reusada no HTML e no TXT;
+// a tela replica o mesmo formato). Texto cru; quem renderiza em HTML aplica esc().
+function humanAge(ms: number): string {
+  const m = Math.max(0, ms); const h = m / 3600000;
+  if (h < 1) return `${Math.round(m / 60000)} min`;
+  if (h < 48) return `${Math.round(h)} h`;
+  return `${Math.round(h / 24)} d`;
+}
+export function provTech(s: any): string {
+  const dDate = (x: string) => { try { return new Date(x).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return x; } };
+  const out: string[] = [`${s.metodo || "GET"} ${s.apiUrl || s.url || "—"}`.trim()];
+  if (s.http != null) out.push(`HTTP ${s.http}`);
+  if (s.cache) out.push(`cache${s.stale ? " (vencido, fallback)" : ""} (idade ${s.cacheAge != null ? humanAge(s.cacheAge) : "?"}${s.sourceUpdatedAt ? ` · cópia de ${dDate(s.sourceUpdatedAt)}` : ""})`);
+  else if (s.http != null || s.ms != null) out.push(`ao vivo${s.ms != null ? ` · ${s.ms} ms` : ""}`);
+  if (s.erro) out.push(`erro: ${s.erro}`);
+  return out.join(" · ");
+}
+// Cabeçalho de auditabilidade da memória do processo (ID + versão do conjunto + tempo + integridade).
+function provCaption(rec: any): string {
+  const bits: string[] = [];
+  const n = rec.fontesCount || (rec.sancoes || []).length;
+  if (n) bits.push(`${n} fontes${rec.fontesVersao ? ` (conjunto v${rec.fontesVersao})` : ""}`);
+  if (rec.diligenciaId) bits.push(`ID da diligência: ${rec.diligenciaId}`);
+  if (rec.tempoTotalMs != null) bits.push(`tempo total: ${(rec.tempoTotalMs / 1000).toFixed(1)} s`);
+  if (rec.metadata?.commit) bits.push(`commit ${rec.metadata.commit}`);
+  if (rec.integridadeHash) bits.push(`integridade SHA-256: ${rec.integridadeHash}`);
+  return bits.length ? `<div class="provcap">${esc(bits.join(" · "))}</div>` : "";
+}
+
 // Seções reutilizáveis (report de diligência + report consolidado do cockpit). HTML auto-contido.
 export function legalNotesHtml(rec: any): string {
   const uniq: string[] = [];
@@ -612,18 +662,22 @@ export function provenanceTableHtml(rec: any): string {
   const rf = rec.receita || {};
   const dt = (s: string) => { try { return new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }); } catch { return s || "—"; } };
   const hostOf = (u: string) => { try { return new URL(u).host; } catch { return u || "—"; } };
-  const lin = (fonte: string, apiUrl: string, at: string, base: string, resultado: string, metodo: string) =>
-    `<tr><td>${esc(fonte)}</td><td>${apiUrl ? `<a href="${esc(apiUrl)}">${esc(hostOf(apiUrl))}</a>` : "—"}</td><td>${at ? dt(at) : "—"}</td><td>${esc(base)}</td><td>${esc(resultado)}</td><td>${esc(metodo)}</td></tr>`;
+  // Cada fonte ocupa 2 linhas: a principal (6 colunas) + uma sub-linha técnica (colspan) com a
+  // proveniência detalhada (método/URL/HTTP/latência/cache/idade/erro), conforme #103.
+  const rowFor = (fonte: string, apiUrl: string, at: string, registros: string, resultado: string, corresp: string, tech: string) =>
+    `<tr><td>${esc(fonte)}</td><td>${apiUrl ? `<a href="${esc(apiUrl)}">${esc(hostOf(apiUrl))}</a>` : "—"}</td><td>${at ? dt(at) : "—"}</td><td>${esc(registros)}</td><td>${esc(resultado)}</td><td>${esc(corresp)}</td></tr>`
+    + (tech ? `<tr class="techrow"><td colspan="6" class="tech">↳ ${esc(tech)}</td></tr>` : "");
   const rows = [
-    lin(rf.fonte || "Receita Federal", rf.apiUrl || "", rf.fetchedAt, "—", rf.situacao_cadastral || "consultado", "CNPJ"),
-    ...(rf.cepFonte ? [lin(rf.cepFonte, rf.cepApiUrl || "", rf.cepFetchedAt, "—", "consultado", "CEP")] : []),
-    ...(rec.sancoes || []).map((s: any) => lin(
+    rowFor(rf.fonte || "Receita Federal", rf.apiUrl || "", rf.fetchedAt, "—", rf.situacao_cadastral || "consultado", "CNPJ", rf.apiUrl ? `GET ${rf.apiUrl} · ao vivo` : ""),
+    ...(rf.cepFonte ? [rowFor(rf.cepFonte, rf.cepApiUrl || "", rf.cepFetchedAt, "—", "consultado", "CEP", rf.cepApiUrl ? `GET ${rf.cepApiUrl} · ao vivo` : "")] : []),
+    ...(rec.sancoes || []).map((s: any) => rowFor(
       s.fonte, s.apiUrl || "", s.fetchedAt,
       s.registros != null ? `${Number(s.registros).toLocaleString("pt-BR")} reg.` : "—",
       `${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? ` (${s.hits.length})` : ""}`,
-      (LEGAL_NOTES[s.recurso]?.match) || "—")),
+      (LEGAL_NOTES[s.recurso]?.match) || s.param || "—",
+      provTech(s))),
   ].join("");
-  return `<table class="prov"><thead><tr><th>Fonte</th><th>Origem</th><th>Consulta</th><th>Registros</th><th>Resultado</th><th>Corresp.</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `${provCaption(rec)}<table class="prov"><thead><tr><th>Fonte</th><th>Origem</th><th>Consulta</th><th>Registros</th><th>Resultado</th><th>Corresp.</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 export function buildReportHtml(rec: any): string {
@@ -673,6 +727,8 @@ table.prov{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}
 table.prov th,table.prov td{border:1px solid #000;padding:4px 6px;text-align:left;vertical-align:top;word-break:break-word}
 table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:9px}
 .note{border:1px solid #000;padding:8px 10px;margin:6px 0}.nk{font-weight:700}
+.provcap{font-size:9.5px;margin:6px 0 3px;word-break:break-all}
+table.prov td.tech{font-size:9px;padding:2px 6px 4px;border-top:0;word-break:break-all;line-height:1.4}
 </style></head><body>
 <button class="toolbar" onclick="window.print()">Salvar em PDF / Imprimir</button>
 <div class="page">
@@ -721,7 +777,7 @@ table.prov th{font-weight:700;text-transform:uppercase;letter-spacing:.04em;font
   <footer>
     <div class="brand">ASSOCIAÇÃO CASA HACKER</div>
     CNPJ 36.038.079/0001-97 · São Paulo · SP · operacoes@casahacker.org · casahacker.org<br>
-    Relatório gerado pela plataforma Auditoria (Casa Hacker) em ${esc(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }))} (BRT) · documento de diligência para fins de prestação de contas.<br>
+    Relatório gerado pela plataforma Auditoria (Casa Hacker)${rec.metadata?.commit ? ` · build ${esc(rec.metadata.commit)}` : ""} em ${esc(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }))} (BRT) · conjunto de fontes v${esc(rec.fontesVersao || "—")} · documento de diligência para fins de prestação de contas.<br>
     Todos os horários deste documento estão no fuso de Brasília (BRT, UTC−3).
   </footer>
 </div>
@@ -744,9 +800,19 @@ export function buildReportTxt(rec: any): string {
   L.push(`  Validade.......: ${new Date(rec.validUntil).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} (${VALIDADE_DIAS} dias)`);
   L.push(`  Solicitante....: ${rec.checkedBy || "-"}`);
   L.push(`  IP de origem...: ${rec.ip || "-"}`);
-  L.push(`  Fonte cadastral: ${rf.fonte || "-"} | ${rf.apiUrl || "-"} | ${rf.fetchedAt ? dt(rf.fetchedAt) : "-"}`);
-  if (rf.cepFonte) L.push(`  Endereço (CEP).: ${rf.cepFonte} | ${rf.cepApiUrl || "-"} | ${rf.cepFetchedAt ? dt(rf.cepFetchedAt) : "-"}`);
-  for (const s of rec.sancoes || []) L.push(`  ${s.fonte}: ${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? " (" + s.hits.length + ")" : ""} | ${s.apiUrl || ""} | ${dt(s.fetchedAt)}${s.registros != null ? " | " + s.registros + " reg." : ""} | corresp. ${LEGAL_NOTES[s.recurso]?.match || "-"}`);
+  if (rec.diligenciaId) L.push(`  ID diligência..: ${rec.diligenciaId}`);
+  if (rec.fontesCount) L.push(`  Conjunto fontes: ${rec.fontesCount} fontes (v${rec.fontesVersao || "-"})`);
+  if (rec.tempoTotalMs != null) L.push(`  Tempo execução.: ${(rec.tempoTotalMs / 1000).toFixed(1)} s`);
+  if (rec.metadata?.commit) L.push(`  Build/commit...: ${rec.metadata.commit}`);
+  if (rec.integridadeHash) L.push(`  Integridade....: SHA-256 ${rec.integridadeHash}`);
+  L.push("");
+  L.push("MEMÓRIA DO PROCESSO — proveniência técnica por fonte");
+  L.push(`  Receita: GET ${rf.apiUrl || "-"} | ${rf.fetchedAt ? dt(rf.fetchedAt) : "-"} | ao vivo`);
+  if (rf.cepFonte) L.push(`  ${rf.cepFonte}: GET ${rf.cepApiUrl || "-"} | ${rf.cepFetchedAt ? dt(rf.cepFetchedAt) : "-"} | ao vivo`);
+  for (const s of rec.sancoes || []) {
+    L.push(`  ${s.fonte}: ${SLABEL[s.status] || s.status}${s.status === "CONSTA" ? " (" + s.hits.length + ")" : ""} | ${dt(s.fetchedAt)}${s.registros != null ? " | " + s.registros + " reg." : ""} | corresp. ${LEGAL_NOTES[s.recurso]?.match || s.param || "-"}`);
+    L.push(`      ↳ ${provTech(s)}`);
+  }
   L.push("");
   L.push("RECEITA FEDERAL — CADASTRO");
   L.push(`  Situação.......: ${rf.situacao_cadastral || "-"}${rf.data_situacao ? " (desde " + rf.data_situacao + ")" : ""}`);

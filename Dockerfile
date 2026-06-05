@@ -16,6 +16,9 @@ COPY --from=builder /app/dist ./dist
 COPY server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts kycPdf.ts ./
 COPY src/kyc/kycTypes.ts ./src/kyc/kycTypes.ts
 COPY assets ./assets
+# #103: commit da plataforma p/ o rodapé/memória do relatório (vazio se não informado no build).
+ARG APP_COMMIT=""
+ENV APP_COMMIT=$APP_COMMIT
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
