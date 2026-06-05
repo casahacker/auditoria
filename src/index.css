@@ -160,4 +160,10 @@
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  /* Exceção: o spinner de carregamento é indicador FUNCIONAL de status (não decoração).
+     Um spinner congelado parece travado — então continua girando mesmo com movimento reduzido. */
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
 }

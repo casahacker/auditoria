@@ -263,7 +263,7 @@ function AjudaDilig() {
     { t: 'Lendo o resultado', d: 'O veredito é "Nada consta" (verde), "Alerta" (vermelho — há sanção em alguma lista OU o cadastro não está Ativo) ou "Pendente" (não foi possível concluir as verificações). Veja os dados completos da Receita, o status de cada lista e, quando "Consta", o tipo de sanção, órgão, vigência, processo e fundamentação.' },
     { t: 'Como filtramos por CNPJ', d: 'O filtro por CNPJ da API do Portal da Transparência é inoperante (devolve a lista inteira). Por isso consultamos cada lista pela razão social do fornecedor (obtida na Receita) e filtramos os resultados pelo CNPJ exato — varrendo todas as páginas da resposta, para não perder uma sanção que esteja além da primeira página. Na prática, a verificação combina nome + CNPJ.' },
     { t: 'Validade e auditoria', d: 'Cada diligência vale 30 dias e fica registrada com data-hora, IP e solicitante. Exporte o relatório em PDF (documento monocromático, pronto para arquivo) ou os dados em TXT e guarde junto à prestação de contas. Use "Reconsultar" para forçar uma nova consulta antes do vencimento.' },
-    { t: 'Fontes complementares (verificação manual)', d: 'A maioria das listas é consultada automaticamente — incluindo Lista Suja do Trabalho Escravo (MTE), TCU (Inidôneos), TCE-SP (Apenados) e Prefeitura de SP (COBES). Duas ficam como link para verificação manual, porque o acesso automatizado é bloqueado pelo órgão: e-Sanções/BEC-SP (sanções administrativas estaduais) e IBAMA (embargos ambientais). Elas não alteram o veredito; verifique-as quando o risco exigir.' },
+    { t: 'Fontes complementares (verificação manual)', d: 'A maioria das listas é consultada automaticamente — incluindo Lista Suja do Trabalho Escravo (MTE), TCU (Inidôneos), TCE-SP (Apenados) e Prefeitura de SP (COBES). Sanções administrativas estaduais da BEC-SP e embargos ambientais do IBAMA não têm consulta automática confiável; verifique-os manualmente quando o risco exigir.' },
   ];
   return (
     <div className="max-w-3xl space-y-5">
@@ -468,11 +468,6 @@ export const provTechLine = (s: any): string => {
   if (s.erro) out.push(`erro: ${s.erro}`);
   return out.join(' · ');
 };
-// #99 — fontes sem consulta automática confiável (espelha COMPLEMENTARY_SOURCES do backend; manter em sincronia).
-export const COMPLEMENTARY_SOURCES_UI = [
-  { nome: 'e-Sanções BEC-SP — Sanções administrativas (Estado de SP)', url: 'https://www.bec.sp.gov.br/sancoes_ui/aspx/consultaadministrativafornecedor.aspx', nota: 'Consulta automática indisponível (ASP.NET ViewState + WAF F5). Cobertura parcial via CEIS/CNEP e TCE-SP.' },
-  { nome: 'IBAMA — Embargos e autuações ambientais', url: 'https://servicos.ibama.gov.br/ctf/publico/areasembargadas/ConsultaPublicaAreasEmbargadas.php', nota: 'Download automatizado bloqueado pelo órgão; verifique quando o risco ambiental exigir.' },
-];
 const KVr = ({ k, v, cls }: { k: string; v: any; cls?: string }) => (
   <div className="flex gap-2 text-[12px]"><span className="text-text-secondary min-w-[120px] shrink-0">{k}</span><span className={cn('font-medium break-words', cls)}>{v || '—'}</span></div>
 );
@@ -577,20 +572,6 @@ export function ResultadoView({ current, busy, apiFetch, addToast, runCheck }: a
         </div>
       </Card>
 
-      {/* #99 — Fontes complementares (verificação manual; não alteram o veredito) */}
-      <Card className="p-5">
-        <div className="text-[12px] font-semibold text-text-secondary mb-1 flex items-center gap-1.5"><ExternalLink size={13} aria-hidden /> Fontes complementares — verificação manual</div>
-        <div className="text-[12px] text-text-secondary mb-3">Sem consulta automática confiável (proteção anti-automação ou download bloqueado pelo órgão). Não alteram o veredito; verifique manualmente quando o risco exigir.</div>
-        <div className="space-y-2.5">
-          {COMPLEMENTARY_SOURCES_UI.map((s, i) => (
-            <div key={i} className="border-b border-line pb-2.5 last:border-0 last:pb-0">
-              <div className="text-[12px] font-semibold">{s.nome}</div>
-              <div className="text-[12px] text-text-secondary">{s.nota}</div>
-              <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-primary hover:underline inline-flex items-center gap-1 mt-0.5 break-all"><ExternalLink size={10} aria-hidden /> consultar manualmente</a>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }

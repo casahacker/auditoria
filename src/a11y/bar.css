@@ -212,6 +212,11 @@
   transition: none !important;
   scroll-behavior: auto !important;
 }
+/* Exceção: spinner de carregamento é indicador funcional de status — continua girando mesmo
+   com "sem animação" (um spinner parado parece travado, não "movimento respeitosamente reduzido"). */
+.ch-a11y-no-motion .animate-spin {
+  animation: spin 1s linear infinite !important;
+}
 
 /* 5. Foco realçado — outline laranja persistente */
 .ch-a11y-highlight-focus *:focus-visible,
