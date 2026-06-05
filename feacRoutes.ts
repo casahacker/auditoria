@@ -632,8 +632,9 @@ function formatBRL(n: number): string {
 function brNumber(n: number): string { return formatBRL(n).replace(/^R\$\s*/, ""); }
 
 /** Per-document filename: "ID - Nº NF - FORNECEDOR - VALOR.pdf" (filesystem-safe, keeps accents). */
-export function docFileName(l: any): string {
-  const id = l.rowNum ?? "S-ID";
+export function docFileName(l: any, seq?: number): string {
+  // ID sequencial (1, 2, 3…) conforme a ordem dos lançamentos; cai p/ rowNum só se não vier seq.
+  const id = seq != null ? seq : (l.rowNum ?? "S-ID");
   const nf = l.nf?.docNumber || "SEM-NF";
   const forn = String(l.razaoSocial || l.fornecedor || "SEM-FORNECEDOR").trim();
   const valor = brNumber(Math.abs(parseNum(l.saida)));
@@ -829,10 +830,12 @@ export function updateFluxoXlsx(srcPath: string, _sheetName: string, lancs: any[
     "Integra Rateio", "Valor", "Observação",
   ];
   const aoa: any[][] = [headers];
+  let seq = 0;
   for (const l of lancs) {
+    seq++; // ID sequencial conforme a ordem dos lançamentos
     const valor = (l.entrada && l.entrada > 0) ? parseNum(l.entrada) : parseNum(l.saida); // + entrada / − saída
     aoa.push([
-      l.rowNum ?? "",
+      seq,
       l.categoria || "",
       l.descricao || "",
       l.grupoNatureza || "",
@@ -1219,6 +1222,7 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
     if (!lancId) return res.status(400).json({ error: "ID inválido" });
     const l = (rec.lancamentos || []).find((x: any) => x.id === lancId);
     if (!l) return res.status(404).json({ error: "Lançamento não encontrado" });
+    const seq = (rec.lancamentos || []).findIndex((x: any) => x.id === lancId) + 1; // ID sequencial p/ o nome do arquivo
     const slug = slugify(l.fornecedor || lancId);
     try {
       const type = String(req.query.type || "");
@@ -1231,10 +1235,10 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
         return sendPdf(res, await extractPages(sp, ref.pages), `${type === "nf" ? "NF" : "Comprovante"}_${slug}.pdf`);
       }
       const treated = path.join(recDir, "treated", `${lancId}.pdf`);
-      if (fs.existsSync(treated)) return sendPdf(res, fs.readFileSync(treated), docFileName(l));
+      if (fs.existsSync(treated)) return sendPdf(res, fs.readFileSync(treated), docFileName(l, seq));
       if (l.nf || l.comprovante) {
         const merged = await mergeForLanc(recDir, l);
-        return sendPdf(res, await stampLeftMargin(merged, buildStampText(rec.accountability)), docFileName(l));
+        return sendPdf(res, await stampLeftMargin(merged, buildStampText(rec.accountability)), docFileName(l, seq));
       }
       res.status(404).json({ error: "Sem documentos para este lançamento" });
     } catch (e: any) { res.status(500).json({ error: "Erro ao gerar PDF: " + e.message }); }
@@ -1279,12 +1283,12 @@ export function registerFeacRoutes(app: Express, ctx: FeacCtx) {
     archive.on("error", (e: any) => { console.error("[feac zip]", e.message); try { res.status(500).end(); } catch { /* */ } });
     archive.pipe(res);
     const treatedDir = path.join(recDir, "treated");
-    for (const l of rec.lancamentos || []) {
+    (rec.lancamentos || []).forEach((l: any, i: number) => {
       const tp = path.join(treatedDir, `${l.id}.pdf`);
       if (l.treatedPdf && fs.existsSync(tp)) {
-        archive.file(tp, { name: `documentos/${docFileName(l)}` });
+        archive.file(tp, { name: `documentos/${docFileName(l, i + 1)}` });
       }
-    }
+    });
     const rateio = path.join(recDir, "declaracao_rateio.pdf");
     if (fs.existsSync(rateio)) archive.file(rateio, { name: "declaracao_rateio.pdf" });
     const fluxo = path.join(recDir, "fluxo_atualizado.xlsx");
