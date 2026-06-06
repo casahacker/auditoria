@@ -13,8 +13,19 @@ RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-por ghosts
 COPY package.json ./
 RUN npm install
 COPY --from=builder /app/dist ./dist
-COPY server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts kycPdf.ts ./
+COPY server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts kycPdf.ts contratosRoutes.ts ./
 COPY src/kyc/kycTypes.ts ./src/kyc/kycTypes.ts
+COPY src/contratos/contratosTypes.ts ./src/contratos/contratosTypes.ts
+COPY src/contratos/termosCondicoes.ts ./src/contratos/termosCondicoes.ts
+COPY src/contratos/jiraClient.ts ./src/contratos/jiraClient.ts
+COPY src/contratos/validacoes.ts ./src/contratos/validacoes.ts
+COPY src/contratos/elegibilidade.ts ./src/contratos/elegibilidade.ts
+COPY src/contratos/extracao.ts ./src/contratos/extracao.ts
+COPY src/contratos/render.ts ./src/contratos/render.ts
+COPY src/contratos/dadosContratada.ts ./src/contratos/dadosContratada.ts
+COPY src/contratos/documenso.ts ./src/contratos/documenso.ts
+COPY src/contratos/templates/contratoPJ_v2026_05.ts ./src/contratos/templates/contratoPJ_v2026_05.ts
+COPY src/contratos/templates/aditivoPJ_v2026_05.ts ./src/contratos/templates/aditivoPJ_v2026_05.ts
 COPY assets ./assets
 # #103: commit da plataforma p/ o rodapé/memória do relatório (vazio se não informado no build).
 ARG APP_COMMIT=""

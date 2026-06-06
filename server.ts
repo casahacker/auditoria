@@ -18,6 +18,7 @@ import { rateLimit } from "express-rate-limit";
 import { registerFeacRoutes } from "./feacRoutes";
 import { registerDiligenciaRoutes } from "./diligenciaRoutes";
 import { registerKycRoutes } from "./kycRoutes";
+import { registerContratosRoutes } from "./contratosRoutes";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1360,6 +1361,9 @@ registerDiligenciaRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
 
 // ── KYS / KYG — Conformidade de Fornecedores e Organizações (Tool D) ───────────
 registerKycRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
+
+// ── Contratos (Tool E) — redator de contratos PJ + termos aditivos ─────────────
+registerContratosRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment, aiClient, extractTextFromFile, parseJsonSafe });
 
 // ── Serve React SPA ───────────────────────────────────────────────────────────
 

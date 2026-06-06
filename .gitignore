@@ -11,6 +11,10 @@ coverage/
 kyc-templates/
 # arquivos de teste temporários
 _smoke_*.ts
+*_smoke.ts
+
+# Contratos: docs de referência (TR/modelo/T&C .docx) — origem local, não versionada
+referencia/
 
 # local operational backups
 _backup_*/
