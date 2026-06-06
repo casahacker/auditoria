@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test:contratos": "tsx src/contratos/validacoes.test.ts"
+    "test:contratos": "tsx src/contratos/validacoes.test.ts",
+    "test:contratos:e2e": "tsx src/contratos/fixture.e2e.ts"
   },
   "dependencies": {
     "@azure-rest/ai-document-intelligence": "^1.1.0",
