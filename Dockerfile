@@ -23,6 +23,7 @@ COPY src/contratos/elegibilidade.ts ./src/contratos/elegibilidade.ts
 COPY src/contratos/extracao.ts ./src/contratos/extracao.ts
 COPY src/contratos/render.ts ./src/contratos/render.ts
 COPY src/contratos/dadosContratada.ts ./src/contratos/dadosContratada.ts
+COPY src/contratos/documenso.ts ./src/contratos/documenso.ts
 COPY src/contratos/templates/contratoPJ_v2026_05.ts ./src/contratos/templates/contratoPJ_v2026_05.ts
 COPY src/contratos/templates/aditivoPJ_v2026_05.ts ./src/contratos/templates/aditivoPJ_v2026_05.ts
 COPY assets ./assets

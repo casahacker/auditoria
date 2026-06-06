@@ -216,10 +216,12 @@ export interface Aditivo {
 }
 
 export interface DocumensoVinculo {
-  documentId?: string;
+  documentId?: number;
   status?: string;
   enviadoEm?: string;
   assinadoEm?: string;
+  fallback?: boolean;   // Documenso indisponível → envio manual do pacote
+  host?: string;
 }
 
 // ── Contrato (registro principal — Seção 5) ──────────────────────────────────────

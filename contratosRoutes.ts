@@ -19,11 +19,16 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import mammoth from "mammoth";
+import crypto from "node:crypto";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import type OpenAI from "openai";
 import { z } from "zod";
+const execFileAsync = promisify(execFile);
 import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo, AnexoRef, Aditivo, Parcela, DadosContratada } from "./src/contratos/contratosTypes";
 import { resumoDoContrato } from "./src/contratos/contratosTypes";
-import { verificarTc, tcStatus, tcSnapshot } from "./src/contratos/termosCondicoes";
+import { verificarTc, tcStatus, tcSnapshot, TC_PATH } from "./src/contratos/termosCondicoes";
+import { enviarContratoParaAssinatura, documensoReady, statusDocumento, baixarAssinado, documensoHost } from "./src/contratos/documenso";
 import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
 import { validarContratoParaGeracao, somaParcelasCentavos } from "./src/contratos/validacoes";
 import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/elegibilidade";
@@ -531,8 +536,117 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
       res.status(500).json({ error: `Falha ao renderizar a minuta: ${e?.message || e}` });
     }
   });
-  app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, naoImplementado("#139", "Aprovação humana (HITL)"));
-  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#139", "Envio para assinatura (Documenso)"));
+  // Gera a minuta PDF + mescla o pacote (Contrato + TR + T&C) e devolve os hashes (#139).
+  app.post("/api/contratos/:id/gerar-pdf", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+    try {
+      const minutaPdf = await renderContratoPdf(contrato);
+      fs.mkdirSync(contratoDir(id), { recursive: true });
+      const minutaPath = path.join(contratoDir(id), "minuta.pdf");
+      fs.writeFileSync(minutaPath, minutaPdf);
+      // pacote: minuta + (TR de entrada, se PDF) + T&C imutável (byte a byte)
+      const partes = [minutaPath];
+      const entrada = contrato.anexos?.entrada;
+      if (entrada && /\.pdf$/i.test(entrada.nome)) { const ep = path.join(contratoDir(id), entrada.nome); if (fs.existsSync(ep)) partes.push(ep); }
+      partes.push(TC_PATH);
+      const pacotePath = path.join(contratoDir(id), "pacote.pdf");
+      try { await execFileAsync("pdfunite", [...partes, pacotePath]); }
+      catch { fs.writeFileSync(pacotePath, minutaPdf); }
+      const pacoteBuf = fs.readFileSync(pacotePath);
+      const sha = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
+      const hashMinuta = sha(minutaPdf), hashPacote = sha(pacoteBuf);
+      const now = nowIso();
+      contrato.anexos = { ...(contrato.anexos || {}),
+        minuta: { nome: "minuta.pdf", tipo: "minuta", mime: "application/pdf", tamanho: minutaPdf.length, hash: hashMinuta, adicionadoEm: now },
+        pacote: { nome: "pacote.pdf", tipo: "pacote", mime: "application/pdf", tamanho: pacoteBuf.length, hash: hashPacote, adicionadoEm: now },
+      };
+      Object.assign(contrato, tcSnapshot());
+      contrato.updatedAt = now;
+      appendTrilha(contrato, sessionUser(req), "gerou_pacote", `Pacote gerado (SHA-256 ${hashPacote.slice(0, 12)}…)`, { hashMinuta, hashPacote });
+      writeContrato(contrato);
+      res.json({ hashMinuta, hashPacote });
+    } catch (e: any) { res.status(500).json({ error: `Falha ao gerar o pacote: ${e?.message || e}` }); }
+  });
+
+  // Aprovação humana obrigatória (HITL, guard-rail #4) — registra quem/quando/hash (#139).
+  app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+    const hashPdf = contrato.anexos?.pacote?.hash;
+    if (!hashPdf) return res.status(422).json({ error: "Gere o pacote (PDF) antes de aprovar." });
+    const user = sessionUser(req);
+    contrato.aprovacao = { usuario: user, ts: nowIso(), hashPdf };
+    contrato.status = "aprovado";
+    appendTrilha(contrato, user, "aprovou", `Aprovação humana (HITL) — pacote SHA-256 ${hashPdf.slice(0, 12)}…`);
+    contrato.updatedAt = nowIso(); writeContrato(contrato);
+    res.json({ ok: true, aprovacao: contrato.aprovacao });
+  });
+
+  // Envio para assinatura (Documenso) — NENHUM caminho envia sem aprovadoPor (16.8).
+  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+    if (!contrato.aprovacao?.usuario) return res.status(422).json({ error: "Aprovação humana obrigatória antes do envio (guard-rail HITL)." });
+    const pacotePath = path.join(contratoDir(id), "pacote.pdf");
+    if (!fs.existsSync(pacotePath)) return res.status(422).json({ error: "Gere o pacote (PDF) antes de enviar." });
+    const repEmail = contrato.dadosContratada?.representante?.email;
+    if (!repEmail) return res.status(422).json({ error: "Informe o e-mail do representante da CONTRATADA (ficha do fornecedor)." });
+
+    const now = nowIso(); const user = sessionUser(req);
+    const pacote = fs.readFileSync(pacotePath);
+    if (documensoReady()) {
+      try {
+        const { stdout } = await execFileAsync("pdfinfo", [path.join(contratoDir(id), "minuta.pdf")]).catch(() => ({ stdout: "" }));
+        const totalPaginas = parseInt(stdout.match(/Pages:\s+(\d+)/)?.[1] || "1", 10);
+        const env = await enviarContratoParaAssinatura({
+          titulo: `Contrato ${contrato.id} — ${contrato.dadosContratada?.razaoSocial || contrato.cnpj}`,
+          pdf: pacote, totalPaginas,
+          contratada: { name: contrato.dadosContratada?.representante?.nome || contrato.dadosContratada?.razaoSocial || "CONTRATADA", email: repEmail },
+          diretor: { name: "Geraldo dos Santos Barros", email: process.env.CONTRATOS_DIRETOR_EMAIL || "diretoria@casahacker.org" },
+          cc: { name: user, email: user },
+        });
+        contrato.documenso = { documentId: env.documentId, status: "PENDING", enviadoEm: now, host: documensoHost };
+        contrato.status = "enviado_assinatura";
+        appendTrilha(contrato, user, "enviou_assinatura", `Enviado ao Documenso (doc ${env.documentId})`, { documentId: env.documentId });
+        contrato.updatedAt = now; writeContrato(contrato);
+        return res.json({ ok: true, documenso: contrato.documenso });
+      } catch (e: any) {
+        contrato.documenso = { fallback: true, enviadoEm: now, host: documensoHost, status: `falha: ${e?.message || e}` };
+        contrato.status = "enviado_assinatura";
+        appendTrilha(contrato, user, "enviou_assinatura_manual", `Documenso indisponível — baixar pacote p/ envio manual (${e?.message || e})`);
+        contrato.updatedAt = now; writeContrato(contrato);
+        return res.json({ ok: true, fallback: true, error: e?.message || String(e) });
+      }
+    }
+    contrato.documenso = { fallback: true, enviadoEm: now, host: documensoHost };
+    contrato.status = "enviado_assinatura";
+    appendTrilha(contrato, user, "enviou_assinatura_manual", "Documenso não configurado — baixar pacote para envio manual.");
+    contrato.updatedAt = now; writeContrato(contrato);
+    res.json({ ok: true, fallback: true });
+  });
+
+  // Verifica o status no Documenso; quando concluído, baixa o assinado e marca o contrato (#139/#140).
+  app.get("/api/contratos/:id/assinatura/status", requireAuth, async (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+    const docId = contrato.documenso?.documentId;
+    if (!docId) return res.json({ status: contrato.documenso?.fallback ? "manual" : "—", contrato: contrato.status });
+    const st = await statusDocumento(docId);
+    if (st === "COMPLETED" && contrato.status !== "assinado") {
+      const buf = await baixarAssinado(docId);
+      if (buf) { fs.writeFileSync(path.join(contratoDir(id), "assinado.pdf"), buf); contrato.anexos = { ...(contrato.anexos || {}), assinado: { nome: "assinado.pdf", tipo: "assinado", mime: "application/pdf", tamanho: buf.length, adicionadoEm: nowIso() } }; }
+      contrato.status = "assinado";
+      contrato.documenso = { ...contrato.documenso, status: "COMPLETED", assinadoEm: nowIso() };
+      appendTrilha(contrato, sessionUser(req), "assinatura_concluida", "Contrato assinado por todas as partes.");
+      contrato.updatedAt = nowIso(); writeContrato(contrato);
+    }
+    res.json({ status: st, contrato: contrato.status });
+  });
   // ── Aditivos (#137) ───────────────────────────────────────────────────────────
   app.get("/api/contratos/:id/aditivos", requireAuth, (req, res) => {
     const id = idParam(req, res); if (!id) return;

@@ -415,7 +415,9 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
         )}
 
         {step === 5 && (
-          <Card className="p-6"><div className="flex items-center gap-2 text-text-secondary"><Lock size={16} /> Aprovação e assinatura (Documenso) chegam na Fase 3 (#139).</div></Card>
+          <Card className="p-6 space-y-2"><div className="flex items-center gap-2 text-[14px] font-semibold"><Lock size={16} /> Aprovação e assinatura</div>
+            <p className="text-[13px] text-text-secondary">Salve/Envie para revisão no passo anterior. A <strong>aprovação humana</strong> (obrigatória) e o <strong>envio ao Documenso</strong> são feitos na <strong>ficha do contrato</strong> (botões Gerar pacote → Aprovar → Enviar para assinatura), para permitir revisão por outra pessoa.</p>
+          </Card>
         )}
 
         {/* navegação */}
@@ -473,6 +475,15 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
     try { const a = await apiFetch(`/api/contratos/${id}/aditivos`); if (a.ok) setAditivos(await a.json()); } catch { /* */ }
   })(); }, [id]);
 
+  const reload = async () => { try { const r = await apiFetch(`/api/contratos/${id}`); if (r.ok) setC(await r.json()); } catch { /* */ } };
+  const acao = async (metodo: string, sub: string, okMsg: string) => {
+    try {
+      const r = await apiFetch(`/api/contratos/${id}/${sub}`, { method: metodo });
+      const b = await r.json().catch(() => ({}));
+      if (r.ok) { addToast('success', okMsg); await reload(); } else addToast('error', b.error || 'Falha na ação.');
+    } catch { addToast('error', 'Falha na ação.'); }
+  };
+
   if (erro) return <main className="p-10"><EmptyState icon={FileSignature} title="Contrato não encontrado" action={<Btn onClick={onVoltar}>Voltar</Btn>} /></main>;
   if (!c) return <main className="p-10 text-text-secondary flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Carregando…</main>;
 
@@ -492,7 +503,13 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
             <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Minuta (PDF)</Btn>
-            <Btn variant="secondary" onClick={onNovoAditivo}><Plus size={16} /> Novo aditivo</Btn>
+            {['rascunho', 'em_revisao'].includes(c.status) && <Btn variant="secondary" onClick={() => acao('POST', 'gerar-pdf', 'Pacote gerado (Contrato + TR + T&C).')}>Gerar pacote</Btn>}
+            {c.anexos?.pacote && !c.aprovacao && <Btn onClick={() => { if (window.confirm('Aprovar este contrato? Sua aprovação fica registrada na trilha (HITL).')) acao('POST', 'aprovar', 'Contrato aprovado.'); }}><Check size={16} /> Aprovar (HITL)</Btn>}
+            {c.status === 'aprovado' && <Btn onClick={() => acao('POST', 'enviar-assinatura', 'Enviado para assinatura.')}><Upload size={16} /> Enviar para assinatura</Btn>}
+            {c.status === 'enviado_assinatura' && !c.documenso?.fallback && <Btn variant="secondary" onClick={() => acao('GET', 'assinatura/status', 'Status verificado.')}>Verificar assinatura</Btn>}
+            {c.documenso?.fallback && <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/anexos/pacote.pdf`, '_blank')}><FileText size={16} /> Baixar pacote (envio manual)</Btn>}
+            {c.anexos?.assinado && <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/anexos/assinado.pdf`, '_blank')}><FileText size={16} /> Baixar assinado</Btn>}
+            {c.status === 'assinado' && <Btn variant="secondary" onClick={onNovoAditivo}><Plus size={16} /> Novo aditivo</Btn>}
           </div>
         </Card>
 
