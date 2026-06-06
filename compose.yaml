@@ -34,6 +34,15 @@ services:
       # KYS/KYG — assinatura via Documenso (createDocument via S3, PDF pré-preenchido)
       - DOCUMENSO_URL=${DOCUMENSO_URL:-https://documenso.casahacker.org}
       - DOCUMENSO_API_TOKEN=${DOCUMENSO_API_TOKEN:-}
+      # Contratos (Tool E) — vínculo Jira (projeto JUR) + sincronização + assinatura
+      - JIRA_BASE_URL=${JIRA_BASE_URL:-}
+      - JIRA_AUTH_MODE=${JIRA_AUTH_MODE:-pat}
+      - JIRA_PAT=${JIRA_PAT:-}
+      - JIRA_EMAIL=${JIRA_EMAIL:-}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN:-}
+      - JIRA_PROJECT_KEY=${JIRA_PROJECT_KEY:-JUR}
+      - JIRA_SYNC=${JIRA_SYNC:-1}
+      - CONTRATOS_DIRETOR_EMAIL=${CONTRATOS_DIRETOR_EMAIL:-diretoria@casahacker.org}
     deploy:
       resources:
         limits:
