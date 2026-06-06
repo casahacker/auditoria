@@ -29,8 +29,8 @@ import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo, AnexoRef, Adi
 import { resumoDoContrato } from "./src/contratos/contratosTypes";
 import { verificarTc, tcStatus, tcSnapshot, TC_PATH } from "./src/contratos/termosCondicoes";
 import { enviarContratoParaAssinatura, documensoReady, statusDocumento, baixarAssinado, documensoHost } from "./src/contratos/documenso";
-import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
-import { validarContratoParaGeracao, somaParcelasCentavos } from "./src/contratos/validacoes";
+import { validarIssue, HTTP_POR_MOTIVO, comentarIssue, anexarIssue, jiraSyncLigado } from "./src/contratos/jiraClient";
+import { validarContratoParaGeracao, somaParcelasCentavos, fmtMoeda } from "./src/contratos/validacoes";
 import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/elegibilidade";
 import { extrairDados } from "./src/contratos/extracao";
 import { renderContratoHtml, renderContratoPdf, renderAditivoHtml, renderAditivoPdf } from "./src/contratos/render";
@@ -220,6 +220,15 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   ) => {
     if (!Array.isArray(c.trilha)) c.trilha = [];
     c.trilha.push({ ts: nowIso(), usuario, acao, ...(resumo ? { resumo } : {}), ...(meta ? { meta } : {}) });
+  };
+
+  // sincronização Jira best-effort (#140): comenta no marco; falha NÃO bloqueia.
+  const syncJira = async (c: Contrato, marco: string, texto: string) => {
+    if (!jiraSyncLigado() || !c.jira?.issueKey) return;
+    const r = await comentarIssue(c.jira.issueKey, texto);
+    c.jiraSync = [...(c.jiraSync || []).filter((s) => s.marco !== marco), { marco, ok: r.ok, ts: nowIso(), ...(r.erro ? { erro: r.erro } : {}) }];
+    appendTrilha(c, "sistema", r.ok ? "jira_sync" : "jira_sync_falhou", `${marco}: Jira ${r.ok ? "ok" : `falhou (${r.erro})`}`);
+    writeContrato(c);
   };
 
   // ── rate limit (padrão da suíte) ───────────────────────────────────────────────
@@ -566,12 +575,13 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
       contrato.updatedAt = now;
       appendTrilha(contrato, sessionUser(req), "gerou_pacote", `Pacote gerado (SHA-256 ${hashPacote.slice(0, 12)}…)`, { hashMinuta, hashPacote });
       writeContrato(contrato);
+      await syncJira(contrato, "minuta_gerada", `Minuta gerada — ${contrato.id} · ${contrato.dadosContratada?.razaoSocial || contrato.cnpj} · ${fmtMoeda(contrato.valorTotalCentavos || 0)} · pacote SHA-256 ${hashPacote.slice(0, 16)}`);
       res.json({ hashMinuta, hashPacote });
     } catch (e: any) { res.status(500).json({ error: `Falha ao gerar o pacote: ${e?.message || e}` }); }
   });
 
   // Aprovação humana obrigatória (HITL, guard-rail #4) — registra quem/quando/hash (#139).
-  app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, (req, res) => {
+  app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, async (req, res) => {
     const id = idParam(req, res); if (!id) return;
     const contrato = readContrato(id);
     if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
@@ -582,6 +592,7 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     contrato.status = "aprovado";
     appendTrilha(contrato, user, "aprovou", `Aprovação humana (HITL) — pacote SHA-256 ${hashPdf.slice(0, 12)}…`);
     contrato.updatedAt = nowIso(); writeContrato(contrato);
+    await syncJira(contrato, "aprovacao_interna", `Aprovação interna (HITL) por ${user} em ${contrato.aprovacao.ts} — pacote SHA-256 ${hashPdf.slice(0, 16)}`);
     res.json({ ok: true, aprovacao: contrato.aprovacao });
   });
 
@@ -613,6 +624,7 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
         contrato.status = "enviado_assinatura";
         appendTrilha(contrato, user, "enviou_assinatura", `Enviado ao Documenso (doc ${env.documentId})`, { documentId: env.documentId });
         contrato.updatedAt = now; writeContrato(contrato);
+        await syncJira(contrato, "envio_assinatura", `Enviado para assinatura via Documenso (doc ${env.documentId}) — ${contrato.id}`);
         return res.json({ ok: true, documenso: contrato.documenso });
       } catch (e: any) {
         contrato.documenso = { fallback: true, enviadoEm: now, host: documensoHost, status: `falha: ${e?.message || e}` };
@@ -626,6 +638,7 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     contrato.status = "enviado_assinatura";
     appendTrilha(contrato, user, "enviou_assinatura_manual", "Documenso não configurado — baixar pacote para envio manual.");
     contrato.updatedAt = now; writeContrato(contrato);
+    await syncJira(contrato, "envio_assinatura", `Pacote pronto para assinatura (envio manual) — ${contrato.id}`);
     res.json({ ok: true, fallback: true });
   });
 
@@ -644,8 +657,33 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
       contrato.documenso = { ...contrato.documenso, status: "COMPLETED", assinadoEm: nowIso() };
       appendTrilha(contrato, sessionUser(req), "assinatura_concluida", "Contrato assinado por todas as partes.");
       contrato.updatedAt = nowIso(); writeContrato(contrato);
+      await syncJira(contrato, "assinatura_concluida", `Contrato ${contrato.id} ASSINADO por todas as partes.`);
+      const assinadoPath = path.join(contratoDir(id), "assinado.pdf");
+      if (contrato.jira?.issueKey && jiraSyncLigado() && fs.existsSync(assinadoPath)) {
+        const ar = await anexarIssue(contrato.jira.issueKey, `${contrato.id}-assinado.pdf`, fs.readFileSync(assinadoPath));
+        contrato.jiraSync = [...(contrato.jiraSync || []).filter((s) => s.marco !== "anexo_assinado"), { marco: "anexo_assinado", ok: ar.ok, ts: nowIso(), ...(ar.erro ? { erro: ar.erro } : {}) }];
+        appendTrilha(contrato, "sistema", ar.ok ? "jira_anexo" : "jira_anexo_falhou", `Anexo do PDF assinado: Jira ${ar.ok ? "ok" : `falhou (${ar.erro})`}`);
+        writeContrato(contrato);
+      }
     }
     res.json({ status: st, contrato: contrato.status });
+  });
+
+  // Reenvio manual da sincronização Jira (#140) — best-effort, visível no detalhe.
+  app.post("/api/contratos/:id/jira/reenviar", writeLimiter, requireAuth, async (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+    if (!contrato.jira?.issueKey) return res.status(422).json({ error: "Contrato sem issue Jira vinculada." });
+    if (!jiraSyncLigado()) return res.status(422).json({ error: "Sincronização Jira desligada (JIRA_SYNC=0)." });
+    await syncJira(contrato, "reenvio", `Resumo do contrato ${contrato.id} — status ${contrato.status} · ${contrato.dadosContratada?.razaoSocial || contrato.cnpj} · ${fmtMoeda(contrato.valorTotalCentavos || 0)}`);
+    const assinadoPath = path.join(contratoDir(id), "assinado.pdf");
+    if (fs.existsSync(assinadoPath)) {
+      const ar = await anexarIssue(contrato.jira.issueKey, `${contrato.id}-assinado.pdf`, fs.readFileSync(assinadoPath));
+      appendTrilha(contrato, "sistema", ar.ok ? "jira_anexo" : "jira_anexo_falhou", `Reenvio do anexo: Jira ${ar.ok ? "ok" : `falhou (${ar.erro})`}`);
+      writeContrato(contrato);
+    }
+    res.json({ ok: true, jiraSync: contrato.jiraSync });
   });
   // ── Aditivos (#137) ───────────────────────────────────────────────────────────
   app.get("/api/contratos/:id/aditivos", requireAuth, (req, res) => {

@@ -510,7 +510,13 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
             {c.documenso?.fallback && <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/anexos/pacote.pdf`, '_blank')}><FileText size={16} /> Baixar pacote (envio manual)</Btn>}
             {c.anexos?.assinado && <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/anexos/assinado.pdf`, '_blank')}><FileText size={16} /> Baixar assinado</Btn>}
             {c.status === 'assinado' && <Btn variant="secondary" onClick={onNovoAditivo}><Plus size={16} /> Novo aditivo</Btn>}
+            {c.jira?.issueKey && <Btn variant="secondary" onClick={() => acao('POST', 'jira/reenviar', 'Reenviado ao Jira.')}>Reenviar ao Jira</Btn>}
           </div>
+          {c.jiraSync && c.jiraSync.length > 0 && (
+            <div className="mt-3 text-[12px] text-text-secondary">
+              Sincronização Jira: {c.jiraSync.map((s: any, i: number) => <span key={i} className="mr-2">{s.marco} <span className={s.ok ? 'text-success' : 'text-error'}>{s.ok ? '✓' : '✗'}</span></span>)}
+            </div>
+          )}
         </Card>
 
         {c.elegibilidadeSnapshot && (

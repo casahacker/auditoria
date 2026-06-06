@@ -139,6 +139,41 @@ export async function validarIssue(
   }
 }
 
+// ── Sincronização best-effort de eventos (#140) — nunca trava o fluxo ────────────
+export function jiraSyncLigado(): boolean {
+  return (process.env.JIRA_SYNC || "1") !== "0";
+}
+
+/** Comenta na issue (1 retry; respeita 429). NÃO executa transições de workflow. */
+export async function comentarIssue(issueKey: string, texto: string, opts: { fetchImpl?: typeof fetch } = {}): Promise<{ ok: boolean; erro?: string }> {
+  const c = cfg(); const f = opts.fetchImpl || fetch;
+  if (!jiraConfigured()) return { ok: false, erro: "Jira não configurado" };
+  const url = `${c.baseUrl}/rest/api/2/issue/${encodeURIComponent(issueKey)}/comment`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await f(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeader(c) }, body: JSON.stringify({ body: texto }), signal: AbortSignal.timeout(15000) });
+      if (r.status === 429 && attempt === 0) { const ra = Number(r.headers.get("retry-after")); await sleep((Number.isFinite(ra) && ra > 0 ? Math.min(ra, 60) : 2 ** attempt + 1) * 1000); continue; }
+      if (r.ok) return { ok: true };
+      if (attempt === 0 && r.status >= 500) { await sleep(2000); continue; }
+      return { ok: false, erro: `Jira respondeu ${r.status}` };
+    } catch (e: any) { if (attempt === 0) { await sleep(2000); continue; } return { ok: false, erro: e?.message || String(e) }; }
+  }
+  return { ok: false, erro: "falha" };
+}
+
+/** Anexa um arquivo à issue (X-Atlassian-Token: no-check). */
+export async function anexarIssue(issueKey: string, nome: string, buf: Buffer, opts: { fetchImpl?: typeof fetch } = {}): Promise<{ ok: boolean; erro?: string }> {
+  const c = cfg(); const f = opts.fetchImpl || fetch;
+  if (!jiraConfigured()) return { ok: false, erro: "Jira não configurado" };
+  const url = `${c.baseUrl}/rest/api/2/issue/${encodeURIComponent(issueKey)}/attachments`;
+  try {
+    const fd = new FormData();
+    fd.append("file", new Blob([new Uint8Array(buf)], { type: "application/pdf" }), nome);
+    const r = await f(url, { method: "POST", headers: { "X-Atlassian-Token": "no-check", ...authHeader(c) }, body: fd as any, signal: AbortSignal.timeout(30000) });
+    return r.ok ? { ok: true } : { ok: false, erro: `Jira respondeu ${r.status}` };
+  } catch (e: any) { return { ok: false, erro: e?.message || String(e) }; }
+}
+
 // HTTP status de saída por motivo de falha (usado pela rota).
 export const HTTP_POR_MOTIVO: Record<MotivoFalhaJira, number> = {
   nao_configurado: 503,

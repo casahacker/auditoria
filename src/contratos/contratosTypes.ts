@@ -265,6 +265,7 @@ export interface Contrato {
   // aprovação humana + assinatura (Fase 3 — #139)
   aprovacao?: { usuario: string; ts: string; hashPdf: string };
   documenso?: DocumensoVinculo;
+  jiraSync?: { marco: string; ok: boolean; ts: string; erro?: string }[]; // sincronização best-effort (#140)
 
   trilha: EventoTrilha[];
   createdAt: string;
