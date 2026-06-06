@@ -283,10 +283,16 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     const fCnpj = onlyDigits(req.query.cnpj);
     const fStatus = String(req.query.status || "");
     const fAno = String(req.query.ano || "");
+    const fVenc = Number(req.query.vencendo_em_dias) || 0; // #141
     let rows = listContratos();
     if (fCnpj) rows = rows.filter((c) => c.cnpj === fCnpj);
     if (fStatus) rows = rows.filter((c) => c.status === fStatus);
     if (fAno) rows = rows.filter((c) => c.id.includes(`-${fAno}-`));
+    if (fVenc > 0) {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const lim = new Date(Date.now() + fVenc * 86_400_000).toISOString().slice(0, 10);
+      rows = rows.filter((c) => { const fim = String(c.vigenciaFim || "").slice(0, 10); return fim && fim >= hoje && fim <= lim; });
+    }
     rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     res.json(rows.map(resumoDoContrato));
   });
@@ -303,6 +309,18 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
 
   // Status dos T&C imutáveis (#128) — antes de "/:id" p/ não casar com :id="tc".
   app.get("/api/contratos/tc", requireAuth, (_req, res) => res.json(tcStatus()));
+
+  // Alertas de vigência (#141) — contratos vencendo em ≤N dias (default 45).
+  app.get("/api/contratos/alertas/vigencia", requireAuth, (req, res) => {
+    const dias = Math.max(1, Math.min(365, Number(req.query.dias) || 45));
+    const hoje = new Date().toISOString().slice(0, 10);
+    const limite = new Date(Date.now() + dias * 86_400_000).toISOString().slice(0, 10);
+    const rows = listContratos().filter((c) => {
+      const fim = String(c.vigenciaFim || "").slice(0, 10);
+      return fim && fim >= hoje && fim <= limite && ["em_revisao", "aprovado", "enviado_assinatura", "assinado", "vigente"].includes(c.status);
+    }).sort((a, b) => String(a.vigenciaFim).localeCompare(String(b.vigenciaFim)));
+    res.json({ dias, contratos: rows.map(resumoDoContrato) });
+  });
 
   // Prefill dos dados da CONTRATADA (passo 1 do wizard) — merge Cockpit/KYS (#134).
   app.get("/api/contratos/fornecedor/:cnpj", requireAuth, (req, res) => {

@@ -75,7 +75,7 @@ export default function ContratosApp({ user, apiFetch, addToast, onHome, navigat
       </ToolSidebar>
 
       <div className="flex-1 ml-[256px] flex flex-col min-h-screen">
-        {section === 'lista' && <ListaView apiFetch={apiFetch} addToast={addToast} onAbrir={(id) => go('detalhe', id)} onNovo={() => go('novo')} />}
+        {section === 'lista' && <ListaView apiFetch={apiFetch} addToast={addToast} onAbrir={(id) => go('detalhe', id)} onNovo={() => go('novo')} onProrrogar={(id) => go('aditivo', id)} />}
         {section === 'novo' && <Wizard apiFetch={apiFetch} addToast={addToast} navigate={navigate} onConcluir={(id) => go('detalhe', id)} onCancelar={() => go('lista')} />}
         {section === 'detalhe' && <DetalheView id={detalheId} apiFetch={apiFetch} addToast={addToast} navigate={navigate} onVoltar={() => go('lista')} onNovoAditivo={() => go('aditivo', detalheId)} />}
         {section === 'aditivo' && <AditivoWizard contratoId={detalheId} apiFetch={apiFetch} addToast={addToast} onConcluir={() => go('detalhe', detalheId)} onCancelar={() => go('detalhe', detalheId)} />}
@@ -86,14 +86,16 @@ export default function ContratosApp({ user, apiFetch, addToast, onHome, navigat
 }
 
 // ── Lista (#135) ────────────────────────────────────────────────────────────────
-function ListaView({ apiFetch, addToast, onAbrir, onNovo }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onAbrir: (id: string) => void; onNovo: () => void }) {
+function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onAbrir: (id: string) => void; onNovo: () => void; onProrrogar: (id: string) => void }) {
   const [rows, setRows] = useState<ContratoResumo[] | null>(null);
   const [fStatus, setFStatus] = useState('');
   const [busca, setBusca] = useState('');
+  const [vencendo, setVencendo] = useState<ContratoResumo[]>([]);
 
   useEffect(() => { (async () => {
     try { const r = await apiFetch('/api/contratos'); setRows(r.ok ? await r.json() : []); }
     catch { setRows([]); addToast('error', 'Falha ao carregar contratos.'); }
+    try { const a = await apiFetch('/api/contratos/alertas/vigencia'); if (a.ok) setVencendo((await a.json()).contratos || []); } catch { /* */ }
   })(); }, []);
 
   const filtered = useMemo(() => (rows || []).filter((c) =>
@@ -105,6 +107,16 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo }: { apiFetch: Contrato
     <>
       <ToolHeader light="Registro de" accent="Contratos" right={<Btn onClick={onNovo}><Plus size={16} /> Novo contrato</Btn>} />
       <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-6xl w-full">
+        {vencendo.length > 0 && (
+          <div className="border border-warning/40 bg-warning/5 p-4 mb-5">
+            <div className="flex items-center gap-2 text-[14px] font-semibold text-warning mb-2"><Clock size={16} aria-hidden /> {vencendo.length} contrato(s) com vigência expirando em ≤45 dias</div>
+            <ul className="space-y-1.5">{vencendo.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+                <button onClick={() => onAbrir(c.id)} className="text-left hover:text-primary"><span className="font-mono text-[12px]">{c.id}</span> <span className="text-text-secondary">· {c.razaoSocial || maskCnpj(c.cnpj)} · vence {fmtData(c.vigenciaFim)}</span></button>
+                <Btn variant="secondary" size="sm" onClick={() => onProrrogar(c.id)}>Criar aditivo de prorrogação</Btn>
+              </li>))}</ul>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3 mb-5">
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por id, fornecedor, objeto, CNPJ ou issue…"
             className="h-10 flex-1 min-w-[260px] bg-field border border-line rounded-none px-3 text-[14px] text-text outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
