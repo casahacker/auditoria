@@ -22,6 +22,7 @@ import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo } from "./src/
 import { resumoDoContrato } from "./src/contratos/contratosTypes";
 import { verificarTc, tcStatus } from "./src/contratos/termosCondicoes";
 import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
+import { validarContratoParaGeracao } from "./src/contratos/validacoes";
 
 export interface ContratosCtx {
   DATA_DIR: string;
@@ -326,12 +327,34 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     res.sendFile(fp);
   });
 
+  // Validações determinísticas (#132) — usado pelo passo 4 do wizard (preview da minuta).
+  app.get("/api/contratos/:id/validar", requireAuth, (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const c = readContrato(id);
+    if (!c) return res.status(404).json({ error: "Contrato não encontrado" });
+    res.json(validarContratoParaGeracao(c));
+  });
+
+  // gate determinístico (#132): trava a geração se Σ parcelas ≠ total, datas incoerentes etc.
+  const exigirDeterministicoOk: RequestHandler = (req, res, next) => {
+    const id = sanitizeSegment(String((req.params as any).id || ""));
+    if (!id) return res.status(400).json({ error: "ID inválido" });
+    const c = readContrato(id);
+    if (!c) return res.status(404).json({ error: "Contrato não encontrado" });
+    const val = validarContratoParaGeracao(c);
+    if (!val.ok) return res.status(422).json({
+      error: "Contrato não passa nas validações determinísticas",
+      bloqueios: val.bloqueios, avisos: val.avisos, ...(val.sugestoes ? { sugestoes: val.sugestoes } : {}),
+    });
+    next();
+  };
+
   // ─────────── stubs das demais sub-issues (501 documentado) ───────────
   app.get("/api/contratos/:id/elegibilidade", requireAuth, naoImplementado("#130", "Gate de elegibilidade no servidor"));
   app.post("/api/contratos/:id/extrair", writeLimiter, requireAuth, naoImplementado("#131", "Extração de dados do TR/Proposta (IA)"));
-  app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
+  app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, exigirDeterministicoOk, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
   app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, naoImplementado("#139", "Aprovação humana (HITL)"));
-  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, naoImplementado("#139", "Envio para assinatura (Documenso)"));
+  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, naoImplementado("#139", "Envio para assinatura (Documenso)"));
   app.get("/api/contratos/:id/aditivos", requireAuth, naoImplementado("#137", "Lista de aditivos"));
   app.post("/api/contratos/:id/aditivos", writeLimiter, requireAuth, naoImplementado("#137", "Criação de termo aditivo"));
 }
