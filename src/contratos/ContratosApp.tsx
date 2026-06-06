@@ -27,7 +27,7 @@ export interface ContratosAppProps {
   initialView?: string; // segmento após /contratos (novo | <id> | ajuda)
 }
 
-type Section = 'lista' | 'novo' | 'detalhe' | 'ajuda';
+type Section = 'lista' | 'novo' | 'detalhe' | 'ajuda' | 'aditivo';
 const segs = () => window.location.pathname.split('/').filter(Boolean);
 
 // formatação local (não arrasta a lib `extenso` para o bundle do front)
@@ -49,14 +49,18 @@ const statusChip = (s: ContratoStatus) => { const m = STATUS[s] || STATUS.rascun
 const CRIT_TONE: Record<string, ChipTone> = { ok: 'success', alerta: 'warning', bloqueio: 'error' };
 
 export default function ContratosApp({ user, apiFetch, addToast, onHome, navigate, initialView }: ContratosAppProps) {
-  const initial = (initialView || segs()[1] || '').toLowerCase();
-  const [section, setSection] = useState<Section>(initial === 'novo' ? 'novo' : initial === 'ajuda' ? 'ajuda' : initial && initial.startsWith('ch-') ? 'detalhe' : 'lista');
+  const seg0 = segs();
+  const isAditivo = (seg0[2] || '').toLowerCase() === 'aditivo';
+  const initial = (initialView || seg0[1] || '').toLowerCase();
+  const [section, setSection] = useState<Section>(isAditivo ? 'aditivo' : initial === 'novo' ? 'novo' : initial === 'ajuda' ? 'ajuda' : initial && initial.startsWith('ch-') ? 'detalhe' : 'lista');
   const [detalheId, setDetalheId] = useState<string>(initial.startsWith('ch-') ? initial.toUpperCase() : '');
 
   const go = (s: Section, id?: string) => {
     setSection(s);
-    if (s === 'detalhe' && id) setDetalheId(id);
-    const path = s === 'lista' ? '/contratos' : s === 'novo' ? '/contratos/novo' : s === 'ajuda' ? '/contratos/ajuda' : `/contratos/${(id || detalheId).toLowerCase()}`;
+    if ((s === 'detalhe' || s === 'aditivo') && id) setDetalheId(id);
+    const alvo = (id || detalheId).toLowerCase();
+    const path = s === 'lista' ? '/contratos' : s === 'novo' ? '/contratos/novo' : s === 'ajuda' ? '/contratos/ajuda'
+      : s === 'aditivo' ? `/contratos/${alvo}/aditivo/novo` : `/contratos/${alvo}`;
     navigate?.(path);
   };
 
@@ -73,7 +77,8 @@ export default function ContratosApp({ user, apiFetch, addToast, onHome, navigat
       <div className="flex-1 ml-[256px] flex flex-col min-h-screen">
         {section === 'lista' && <ListaView apiFetch={apiFetch} addToast={addToast} onAbrir={(id) => go('detalhe', id)} onNovo={() => go('novo')} />}
         {section === 'novo' && <Wizard apiFetch={apiFetch} addToast={addToast} navigate={navigate} onConcluir={(id) => go('detalhe', id)} onCancelar={() => go('lista')} />}
-        {section === 'detalhe' && <DetalheView id={detalheId} apiFetch={apiFetch} addToast={addToast} navigate={navigate} onVoltar={() => go('lista')} onNovoAditivo={() => addToast('info', 'Aditivos chegam na Fase 2 (#137/#138).')} />}
+        {section === 'detalhe' && <DetalheView id={detalheId} apiFetch={apiFetch} addToast={addToast} navigate={navigate} onVoltar={() => go('lista')} onNovoAditivo={() => go('aditivo', detalheId)} />}
+        {section === 'aditivo' && <AditivoWizard contratoId={detalheId} apiFetch={apiFetch} addToast={addToast} onConcluir={() => go('detalhe', detalheId)} onCancelar={() => go('detalhe', detalheId)} />}
         {section === 'ajuda' && <AjudaView />}
       </div>
     </div>
@@ -449,9 +454,11 @@ function CriterioRow({ c, cnpj, contratoId, apiFetch, addToast, onReavaliar, nav
 function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo }: { id: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; navigate?: (p: string) => void; onVoltar: () => void; onNovoAditivo: () => void }) {
   const [c, setC] = useState<Contrato | null>(null);
   const [erro, setErro] = useState(false);
+  const [aditivos, setAditivos] = useState<any[]>([]);
   useEffect(() => { (async () => {
     try { const r = await apiFetch(`/api/contratos/${id}`); if (r.ok) setC(await r.json()); else setErro(true); }
     catch { setErro(true); }
+    try { const a = await apiFetch(`/api/contratos/${id}/aditivos`); if (a.ok) setAditivos(await a.json()); } catch { /* */ }
   })(); }, [id]);
 
   if (erro) return <main className="p-10"><EmptyState icon={FileSignature} title="Contrato não encontrado" action={<Btn onClick={onVoltar}>Voltar</Btn>} /></main>;
@@ -485,6 +492,19 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
         )}
 
         <Card className="p-5">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-[14px] font-semibold flex items-center gap-2"><ListChecks size={15} /> Termos aditivos {aditivos.length > 0 && <span className="text-[12px] text-text-secondary font-normal">({aditivos.length})</span>}</h3>
+            {c.status === 'assinado' && <Btn variant="secondary" size="sm" onClick={onNovoAditivo}><Plus size={14} /> Novo aditivo</Btn>}
+          </div>
+          {aditivos.length === 0 ? <p className="text-[13px] text-text-secondary">Nenhum aditivo.{c.status !== 'assinado' && ' Aditivos só sobre contrato assinado.'}</p>
+            : <ul className="space-y-2">{aditivos.map((a: any) => (
+                <li key={a.id} className="flex items-center justify-between gap-2 text-[13px] border-b border-line pb-2 last:border-0">
+                  <div><span className="font-mono text-[12px]">{a.id}</span> <span className="text-text-secondary">· {a.numeroOrdinal}º · {a.tipo}</span>{a.variacaoPercentual != null && <span className="text-text-secondary"> · {a.variacaoPercentual > 0 ? '+' : ''}{a.variacaoPercentual}%</span>}</div>
+                  <a href={`/api/contratos/${id}/aditivos/${a.id}/minuta?formato=pdf`} target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-1 text-[12px]"><FileText size={12} /> minuta</a>
+                </li>))}</ul>}
+        </Card>
+
+        <Card className="p-5">
           <h3 className="text-[14px] font-semibold mb-3 flex items-center gap-2"><Clock size={15} /> Linha do tempo</h3>
           <ol className="space-y-2">
             {(c.trilha || []).slice().reverse().map((e, i) => (
@@ -499,6 +519,94 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
 
 function Info({ label, value }: { label: string; value: string }) {
   return <div><div className="text-[12px] text-text-secondary">{label}</div><div className="text-text">{value}</div></div>;
+}
+
+// ── Wizard de aditivo (#138) ─────────────────────────────────────────────────────
+const TIPOS_ADITIVO = [
+  { v: 'prorrogacao', label: 'Prorrogação de vigência' },
+  { v: 'valor_parcelas', label: 'Valor / parcelas' },
+  { v: 'escopo', label: 'Escopo (novo TR)' },
+  { v: 'dados_cadastrais', label: 'Dados cadastrais' },
+];
+function AditivoWizard({ contratoId, apiFetch, addToast, onConcluir, onCancelar }: { contratoId: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onConcluir: () => void; onCancelar: () => void }) {
+  const [c, setC] = useState<Contrato | null>(null);
+  const [tipo, setTipo] = useState('prorrogacao');
+  const [busy, setBusy] = useState(false);
+  const [vigNova, setVigNova] = useState('');
+  const [valorNovo, setValorNovo] = useState('');
+  const [nParcelas, setNParcelas] = useState('1');
+  const [escopo, setEscopo] = useState('');
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [descricao, setDescricao] = useState('');
+  const [criado, setCriado] = useState<any | null>(null);
+  const [minuta, setMinuta] = useState('');
+
+  useEffect(() => { (async () => { try { const r = await apiFetch(`/api/contratos/${contratoId}`); if (r.ok) setC(await r.json()); } catch { /* */ } })(); }, [contratoId]);
+
+  const submeter = async () => {
+    setBusy(true);
+    try {
+      const payload: any = { tipo, ...(descricao ? { descricao } : {}) };
+      if (tipo === 'prorrogacao') { if (!vigNova) { addToast('error', 'Informe a nova data de fim.'); return; } payload.vigenciaNovaFim = vigNova; }
+      if (tipo === 'valor_parcelas') {
+        const v = Math.round(parseFloat(valorNovo.replace(',', '.')) * 100) || 0; const n = Math.max(1, parseInt(nParcelas, 10) || 1);
+        if (!v) { addToast('error', 'Informe o novo valor.'); return; }
+        payload.valorNovoCentavos = v;
+        const baseP = Math.floor(v / n); const resto = v - baseP * n;
+        payload.parcelasNovas = Array.from({ length: n }, (_, i) => ({ numero: i + 1, valorCentavos: baseP + (i === n - 1 ? resto : 0), vencimento: null }));
+      }
+      if (tipo === 'escopo') { if (!escopo && !arquivo) { addToast('error', 'Informe o novo escopo ou anexe o novo TR.'); return; } payload.escopoNovo = escopo; }
+      if (tipo === 'dados_cadastrais') { payload.dadosCadastraisNovos = { observacoes: descricao }; }
+
+      let r: Response;
+      if (tipo === 'escopo' && arquivo) { const fd = new FormData(); fd.append('payload', JSON.stringify(payload)); fd.append('file', arquivo); r = await apiFetch(`/api/contratos/${contratoId}/aditivos`, { method: 'POST', body: fd }); }
+      else r = await apiFetch(`/api/contratos/${contratoId}/aditivos`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) { addToast('error', (await r.json().catch(() => ({})))?.error || 'Falha ao criar o aditivo.'); return; }
+      const ad = await r.json(); setCriado(ad);
+      const m = await apiFetch(`/api/contratos/${contratoId}/aditivos/${ad.id}/minuta`); if (m.ok) setMinuta((await m.json()).html || '');
+      addToast('success', `Aditivo ${ad.id} criado.`);
+    } catch { addToast('error', 'Falha ao criar o aditivo.'); } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <ToolHeader light="Novo" accent="aditivo" right={<Btn variant="secondary" onClick={onCancelar}>Voltar ao contrato</Btn>} />
+      <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-3xl w-full space-y-5">
+        {c && <div className="text-[13px] text-text-secondary">Contrato <strong className="text-text font-mono">{c.id}</strong> — {c.dadosContratada?.razaoSocial} · {STATUS[c.status]?.label}{c.status !== 'assinado' && <span className="text-warning"> (aditivos só sobre contrato assinado)</span>}</div>}
+        {criado ? (
+          <Card className="p-6 space-y-4">
+            <div className="flex items-center gap-2 text-[14px]"><Check size={16} className="text-success" /> Aditivo <strong className="font-mono">{criado.id}</strong> criado ({criado.numeroOrdinal}º).</div>
+            <div className="border border-line bg-white max-h-[440px] overflow-y-auto p-6" dangerouslySetInnerHTML={{ __html: minuta }} />
+            <div className="flex gap-3">
+              <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${contratoId}/aditivos/${criado.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Baixar PDF</Btn>
+              <Btn onClick={onConcluir}>Concluir</Btn>
+            </div>
+          </Card>
+        ) : (
+          <Card className="p-6 space-y-4">
+            <Campo label="Tipo de aditivo">
+              <div className="flex flex-wrap gap-2">{TIPOS_ADITIVO.map((t) => <button key={t.v} onClick={() => setTipo(t.v)} className={cn('h-9 px-3 text-[13px] border', tipo === t.v ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{t.label}</button>)}</div>
+            </Campo>
+            {tipo === 'prorrogacao' && <Campo label="Nova data de fim da vigência"><input type="date" value={vigNova} onChange={(e) => setVigNova(e.target.value)} className="h-10 bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>}
+            {tipo === 'valor_parcelas' && <div className="grid sm:grid-cols-2 gap-4">
+              <Campo label="Novo valor total (R$)"><input value={valorNovo} onChange={(e) => setValorNovo(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>
+              <Campo label="Nº de parcelas"><input type="number" min={1} value={nParcelas} onChange={(e) => setNParcelas(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>
+            </div>}
+            {tipo === 'escopo' && <>
+              <Campo label="Nova descrição do objeto"><textarea value={escopo} onChange={(e) => setEscopo(e.target.value)} rows={3} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary" /></Campo>
+              <Campo label="Novo Termo de Referência (PDF/DOCX) — roda o radar trabalhista"><input type="file" accept=".pdf,.docx" onChange={(e) => setArquivo(e.target.files?.[0] || null)} className="text-[13px]" /></Campo>
+            </>}
+            {tipo === 'dados_cadastrais' && <Campo label="Dados a atualizar"><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary" /></Campo>}
+            {tipo !== 'dados_cadastrais' && <Campo label="Observações (opcional)"><input value={descricao} onChange={(e) => setDescricao(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>}
+            <div className="flex justify-between pt-2">
+              <Btn variant="ghost" onClick={onCancelar}>Cancelar</Btn>
+              <Btn onClick={submeter} disabled={busy || c?.status !== 'assinado'}>{busy ? <Loader2 size={16} className="animate-spin" /> : null} Gerar aditivo</Btn>
+            </div>
+          </Card>
+        )}
+      </main>
+    </>
+  );
 }
 
 function AjudaView() {
