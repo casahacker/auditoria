@@ -19,6 +19,7 @@ COPY src/contratos/contratosTypes.ts ./src/contratos/contratosTypes.ts
 COPY src/contratos/termosCondicoes.ts ./src/contratos/termosCondicoes.ts
 COPY src/contratos/jiraClient.ts ./src/contratos/jiraClient.ts
 COPY src/contratos/validacoes.ts ./src/contratos/validacoes.ts
+COPY src/contratos/elegibilidade.ts ./src/contratos/elegibilidade.ts
 COPY assets ./assets
 # #103: commit da plataforma p/ o rodapé/memória do relatório (vazio se não informado no build).
 ARG APP_COMMIT=""

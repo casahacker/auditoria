@@ -80,6 +80,13 @@ export interface ElegibilidadeSnapshot {
   elegivel: boolean;             // derivado: nenhum critério bloqueante ativo (ou todos justificados)
   criterios: CriterioElegibilidade[];
 }
+// prosseguimento justificado (critério Alerta da diligência) — fica na trilha (#130)
+export interface JustificativaElegibilidade {
+  criterioId: string;
+  justificativa: string;
+  aprovador: string;
+  ts: string;
+}
 
 // ── Extração da IA (Seção 8.2 / #131) — só EXTRAI; cada campo cita o trecho-fonte ─
 export interface CampoExtraido<T> {
@@ -222,6 +229,7 @@ export interface Contrato {
 
   dadosContratada?: DadosContratada;       // merge determinístico (Cockpit/KYS)
   elegibilidadeSnapshot?: ElegibilidadeSnapshot;
+  elegibilidadeJustificativas?: JustificativaElegibilidade[];
   extracao?: ExtracaoIA;
 
   // campos finais do contrato (após conferência/edição humana)

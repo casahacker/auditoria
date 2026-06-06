@@ -23,6 +23,7 @@ import { resumoDoContrato } from "./src/contratos/contratosTypes";
 import { verificarTc, tcStatus } from "./src/contratos/termosCondicoes";
 import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
 import { validarContratoParaGeracao } from "./src/contratos/validacoes";
+import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/elegibilidade";
 
 export interface ContratosCtx {
   DATA_DIR: string;
@@ -349,12 +350,63 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     next();
   };
 
+  // gate de elegibilidade (#130): reavalia SEMPRE no servidor; sem elegibilidade não avança.
+  const exigirElegivel: RequestHandler = async (req, res, next) => {
+    const id = sanitizeSegment(String((req.params as any).id || ""));
+    if (!id) return res.status(400).json({ error: "ID inválido" });
+    const c = readContrato(id);
+    if (!c) return res.status(404).json({ error: "Contrato não encontrado" });
+    try {
+      const snap = await avaliarElegibilidade(DATA_DIR, c.cnpj, c.objeto || c.extracao?.objeto?.valor || undefined, c.valorTotalCentavos);
+      aplicarJustificativas(snap, c.elegibilidadeJustificativas);
+      c.elegibilidadeSnapshot = snap; c.updatedAt = nowIso(); writeContrato(c);
+      if (!snap.elegivel) return res.status(422).json({ error: "Fornecedor inelegível para contratação", elegibilidade: snap });
+      next();
+    } catch (e: any) {
+      res.status(502).json({ error: `Falha ao avaliar elegibilidade: ${e?.message || e}` });
+    }
+  };
+
+  // Elegibilidade (#130): reavalia no servidor e congela o snapshot no contrato (Seção 7).
+  app.get("/api/contratos/:id/elegibilidade", requireAuth, async (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const c = readContrato(id);
+    if (!c) return res.status(404).json({ error: "Contrato não encontrado" });
+    try {
+      const snap = await avaliarElegibilidade(DATA_DIR, c.cnpj, c.objeto || c.extracao?.objeto?.valor || undefined, c.valorTotalCentavos);
+      aplicarJustificativas(snap, c.elegibilidadeJustificativas);
+      c.elegibilidadeSnapshot = snap; c.updatedAt = nowIso();
+      appendTrilha(c, sessionUser(req), "avaliou_elegibilidade", `Elegibilidade: ${snap.elegivel ? "ELEGÍVEL" : "INELEGÍVEL"}`, { elegivel: snap.elegivel });
+      writeContrato(c);
+      res.json(snap);
+    } catch (e: any) {
+      res.status(502).json({ error: `Falha ao avaliar elegibilidade: ${e?.message || e}` });
+    }
+  });
+
+  // Prosseguimento justificado do critério Alerta (diligência) — registra na trilha (#130).
+  app.post("/api/contratos/:id/elegibilidade/justificar", writeLimiter, requireAuth, (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const c = readContrato(id);
+    if (!c) return res.status(404).json({ error: "Contrato não encontrado" });
+    const criterioId = String(req.body?.criterioId || "").trim();
+    const justificativa = String(req.body?.justificativa || "").trim();
+    if (!criterioId || justificativa.length < 10) return res.status(400).json({ error: "Informe o critério e uma justificativa (mínimo 10 caracteres)." });
+    const aprovador = sessionUser(req);
+    c.elegibilidadeJustificativas = [
+      ...(c.elegibilidadeJustificativas || []).filter((j) => j.criterioId !== criterioId),
+      { criterioId, justificativa, aprovador, ts: nowIso() },
+    ];
+    appendTrilha(c, aprovador, "justificou_elegibilidade", `Prosseguimento justificado: ${criterioId}`, { criterioId, justificativa });
+    c.updatedAt = nowIso(); writeContrato(c);
+    res.json({ ok: true, justificativas: c.elegibilidadeJustificativas });
+  });
+
   // ─────────── stubs das demais sub-issues (501 documentado) ───────────
-  app.get("/api/contratos/:id/elegibilidade", requireAuth, naoImplementado("#130", "Gate de elegibilidade no servidor"));
-  app.post("/api/contratos/:id/extrair", writeLimiter, requireAuth, naoImplementado("#131", "Extração de dados do TR/Proposta (IA)"));
-  app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, exigirDeterministicoOk, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
+  app.post("/api/contratos/:id/extrair", writeLimiter, requireAuth, exigirElegivel, naoImplementado("#131", "Extração de dados do TR/Proposta (IA)"));
+  app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
   app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, naoImplementado("#139", "Aprovação humana (HITL)"));
-  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, naoImplementado("#139", "Envio para assinatura (Documenso)"));
+  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#139", "Envio para assinatura (Documenso)"));
   app.get("/api/contratos/:id/aditivos", requireAuth, naoImplementado("#137", "Lista de aditivos"));
   app.post("/api/contratos/:id/aditivos", writeLimiter, requireAuth, naoImplementado("#137", "Criação de termo aditivo"));
 }
