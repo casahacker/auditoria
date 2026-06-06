@@ -17,6 +17,7 @@ COPY server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts kycPdf.ts contrato
 COPY src/kyc/kycTypes.ts ./src/kyc/kycTypes.ts
 COPY src/contratos/contratosTypes.ts ./src/contratos/contratosTypes.ts
 COPY src/contratos/termosCondicoes.ts ./src/contratos/termosCondicoes.ts
+COPY src/contratos/jiraClient.ts ./src/contratos/jiraClient.ts
 COPY assets ./assets
 # #103: commit da plataforma p/ o rodapé/memória do relatório (vazio se não informado no build).
 ARG APP_COMMIT=""

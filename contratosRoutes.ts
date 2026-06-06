@@ -18,9 +18,10 @@ import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { z } from "zod";
-import type { Contrato, ContratoStatus, EventoTrilha } from "./src/contratos/contratosTypes";
+import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo } from "./src/contratos/contratosTypes";
 import { resumoDoContrato } from "./src/contratos/contratosTypes";
 import { verificarTc, tcStatus } from "./src/contratos/termosCondicoes";
+import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
 
 export interface ContratosCtx {
   DATA_DIR: string;
@@ -101,6 +102,26 @@ const zodError = (e: any) => ({
   error: "Dados inválidos",
   detalhes: e?.issues?.map((i: any) => ({ campo: i.path.join(".") || "(raiz)", msg: i.message })) || [String(e?.message || e)],
 });
+
+// Resolve o vínculo Jira validando a issue NO SERVIDOR (gate — não confia no front).
+// Sem integração configurada (dev/local) aceita o vínculo como "nao_validado": não é
+// bypass em produção, onde o Jira está sempre configurado e a issue inválida bloqueia.
+// Sucesso → { jira }; falha → { erroStatus, erroBody } (para a rota responder direto).
+async function resolverVinculoJira(
+  key: string,
+): Promise<{ jira?: JiraVinculo; erroStatus?: number; erroBody?: any }> {
+  const v = await validarIssue(key);
+  if (v.ok && v.issue) {
+    return { jira: { issueKey: v.issue.key, resumo: v.issue.summary, status: v.issue.status, categoriaStatus: v.issue.statusCategory, syncStatus: "validado" } };
+  }
+  if (v.motivo === "nao_configurado") {
+    return { jira: { issueKey: key.trim().toUpperCase(), syncStatus: "nao_validado" } };
+  }
+  return {
+    erroStatus: HTTP_POR_MOTIVO[v.motivo || "rede"] || 502,
+    erroBody: { error: v.erro, motivo: v.motivo, ...(v.issue ? { jira: v.issue } : {}) },
+  };
+}
 
 export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   const { DATA_DIR, requireAuth, sanitizeSegment } = ctx;
@@ -192,17 +213,25 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   // ─────────────────────────── CRUD da fundação ───────────────────────────────────
 
   // Criar rascunho (passo 1 do wizard) — Seção 13.
-  app.post("/api/contratos", writeLimiter, requireAuth, (req, res) => {
+  app.post("/api/contratos", writeLimiter, requireAuth, async (req, res) => {
     let body: z.infer<typeof createSchema>;
     try { body = createSchema.parse(req.body); }
     catch (e) { return res.status(400).json(zodError(e)); }
+
+    // Se já vier vinculado a uma issue JUR, valida no servidor (#133) antes de criar.
+    let jira: JiraVinculo | undefined;
+    if (body.jiraIssueKey) {
+      const r = await resolverVinculoJira(body.jiraIssueKey);
+      if (r.erroBody) return res.status(r.erroStatus || 502).json(r.erroBody);
+      jira = r.jira;
+    }
 
     const id = allocId("CT");
     const now = nowIso();
     const user = sessionUser(req);
     const contrato: Contrato = {
       id, status: "rascunho", cnpj: body.cnpj,
-      ...(body.jiraIssueKey ? { jira: { issueKey: body.jiraIssueKey.toUpperCase() } } : {}),
+      ...(jira ? { jira } : {}),
       ...(body.ordemCompra ? { ordemCompra: body.ordemCompra } : {}),
       ...(body.tipoDocumentoEntrada ? { tipoDocumentoEntrada: body.tipoDocumentoEntrada } : {}),
       aditivos: [], trilha: [], createdAt: now, createdBy: user, updatedAt: now,
@@ -226,7 +255,14 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   });
 
   // Validação da issue Jira (#133) — registrar antes de "/:id" para não colidir.
-  app.get("/api/contratos/jira/:issueKey", requireAuth, naoImplementado("#133", "Validação da issue Jira (JUR)"));
+  // Passo 2 do wizard: confere existência + projeto e devolve summary/status. Categoria
+  // "Done" vem com alertaDone para a ciência obrigatória no front.
+  app.get("/api/contratos/jira/:issueKey", requireAuth, async (req, res) => {
+    const v = await validarIssue(String(req.params.issueKey || ""));
+    if (v.ok && v.issue) return res.json({ ok: true, issue: v.issue, alertaDone: v.issue.isDone });
+    const status = HTTP_POR_MOTIVO[v.motivo || "rede"] || 502;
+    res.status(status).json({ ok: false, error: v.erro, motivo: v.motivo, ...(v.issue ? { issue: v.issue } : {}) });
+  });
 
   // Status dos T&C imutáveis (#128) — antes de "/:id" p/ não casar com :id="tc".
   app.get("/api/contratos/tc", requireAuth, (_req, res) => res.json(tcStatus()));
@@ -240,7 +276,7 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   });
 
   // Editar campos do operador (conferência/edição do wizard) — trilha registra o diff.
-  app.patch("/api/contratos/:id", writeLimiter, requireAuth, (req, res) => {
+  app.patch("/api/contratos/:id", writeLimiter, requireAuth, async (req, res) => {
     const id = idParam(req, res); if (!id) return;
     const contrato = readContrato(id);
     if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
@@ -252,12 +288,13 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     const user = sessionUser(req);
     const changed: string[] = [];
 
-    // jiraIssueKey é uma string no payload, mas mora em contrato.jira.issueKey.
+    // jiraIssueKey é uma string no payload, mas mora em contrato.jira; valida no servidor (#133).
     if (parsed.jiraIssueKey !== undefined) {
       const key = parsed.jiraIssueKey.toUpperCase();
       if (contrato.jira?.issueKey !== key) {
-        contrato.jira = { ...(contrato.jira || {}), issueKey: key };
-        changed.push("jira.issueKey");
+        const r = await resolverVinculoJira(key);
+        if (r.erroBody) return res.status(r.erroStatus || 502).json(r.erroBody);
+        if (r.jira) { contrato.jira = r.jira; changed.push("jira"); }
       }
       delete (parsed as any).jiraIssueKey;
     }
