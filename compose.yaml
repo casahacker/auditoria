@@ -42,7 +42,10 @@ services:
       - JIRA_API_TOKEN=${JIRA_API_TOKEN:-}
       - JIRA_PROJECT_KEY=${JIRA_PROJECT_KEY:-JUR}
       - JIRA_SYNC=${JIRA_SYNC:-1}
-      - CONTRATOS_DIRETOR_EMAIL=${CONTRATOS_DIRETOR_EMAIL:-diretoria@casahacker.org}
+      # Documenso — ordem do envelope: aprovadores → Diretor (Casa Hacker) → Contratada → CC jurídico
+      - CONTRATOS_APROVADORES=${CONTRATOS_APROVADORES:-melissa.suda@casahacker.org,everton.justo@casahacker.org}
+      - CONTRATOS_DIRETOR_EMAIL=${CONTRATOS_DIRETOR_EMAIL:-geraldo@casahacker.org}
+      - CONTRATOS_CC_EMAIL=${CONTRATOS_CC_EMAIL:-juridico@casahacker.org}
     deploy:
       resources:
         limits:

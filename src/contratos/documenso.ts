@@ -12,15 +12,20 @@
  *
  * Módulo SERVER-ONLY.
  */
-const DOCUMENSO_URL = (process.env.DOCUMENSO_URL || "https://documenso.casahacker.org").replace(/\/$/, "");
-const DOCUMENSO_TOKEN = process.env.DOCUMENSO_API_TOKEN || "";
+// Lê o ambiente preguiçosamente (igual ao jiraClient) — robusto e testável.
+const cfg = () => ({
+  url: (process.env.DOCUMENSO_URL || "https://documenso.casahacker.org").replace(/\/$/, ""),
+  token: process.env.DOCUMENSO_API_TOKEN || "",
+});
 
-export const documensoReady = (): boolean => !!DOCUMENSO_TOKEN;
+export const documensoReady = (): boolean => !!cfg().token;
+export const documensoHost = (): string => cfg().url;
 
 async function dso(method: string, urlPath: string, body?: any): Promise<any> {
-  const r = await fetch(`${DOCUMENSO_URL}/api/v1${urlPath}`, {
+  const c = cfg();
+  const r = await fetch(`${c.url}/api/v1${urlPath}`, {
     method,
-    headers: { Authorization: DOCUMENSO_TOKEN, "Content-Type": "application/json", Accept: "application/json" },
+    headers: { Authorization: c.token, "Content-Type": "application/json", Accept: "application/json" },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(30000),
   });
@@ -36,25 +41,33 @@ export interface EnvioContrato {
 }
 
 /**
- * Cria o documento no Documenso a partir do PDF do pacote, com 2 signatários + CC,
- * adiciona um campo SIGNATURE para cada signatário e dispara o envio (e-mail).
- * Os campos são posicionados na faixa inferior da última página (2 colunas) — onde o
- * render desenha o bloco de assinaturas.
+ * Cria o documento no Documenso com a ORDEM fixa do processo (assinatura SEQUENTIAL):
+ *   APROVADORES (Melissa, Everton) → SIGNER Casa Hacker (Diretor) → SIGNER Contratada → CC (jurídico).
+ * Faz upload do PDF do pacote, adiciona um campo SIGNATURE para cada SIGNER (faixa
+ * inferior da última página, 2 colunas: Casa Hacker à esquerda, Contratada à direita) e
+ * dispara o envio. Aprovadores e CC não recebem campo de assinatura.
  */
 export async function enviarContratoParaAssinatura(opts: {
   titulo: string;
   pdf: Buffer;
   totalPaginas: number;
-  contratada: SignatarioContrato;
-  diretor: SignatarioContrato;
-  cc?: SignatarioContrato;
+  aprovadores: SignatarioContrato[];   // role APPROVER, na ordem
+  signatarios: SignatarioContrato[];   // role SIGNER, na ordem (Casa Hacker/Diretor, depois Contratada)
+  cc?: SignatarioContrato;             // role CC
+  externalId?: string;
 }): Promise<EnvioContrato> {
+  let ordem = 1;
   const recipients = [
-    { name: opts.contratada.name, email: opts.contratada.email, role: "SIGNER" },
-    { name: opts.diretor.name, email: opts.diretor.email, role: "SIGNER" },
-    ...(opts.cc ? [{ name: opts.cc.name, email: opts.cc.email, role: "CC" }] : []),
+    ...opts.aprovadores.map((a) => ({ name: a.name, email: a.email, role: "APPROVER", signingOrder: ordem++ })),
+    ...opts.signatarios.map((s) => ({ name: s.name, email: s.email, role: "SIGNER", signingOrder: ordem++ })),
+    ...(opts.cc ? [{ name: opts.cc.name, email: opts.cc.email, role: "CC", signingOrder: ordem++ }] : []),
   ];
-  const gen = await dso("POST", "/documents", { title: opts.titulo, recipients });
+  const gen = await dso("POST", "/documents", {
+    title: opts.titulo,
+    ...(opts.externalId ? { externalId: opts.externalId } : {}),
+    recipients,
+    meta: { signingOrder: "SEQUENTIAL", subject: "Contrato de Prestação de Serviços — Casa Hacker", message: "Contrato para aprovação e assinatura eletrônica." },
+  });
   const documentId: number = gen.documentId ?? gen.id;
   const uploadUrl: string = gen.uploadUrl;
   const recps: any[] = gen.recipients || [];
@@ -63,18 +76,17 @@ export async function enviarContratoParaAssinatura(opts: {
   const up = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: opts.pdf, signal: AbortSignal.timeout(60000) });
   if (!up.ok) throw new Error(`Falha no upload do PDF ao S3 (${up.status})`);
 
-  // campo SIGNATURE para cada SIGNER, na faixa inferior da última página (2 colunas).
+  // campo SIGNATURE só para os SIGNER, na faixa inferior da última página.
+  // 1º signatário (Casa Hacker/Diretor) → coluna esquerda; 2º (Contratada) → direita.
+  const signerEmails = opts.signatarios.map((s) => s.email.toLowerCase());
   const signers = recps.filter((r) => /SIGNER/i.test(r.role));
   const pageNumber = Math.max(1, opts.totalPaginas);
-  const posPorEmail: Record<string, { x: number; width: number }> = {
-    [opts.contratada.email.toLowerCase()]: { x: 55, width: 35 },
-    [opts.diretor.email.toLowerCase()]: { x: 10, width: 35 },
-  };
   for (const s of signers) {
-    const pos = posPorEmail[String(s.email || "").toLowerCase()] || { x: 10, width: 35 };
+    const idx = signerEmails.indexOf(String(s.email || "").toLowerCase());
+    const x = idx <= 0 ? 10 : 55; // esquerda (Casa Hacker) / direita (Contratada)
     await dso("POST", `/documents/${documentId}/fields`, {
       recipientId: s.recipientId ?? s.id, type: "SIGNATURE",
-      pageNumber, pageX: pos.x, pageY: 84, pageWidth: pos.width, pageHeight: 6,
+      pageNumber, pageX: x, pageY: 84, pageWidth: 35, pageHeight: 6,
     });
   }
   await dso("POST", `/documents/${documentId}/send`, { sendEmail: true });
@@ -97,5 +109,3 @@ export async function baixarAssinado(documentId: number): Promise<Buffer | null>
     return Buffer.from(await r.arrayBuffer());
   } catch { return null; }
 }
-
-export const documensoHost = DOCUMENSO_URL;

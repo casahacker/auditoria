@@ -55,6 +55,12 @@ function fmtCnpj(d?: string): string {
   return d || "";
 }
 
+// Ordem fixa do envelope Documenso (#139): aprovadores → Diretor (Casa Hacker) → Contratada → CC jurídico.
+const nomeDeEmail = (e: string): string => e.split("@")[0].split(/[._-]/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || e;
+const aprovadoresContrato = (): { name: string; email: string }[] =>
+  (process.env.CONTRATOS_APROVADORES || "melissa.suda@casahacker.org,everton.justo@casahacker.org")
+    .split(",").map((e) => e.trim()).filter(Boolean).map((e) => ({ name: nomeDeEmail(e), email: e }));
+
 // ── validação de payloads (zod) ──────────────────────────────────────────────────
 const cnpjField = z.string().transform(onlyDigits).refine((v) => v.length === 14, "CNPJ deve ter 14 dígitos");
 // Formato JUR-<número>; a existência/projeto da issue é validada em #133.
@@ -615,26 +621,29 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
         const totalPaginas = parseInt(stdout.match(/Pages:\s+(\d+)/)?.[1] || "1", 10);
         const env = await enviarContratoParaAssinatura({
           titulo: `Contrato ${contrato.id} — ${contrato.dadosContratada?.razaoSocial || contrato.cnpj}`,
-          pdf: pacote, totalPaginas,
-          contratada: { name: contrato.dadosContratada?.representante?.nome || contrato.dadosContratada?.razaoSocial || "CONTRATADA", email: repEmail },
-          diretor: { name: "Geraldo dos Santos Barros", email: process.env.CONTRATOS_DIRETOR_EMAIL || "diretoria@casahacker.org" },
-          cc: { name: user, email: user },
+          pdf: pacote, totalPaginas, externalId: contrato.id,
+          aprovadores: aprovadoresContrato(),
+          signatarios: [
+            { name: "Geraldo dos Santos Barros", email: process.env.CONTRATOS_DIRETOR_EMAIL || "geraldo@casahacker.org" },
+            { name: contrato.dadosContratada?.representante?.nome || contrato.dadosContratada?.razaoSocial || "CONTRATADA", email: repEmail },
+          ],
+          cc: { name: "Jurídico — Casa Hacker", email: process.env.CONTRATOS_CC_EMAIL || "juridico@casahacker.org" },
         });
-        contrato.documenso = { documentId: env.documentId, status: "PENDING", enviadoEm: now, host: documensoHost };
+        contrato.documenso = { documentId: env.documentId, status: "PENDING", enviadoEm: now, host: documensoHost() };
         contrato.status = "enviado_assinatura";
         appendTrilha(contrato, user, "enviou_assinatura", `Enviado ao Documenso (doc ${env.documentId})`, { documentId: env.documentId });
         contrato.updatedAt = now; writeContrato(contrato);
         await syncJira(contrato, "envio_assinatura", `Enviado para assinatura via Documenso (doc ${env.documentId}) — ${contrato.id}`);
         return res.json({ ok: true, documenso: contrato.documenso });
       } catch (e: any) {
-        contrato.documenso = { fallback: true, enviadoEm: now, host: documensoHost, status: `falha: ${e?.message || e}` };
+        contrato.documenso = { fallback: true, enviadoEm: now, host: documensoHost(), status: `falha: ${e?.message || e}` };
         contrato.status = "enviado_assinatura";
         appendTrilha(contrato, user, "enviou_assinatura_manual", `Documenso indisponível — baixar pacote p/ envio manual (${e?.message || e})`);
         contrato.updatedAt = now; writeContrato(contrato);
         return res.json({ ok: true, fallback: true, error: e?.message || String(e) });
       }
     }
-    contrato.documenso = { fallback: true, enviadoEm: now, host: documensoHost };
+    contrato.documenso = { fallback: true, enviadoEm: now, host: documensoHost() };
     contrato.status = "enviado_assinatura";
     appendTrilha(contrato, user, "enviou_assinatura_manual", "Documenso não configurado — baixar pacote para envio manual.");
     contrato.updatedAt = now; writeContrato(contrato);

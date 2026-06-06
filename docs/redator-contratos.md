@@ -33,8 +33,12 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
 4. **Minuta** — preview HTML + validações determinísticas; baixar PDF; salvar/enviar para
    revisão.
 5. **Aprovação e assinatura** — na **ficha do contrato**: *Gerar pacote* (Contrato + TR +
-   T&C) → *Aprovar (HITL)* → *Enviar para assinatura* (Documenso, 2 signatários + CC). Se
-   o Documenso não suportar o upload, há **fallback** (baixar o pacote para envio manual).
+   T&C) → *Aprovar (HITL interna)* → *Enviar para assinatura*. O envelope do Documenso segue
+   uma **ordem fixa, sequencial**: **aprovadores** (Melissa, Everton — papel APPROVER) →
+   **assinatura da Casa Hacker** (Diretor/representante legal, `geraldo@`) → **assinatura da
+   Contratada** (representante legal) → **CC** (`juridico@`). Se o Documenso não suportar o
+   upload, há **fallback** (baixar o pacote para envio manual). Configurável por
+   `CONTRATOS_APROVADORES` / `CONTRATOS_DIRETOR_EMAIL` / `CONTRATOS_CC_EMAIL`.
 
 ## Termos aditivos (Fase 2)
 
