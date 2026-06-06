@@ -28,6 +28,7 @@ import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
 import { validarContratoParaGeracao } from "./src/contratos/validacoes";
 import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/elegibilidade";
 import { extrairDados } from "./src/contratos/extracao";
+import { renderContratoHtml, renderContratoPdf } from "./src/contratos/render";
 
 export interface ContratosCtx {
   DATA_DIR: string;
@@ -464,7 +465,23 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     writeContrato(contrato);
     res.json(r.extracao);
   });
-  app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
+  // Minuta (#129): preview HTML (passo 4) ou PDF (?formato=pdf), com rodapé em todas as páginas.
+  app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const c = readContrato(id);
+    if (!c) return res.status(404).json({ error: "Contrato não encontrado" });
+    try {
+      if (String(req.query.formato || "html").toLowerCase() === "pdf") {
+        const pdf = await renderContratoPdf(c);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename="minuta_${c.id}.pdf"`);
+        return res.send(pdf);
+      }
+      res.json({ html: renderContratoHtml(c) });
+    } catch (e: any) {
+      res.status(500).json({ error: `Falha ao renderizar a minuta: ${e?.message || e}` });
+    }
+  });
   app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, naoImplementado("#139", "Aprovação humana (HITL)"));
   app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#139", "Envio para assinatura (Documenso)"));
   app.get("/api/contratos/:id/aditivos", requireAuth, naoImplementado("#137", "Lista de aditivos"));
