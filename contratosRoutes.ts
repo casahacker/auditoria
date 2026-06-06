@@ -17,18 +17,25 @@ import type { Express, RequestHandler } from "express";
 import { rateLimit } from "express-rate-limit";
 import path from "path";
 import fs from "fs";
+import multer from "multer";
+import mammoth from "mammoth";
+import type OpenAI from "openai";
 import { z } from "zod";
-import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo } from "./src/contratos/contratosTypes";
+import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo, AnexoRef } from "./src/contratos/contratosTypes";
 import { resumoDoContrato } from "./src/contratos/contratosTypes";
 import { verificarTc, tcStatus } from "./src/contratos/termosCondicoes";
 import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
 import { validarContratoParaGeracao } from "./src/contratos/validacoes";
 import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/elegibilidade";
+import { extrairDados } from "./src/contratos/extracao";
 
 export interface ContratosCtx {
   DATA_DIR: string;
   requireAuth: RequestHandler;
   sanitizeSegment: (s: string) => string | null;
+  aiClient: OpenAI;
+  extractTextFromFile: (filePath: string) => Promise<string>;
+  parseJsonSafe: (text: string) => any;
 }
 
 // ── helpers de formatação ────────────────────────────────────────────────────────
@@ -126,7 +133,7 @@ async function resolverVinculoJira(
 }
 
 export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
-  const { DATA_DIR, requireAuth, sanitizeSegment } = ctx;
+  const { DATA_DIR, requireAuth, sanitizeSegment, aiClient, extractTextFromFile, parseJsonSafe } = ctx;
   const CONTRATOS_DIR = path.join(DATA_DIR, "contratos");
   const SEQ_FILE = path.join(CONTRATOS_DIR, "_seq.json");
   fs.mkdirSync(CONTRATOS_DIR, { recursive: true });
@@ -191,6 +198,9 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false,
     message: { error: "Muitas requisições. Aguarde 1 minuto." },
   });
+
+  // upload do TR/Proposta (PDF/DOCX) para a extração (#131).
+  const docUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
 
   const idParam = (req: any, res: any): string | null => {
     const id = sanitizeSegment(String(req.params.id || ""));
@@ -403,7 +413,57 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   });
 
   // ─────────── stubs das demais sub-issues (501 documentado) ───────────
-  app.post("/api/contratos/:id/extrair", writeLimiter, requireAuth, exigirElegivel, naoImplementado("#131", "Extração de dados do TR/Proposta (IA)"));
+  // Extração do TR/Proposta com IA (#131) — só o TEXTO do documento vai à IA (LGPD).
+  app.post("/api/contratos/:id/extrair", writeLimiter, requireAuth, exigirElegivel, docUpload.single("file"), async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+
+    const tipo: "tr" | "proposta" = (req.body?.tipoDocumento === "proposta" || contrato.tipoDocumentoEntrada === "proposta") ? "proposta" : "tr";
+    const user = sessionUser(req);
+
+    // 1) texto do documento: PDF → pipeline existente; DOCX → mammoth; ou texto colado.
+    let texto = "";
+    let anexo: AnexoRef | undefined;
+    try {
+      if (req.file) {
+        const ext = path.extname(req.file.originalname || "").toLowerCase();
+        const nome = `entrada${ext || ".bin"}`;
+        fs.mkdirSync(contratoDir(id), { recursive: true });
+        const dest = path.join(contratoDir(id), nome);
+        fs.writeFileSync(dest, req.file.buffer);
+        anexo = { nome, tipo: "entrada", mime: req.file.mimetype, tamanho: req.file.size, adicionadoEm: nowIso() };
+        if (ext === ".docx") texto = (await mammoth.extractRawText({ buffer: req.file.buffer })).value || "";
+        else if (ext === ".pdf") texto = await extractTextFromFile(dest);
+        else texto = req.file.buffer.toString("utf-8");
+      } else if (typeof req.body?.texto === "string" && req.body.texto.trim()) {
+        texto = req.body.texto;
+      } else {
+        return res.status(400).json({ error: "Envie o arquivo do TR/Proposta (PDF/DOCX) ou o texto." });
+      }
+    } catch (e: any) {
+      return res.status(422).json({ error: `Não foi possível ler o documento: ${e?.message || e}` });
+    }
+    if (!texto.trim()) return res.status(422).json({ error: "Documento sem texto extraível (verifique o arquivo)." });
+
+    // 2) extração via DeepSeek (NUNCA enviamos dados cadastrais nem o conteúdo dos T&C).
+    const r = await extrairDados(texto, tipo, { aiClient, parseJsonSafe });
+    if (anexo) { contrato.anexos = { ...(contrato.anexos || {}), entrada: anexo }; contrato.tipoDocumentoEntrada = tipo; }
+    if (!r.ok || !r.extracao) {
+      contrato.updatedAt = nowIso();
+      appendTrilha(contrato, user, "extracao_falhou", `Extração automática falhou (${tipo})`);
+      writeContrato(contrato);
+      return res.status(502).json({ error: r.erro || "Falha na extração.", anexo });
+    }
+
+    contrato.extracao = r.extracao;
+    contrato.updatedAt = nowIso();
+    appendTrilha(contrato, user, "rodou_extracao",
+      `Extração concluída (${r.extracao.lacunas.length} lacuna(s), ${r.extracao.indiciosTrabalhistas.length} indício(s) trabalhista(s))`,
+      { lacunas: r.extracao.lacunas.length, indicios: r.extracao.indiciosTrabalhistas.length });
+    writeContrato(contrato);
+    res.json(r.extracao);
+  });
   app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
   app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, naoImplementado("#139", "Aprovação humana (HITL)"));
   app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#139", "Envio para assinatura (Documenso)"));

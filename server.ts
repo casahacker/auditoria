@@ -1363,7 +1363,7 @@ registerDiligenciaRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
 registerKycRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
 
 // ── Contratos (Tool E) — redator de contratos PJ + termos aditivos ─────────────
-registerContratosRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment });
+registerContratosRoutes(app, { DATA_DIR, requireAuth, sanitizeSegment, aiClient, extractTextFromFile, parseJsonSafe });
 
 // ── Serve React SPA ───────────────────────────────────────────────────────────
 

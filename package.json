@@ -25,6 +25,7 @@
     "helmet": "^8.1.0",
     "jsonrepair": "^3.14.0",
     "lucide-react": "^0.546.0",
+    "mammoth": "^1.12.0",
     "motion": "^12.23.24",
     "multer": "^2.0.0",
     "openai": "^4.100.0",
