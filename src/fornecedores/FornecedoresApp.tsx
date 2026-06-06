@@ -541,7 +541,40 @@ function FichaFornecedor({ doc, profile, busy, apiFetch, addToast, onRefresh, on
         {kyc ? <KycDetailView current={kyc} busy={false} apiFetch={apiFetch} addToast={addToast} reload={reloadKyc} embedded />
           : <EmptyState icon={BadgeCheck} title="Sem KYS/KYG" description="Este fornecedor ainda não preencheu a ficha de conformidade (exigida para contratações específicas)." action={<Btn variant="secondary" onClick={onInvite}><Link2 size={14} aria-hidden /> Gerar convite KYS/KYG</Btn>} />}
       </div>
+
+      {/* Contratos (Tool E) — lista filtrada por CNPJ + atalho p/ o wizard (#135) */}
+      <ContratosDoFornecedor doc={doc} apiFetch={apiFetch} />
     </div>
+  );
+}
+
+const CT_STATUS_LABEL: Record<string, string> = {
+  rascunho: 'Rascunho', em_revisao: 'Em revisão', aprovado: 'Aprovado', enviado_assinatura: 'Enviado p/ assinatura',
+  assinado: 'Assinado', vigente: 'Vigente', encerrado: 'Encerrado', cancelado: 'Cancelado',
+};
+function ContratosDoFornecedor({ doc, apiFetch }: { doc: string; apiFetch: (u: string, o?: RequestInit) => Promise<Response> }) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  useEffect(() => { let on = true; (async () => {
+    try { const r = await apiFetch(`/api/contratos?cnpj=${doc}`); if (on) setRows(r.ok ? await r.json() : []); }
+    catch { if (on) setRows([]); }
+  })(); return () => { on = false; }; }, [doc]);
+  if (doc.length !== 14) return null;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="text-[14px] font-semibold flex items-center gap-1.5"><FileSignature size={15} className="text-primary" aria-hidden /> Contratos</div>
+        <Btn variant="secondary" size="sm" onClick={() => { window.location.href = `/contratos/novo?cnpj=${doc}`; }}>Novo contrato</Btn>
+      </div>
+      {rows === null ? <div className="text-[12px] text-text-secondary flex items-center gap-2"><Loader2 size={13} className="animate-spin" aria-hidden /> Carregando…</div>
+        : rows.length === 0 ? <div className="text-[12px] text-text-secondary">Nenhum contrato para este fornecedor ainda.</div>
+        : <ul className="space-y-1.5">{rows.map((c: any) => (
+            <li key={c.id} className="flex items-center justify-between gap-2 text-[13px] border-b border-line pb-1.5 last:border-0">
+              <a href={`/contratos/${String(c.id).toLowerCase()}`} className="font-mono text-[12px] text-primary hover:underline whitespace-nowrap">{c.id}</a>
+              <span className="flex-1 truncate text-text-secondary px-2">{c.objeto || '—'}</span>
+              <span className="whitespace-nowrap text-[12px]">{c.valorTotalCentavos ? `R$ ${(c.valorTotalCentavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</span>
+              <Chip tone="neutral" size="sm">{CT_STATUS_LABEL[c.status] || c.status}</Chip>
+            </li>))}</ul>}
+    </Card>
   );
 }
 

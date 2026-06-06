@@ -166,8 +166,8 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
   const [contrato, setContrato] = useState<Contrato | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // passo 1
-  const [cnpj, setCnpj] = useState('');
+  // passo 1 — pré-preenche o CNPJ vindo da ficha do fornecedor (?cnpj=)
+  const [cnpj, setCnpj] = useState(() => { try { return new URLSearchParams(window.location.search).get('cnpj') || ''; } catch { return ''; } });
   const [eleg, setEleg] = useState<ElegibilidadeSnapshot | null>(null);
   // passo 2
   const [tipoDoc, setTipoDoc] = useState<'tr' | 'proposta'>('tr');
