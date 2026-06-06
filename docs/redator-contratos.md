@@ -1,0 +1,99 @@
+# Contratos (Tool E) — redator de contratos PJ + termos aditivos
+
+Ferramenta da suíte **Auditoria** que gera contratos de prestação de serviços (Pessoa
+Jurídica) e termos aditivos a partir de um **Termo de Referência (TR)** ou **Proposta
+Comercial**, com guard-rails jurídicos rígidos. Épico #126.
+
+## Princípios inegociáveis (guard-rails)
+
+1. **T&C imutáveis** — os Termos e Condições são anexados **byte a byte** a partir do PDF
+   oficial (`assets/contratos/termos-e-condicoes-pj-v2026-05.pdf`); o **SHA-256** é
+   conferido no boot e por contrato. Se o arquivo for alterado, a geração de pacotes é
+   **recusada**. O conteúdo dos T&C **nunca** passa pela IA.
+2. **A IA só extrai** — o DeepSeek-V3 extrai os dados variáveis do TR/Proposta (com o
+   trecho-fonte literal); **nunca redige** cláusula. A lógica do contrato é fixa.
+3. **Determinismo** — somas de parcelas, datas, dígitos verificadores e valor por extenso
+   são validados por **código** (`src/contratos/validacoes.ts`), nunca por IA.
+4. **Aprovação humana obrigatória (HITL)** — nada vai ao Documenso sem um usuário
+   autenticado aprovar; a trilha registra **quem, quando e o hash do PDF aprovado**.
+5. **Gate de elegibilidade no servidor** — Receita ATIVA, diligência válida (≤30 dias),
+   KYS assinado, CNAE × objeto e porte (MEI). Avaliado **sempre no servidor**.
+6. **Trilha auditável** de tudo (append-only).
+7. **v1 = somente Pessoa Jurídica.**
+
+## Fluxo (wizard `/contratos/novo`, 5 passos)
+
+1. **Fornecedor** — CNPJ → gate de elegibilidade (servidor). Inelegível bloqueia, com
+   motivos e atalho para a ficha; diligência em Alerta admite **prosseguimento
+   justificado** (justificativa + aprovador, na trilha).
+2. **Documento** — upload do TR/Proposta (PDF/DOCX) + **issue Jira (projeto JUR)**
+   validada ao vivo + nº da Ordem de Compra (opcional).
+3. **Conferência** — a IA extrai os campos (cada um com o trecho-fonte); lacunas
+   destacadas; **alertas** (radar trabalhista + conflitos) exigem **ciência individual**.
+4. **Minuta** — preview HTML + validações determinísticas; baixar PDF; salvar/enviar para
+   revisão.
+5. **Aprovação e assinatura** — na **ficha do contrato**: *Gerar pacote* (Contrato + TR +
+   T&C) → *Aprovar (HITL)* → *Enviar para assinatura* (Documenso, 2 signatários + CC). Se
+   o Documenso não suportar o upload, há **fallback** (baixar o pacote para envio manual).
+
+## Termos aditivos (Fase 2)
+
+Sobre contratos **assinados**: `prorrogacao`, `valor_parcelas`, `escopo` (novo TR, roda o
+radar trabalhista) e `dados_cadastrais`. Numeração ordinal por contrato (`CH-AD-…`), gate
+de elegibilidade **reavaliado** na data do aditivo, redação consolidada das cláusulas
+alteradas + ratificação das demais.
+
+## Radar trabalhista (anti-pejotização)
+
+A extração aponta indícios do art. 3º da CLT (jornada fixa, exclusividade, subordinação,
+pessoalidade, habitualidade, tempo de resposta rígido, equipamentos corporativos,
+integração a rotinas) com trecho literal e gravidade (baixa/média/alta). **Não bloqueia**,
+mas exige ciência — é um alerta de risco de reconhecimento de vínculo empregatício.
+
+## Tratamento de dados e IA (LGPD — Seção 15)
+
+- **O que vai ao DeepSeek:** **somente** o texto do documento de entrada (TR/Proposta). Os
+  **dados cadastrais** do fornecedor/representante (Cockpit/KYS) e o **conteúdo dos T&C**
+  **nunca** são enviados à IA — são combinados por *merge* determinístico no servidor.
+- **Minimização:** a IA recebe o mínimo necessário para extrair os campos variáveis.
+- **Retenção:** os artefatos (JSON do contrato, TR de entrada, minuta, pacote e PDF
+  assinado) ficam em `/app/data/contratos/<id>/` no servidor, sob backup `restic`.
+- **Base legal/Provedor:** o DeepSeek é usado como operador de processamento de texto; não
+  há decisão automatizada — toda geração passa por conferência e **aprovação humana**.
+- **Encarregado (DPO):** privacidade@casahacker.org.
+
+## Integração com o Jira (projeto JUR)
+
+Todo contrato/aditivo nasce vinculado a uma issue do projeto `JUR` (validação obrigatória
+na criação, sem bypass). A **sincronização** de eventos (comentários nos marcos + anexo do
+PDF assinado) é **best-effort** e nunca trava o fluxo: falhas ficam visíveis no detalhe,
+com botão *Reenviar ao Jira*. `JIRA_SYNC=0` desliga só a sincronização (a validação
+permanece). **Não** executamos transições de workflow automaticamente.
+
+## Variáveis de ambiente
+
+Ver `.env.example` (seção Jira `JIRA_*`, `DOCUMENSO_URL`/`DOCUMENSO_API_TOKEN` — a mesma
+instância do KYS, com S3 ligado — e `CONTRATOS_DIRETOR_EMAIL`).
+
+## Arquivos
+
+| Arquivo | Papel |
+|---|---|
+| `contratosRoutes.ts` | rotas Express (CRUD, gate, extração, minuta, HITL, Documenso, aditivos, Jira) |
+| `src/contratos/contratosTypes.ts` | modelo de dados |
+| `src/contratos/termosCondicoes.ts` | T&C imutáveis (SHA-256, fail-safe) |
+| `src/contratos/jiraClient.ts` | validação + sincronização Jira |
+| `src/contratos/validacoes.ts` | validações determinísticas + formatação (`extenso`) |
+| `src/contratos/elegibilidade.ts` | gate de elegibilidade (servidor) |
+| `src/contratos/extracao.ts` | pipeline DeepSeek-V3 (zod, radar trabalhista) |
+| `src/contratos/dadosContratada.ts` | merge Receita + KYS da CONTRATADA |
+| `src/contratos/documenso.ts` | envio para assinatura (2 signatários + CC) |
+| `src/contratos/templates/contratoPJ_v2026_05.ts` · `aditivoPJ_v2026_05.ts` | templates versionados |
+| `src/contratos/render.ts` | render HTML/PDF (rodapé IBM Plex Mono em todas as páginas) |
+| `src/contratos/ContratosApp.tsx` | frontend (lista, wizard, detalhe, aditivos, ajuda) |
+
+## Testes
+
+- `npm run lint` — `tsc --noEmit`.
+- `npm run test:contratos` — validações determinísticas (extenso, Σ parcelas, datas).
+- `npm run test:contratos:e2e` — fixture E2E (TR Assistente de Comunicação) ponta a ponta.

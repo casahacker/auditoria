@@ -15,6 +15,7 @@ O **Auditoria** é uma plataforma da **Associação Casa Hacker** com **três fe
 | **A** | **Auditoria de Prestação de Contas** | Concilia notas fiscais, comprovantes e orçamento por rubrica com IA (DeepSeek + Azure Document Intelligence) e emite o parecer final (RAPC). |
 | **B** | **Processador FEAC / SGPP** | Concilia lançamentos × documentos, **trata** os PDFs (mescla, carimbo de margem, conversão **PDF/A-2b**), gera a **Declaração de Rateio** e o Relatório de Prestação de Contas para a Fundação FEAC. |
 | **C** | **Cockpit de Fornecedores** | Concentra, por fornecedor, a **Diligência** (Receita Federal + **15 listas de restrição** nacionais e internacionais) **e** a **Conformidade KYS / KYG** (cadastro verificado + **assinatura via Documenso**). A diferença entre fornecedores é apenas ter ou não KYS/KYG assinado. |
+| **E** | **Contratos** | Redige **contratos de prestação de serviços (PJ)** e **termos aditivos** a partir de um TR/Proposta: gate de elegibilidade, extração por IA (só extrai; radar trabalhista), **T&C imutáveis** (SHA-256), aprovação humana e assinatura via Documenso, vínculo obrigatório a uma issue Jira (JUR). |
 
 > O **Cockpit de Fornecedores** unifica as antigas ferramentas *Diligência* e *Conformidade KYS/KYG* numa só (o KYS/KYG é exigido apenas para contratações específicas). O preenchimento do KYS/KYG é feito pelo próprio fornecedor numa **página pública** (`/kys`, `/kyg`).
 
@@ -54,6 +55,13 @@ Fluxo em 4 etapas, cada prestação persistida no servidor:
 
 > **Setup único do Documenso** (uma vez): garanta que a instância do Documenso esteja com **armazenamento S3** habilitado, crie um **API token** e preencha `DOCUMENSO_URL` + `DOCUMENSO_API_TOKEN` no `.env`. **Não há templates a configurar** — o app gera o PDF a cada envio. Sem o token, o wizard recebe os dados mas a assinatura fica desabilitada.
 
+### E — Contratos (redator de contratos PJ + aditivos)
+- Gera o **contrato de prestação de serviços (PJ)** a partir de um **TR/Proposta**, em 5 passos: gate de elegibilidade (servidor) → documento + issue **Jira (JUR)** → **extração por IA** (DeepSeek; só extrai, com trecho-fonte, radar trabalhista anti-pejotização) → minuta (validações determinísticas, render com **T&C imutáveis** SHA-256) → **aprovação humana (HITL)** + envio ao **Documenso** (2 signatários + CC; fallback de envio manual).
+- **Termos aditivos** sobre contratos assinados (prorrogação, valor/parcelas, escopo, dados cadastrais) com gate reavaliado e numeração ordinal.
+- **Sincronização Jira best-effort** (comentários nos marcos + anexo do assinado), **alertas de vigência** (≤45 dias) e atalho de prorrogação. Documentação: [`docs/redator-contratos.md`](docs/redator-contratos.md).
+
+> A IA recebe **somente** o texto do documento de entrada (LGPD); os dados cadastrais e os T&C **nunca** passam pela IA. Variáveis: `JIRA_*`, `DOCUMENSO_*`, `CONTRATOS_DIRETOR_EMAIL` (ver `.env.example`).
+
 ---
 
 ## Roteamento (URLs compartilháveis)
@@ -70,6 +78,8 @@ Cada página tem um caminho próprio no navegador (deep-link + voltar/avançar):
 | `/fornecedores/<cnpj\|cpf>` | Cockpit — ficha do fornecedor (diligência + KYS/KYG juntos) |
 | `/diligencia` · `/conformidade` | Redirecionam (soft) para o Cockpit de Fornecedores |
 | `/kys` · `/kyg` · `/kys/<token>` · `/kyg/<token>` | **Página pública** do wizard KYS/KYG (sem login) |
+| `/contratos` · `/contratos/novo` · `/contratos/ajuda` | Contratos — registro/lista, wizard de geração, como usar |
+| `/contratos/<id>` · `/contratos/<id>/aditivo/novo` | Contratos — ficha do contrato, novo termo aditivo |
 | `/share/<token>` | Link público (somente leitura) de uma auditoria |
 
 O servidor faz fallback de SPA para qualquer rota, então recarregar ou compartilhar um deep-link funciona.
