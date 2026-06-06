@@ -36,16 +36,15 @@ const ph = (v: any, placeholder: string): string => {
 function qualificacaoContratada(c: Contrato): string {
   const d = c.dadosContratada;
   const r = d?.representante;
-  const endRep = r as any; // endereço do rep. não modelado em v1 → placeholder
   return [
     `${ph(d?.razaoSocial, "RAZÃO SOCIAL")}, ${ph(d?.naturezaJuridica, "NATUREZA JURÍDICA")},`,
     `inscrita no CNPJ sob o n° ${ph(d?.cnpj, "CNPJ DO CONTRATADO")},`,
     `com sede na ${ph([d?.endereco?.logradouro, d?.endereco?.numero, d?.endereco?.bairro, d?.endereco?.municipio && d?.endereco?.uf ? `${d?.endereco?.municipio}/${d?.endereco?.uf}` : "", d?.endereco?.cep].filter(Boolean).join(", "), "ENDEREÇO COMPLETO DO CONTRATADO")},`,
     `neste ato representada por seu representante legal ${ph(r?.nome, "NOME COMPLETO DO REPRESENTANTE LEGAL")}, ${ph(r?.estadoCivil, "ESTADO CIVIL")}, ${ph(r?.cargo, "PROFISSÃO")},`,
     `inscrito no CPF sob n° ${ph(r?.cpf, "CPF DO REPRESENTANTE LEGAL")},`,
-    `domiciliado(a) na ${ph(endRep?.enderecoCompleto, "ENDEREÇO COMPLETO DO REPRESENTANTE LEGAL")},`,
+    `domiciliado(a) na ${ph(r?.enderecoCompleto, "ENDEREÇO COMPLETO DO REPRESENTANTE LEGAL")},`,
     `endereço eletrônico ${ph(r?.email, "E-MAIL DO REPRESENTANTE LEGAL")},`,
-    `telefone móvel ${ph(endRep?.telefone, "TELEFONE MÓVEL")},`,
+    `telefone móvel ${ph(r?.telefone, "TELEFONE MÓVEL")},`,
     `doravante denominada simplesmente “CONTRATADA”;`,
   ].join(" ");
 }

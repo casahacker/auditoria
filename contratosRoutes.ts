@@ -29,6 +29,7 @@ import { validarContratoParaGeracao } from "./src/contratos/validacoes";
 import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/elegibilidade";
 import { extrairDados } from "./src/contratos/extracao";
 import { renderContratoHtml, renderContratoPdf } from "./src/contratos/render";
+import { montarDadosContratada } from "./src/contratos/dadosContratada";
 
 export interface ContratosCtx {
   DATA_DIR: string;
@@ -247,6 +248,7 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
       ...(jira ? { jira } : {}),
       ...(body.ordemCompra ? { ordemCompra: body.ordemCompra } : {}),
       ...(body.tipoDocumentoEntrada ? { tipoDocumentoEntrada: body.tipoDocumentoEntrada } : {}),
+      dadosContratada: montarDadosContratada(DATA_DIR, body.cnpj), // merge Cockpit/KYS (operador confere)
       aditivos: [], trilha: [], createdAt: now, createdBy: user, updatedAt: now,
     };
     appendTrilha(contrato, user, "criou_rascunho", `Rascunho criado para o CNPJ ${fmtCnpj(body.cnpj)}`);
@@ -279,6 +281,13 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
 
   // Status dos T&C imutáveis (#128) — antes de "/:id" p/ não casar com :id="tc".
   app.get("/api/contratos/tc", requireAuth, (_req, res) => res.json(tcStatus()));
+
+  // Prefill dos dados da CONTRATADA (passo 1 do wizard) — merge Cockpit/KYS (#134).
+  app.get("/api/contratos/fornecedor/:cnpj", requireAuth, (req, res) => {
+    const cnpj = onlyDigits(req.params.cnpj);
+    if (cnpj.length !== 14) return res.status(400).json({ error: "CNPJ deve ter 14 dígitos" });
+    res.json(montarDadosContratada(DATA_DIR, cnpj));
+  });
 
   // Detalhe — Seção 14.3.
   app.get("/api/contratos/:id", requireAuth, (req, res) => {

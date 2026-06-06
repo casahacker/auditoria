@@ -1,0 +1,521 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Contratos (Tool E) — frontend: registro/lista (#135), wizard de geração (#134) e
+ * detalhe. Só componentes do kit (IBM Carbon); a11y no padrão da suíte. O gate de
+ * elegibilidade, a extração (IA) e a minuta são SEMPRE decididos no servidor.
+ */
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FileSignature, Building2, Loader2, ChevronRight, ChevronLeft, Plus, Check, AlertTriangle,
+  ShieldCheck, ShieldAlert, Upload, FileText, ExternalLink, HelpCircle, ListChecks, Clock, Lock,
+} from 'lucide-react';
+import { cn } from '../lib/utils';
+import { AuthUser } from '../types';
+import { Btn, IconBtn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SidebarGroupLabel, SkipLink, EmptyState, tableHeadCls } from '../ui/kit';
+import type { ChipTone } from '../ui/kit';
+import { onlyDigits, maskCnpj } from '../kyc/kycTypes';
+import type { Contrato, ContratoResumo, ContratoStatus, ElegibilidadeSnapshot, CriterioElegibilidade, ExtracaoIA } from './contratosTypes';
+
+export interface ContratosAppProps {
+  user: AuthUser;
+  apiFetch: (url: string, opts?: RequestInit) => Promise<Response>;
+  addToast: (kind: 'success' | 'error' | 'info', message: string) => void;
+  onHome: () => void;
+  navigate?: (path: string) => void;
+  initialView?: string; // segmento após /contratos (novo | <id> | ajuda)
+}
+
+type Section = 'lista' | 'novo' | 'detalhe' | 'ajuda';
+const segs = () => window.location.pathname.split('/').filter(Boolean);
+
+// formatação local (não arrasta a lib `extenso` para o bundle do front)
+const fmtMoeda = (c?: number) => { const v = Math.abs(Math.trunc(Number(c) || 0)); return `R$ ${String(Math.trunc(v / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${String(v % 100).padStart(2, '0')}`; };
+const fmtData = (iso?: string | null) => { if (!iso) return '—'; const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso)); return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso); };
+
+const STATUS: Record<ContratoStatus, { tone: ChipTone; label: string }> = {
+  rascunho: { tone: 'neutral', label: 'Rascunho' },
+  em_revisao: { tone: 'info', label: 'Em revisão' },
+  aprovado: { tone: 'info', label: 'Aprovado' },
+  enviado_assinatura: { tone: 'warning', label: 'Enviado p/ assinatura' },
+  assinado: { tone: 'success', label: 'Assinado' },
+  vigente: { tone: 'success', label: 'Vigente' },
+  encerrado: { tone: 'neutral', label: 'Encerrado' },
+  cancelado: { tone: 'error', label: 'Cancelado' },
+};
+const statusChip = (s: ContratoStatus) => { const m = STATUS[s] || STATUS.rascunho; return <Chip tone={m.tone} size="sm">{m.label}</Chip>; };
+
+const CRIT_TONE: Record<string, ChipTone> = { ok: 'success', alerta: 'warning', bloqueio: 'error' };
+
+export default function ContratosApp({ user, apiFetch, addToast, onHome, navigate, initialView }: ContratosAppProps) {
+  const initial = (initialView || segs()[1] || '').toLowerCase();
+  const [section, setSection] = useState<Section>(initial === 'novo' ? 'novo' : initial === 'ajuda' ? 'ajuda' : initial && initial.startsWith('ch-') ? 'detalhe' : 'lista');
+  const [detalheId, setDetalheId] = useState<string>(initial.startsWith('ch-') ? initial.toUpperCase() : '');
+
+  const go = (s: Section, id?: string) => {
+    setSection(s);
+    if (s === 'detalhe' && id) setDetalheId(id);
+    const path = s === 'lista' ? '/contratos' : s === 'novo' ? '/contratos/novo' : s === 'ajuda' ? '/contratos/ajuda' : `/contratos/${(id || detalheId).toLowerCase()}`;
+    navigate?.(path);
+  };
+
+  return (
+    <div className="flex min-h-screen pt-8">
+      <SkipLink />
+      <ToolSidebar brand="Contratos" onHome={onHome} user={user}>
+        <SidebarItem icon={ListChecks} active={section === 'lista'} onClick={() => go('lista')}>Contratos</SidebarItem>
+        <SidebarItem icon={Plus} active={section === 'novo'} onClick={() => go('novo')}>Novo contrato</SidebarItem>
+        <SidebarGroupLabel>Ajuda</SidebarGroupLabel>
+        <SidebarItem icon={HelpCircle} active={section === 'ajuda'} onClick={() => go('ajuda')}>Como usar</SidebarItem>
+      </ToolSidebar>
+
+      <div className="flex-1 ml-[256px] flex flex-col min-h-screen">
+        {section === 'lista' && <ListaView apiFetch={apiFetch} addToast={addToast} onAbrir={(id) => go('detalhe', id)} onNovo={() => go('novo')} />}
+        {section === 'novo' && <Wizard apiFetch={apiFetch} addToast={addToast} navigate={navigate} onConcluir={(id) => go('detalhe', id)} onCancelar={() => go('lista')} />}
+        {section === 'detalhe' && <DetalheView id={detalheId} apiFetch={apiFetch} addToast={addToast} navigate={navigate} onVoltar={() => go('lista')} onNovoAditivo={() => addToast('info', 'Aditivos chegam na Fase 2 (#137/#138).')} />}
+        {section === 'ajuda' && <AjudaView />}
+      </div>
+    </div>
+  );
+}
+
+// ── Lista (#135) ────────────────────────────────────────────────────────────────
+function ListaView({ apiFetch, addToast, onAbrir, onNovo }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onAbrir: (id: string) => void; onNovo: () => void }) {
+  const [rows, setRows] = useState<ContratoResumo[] | null>(null);
+  const [fStatus, setFStatus] = useState('');
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => { (async () => {
+    try { const r = await apiFetch('/api/contratos'); setRows(r.ok ? await r.json() : []); }
+    catch { setRows([]); addToast('error', 'Falha ao carregar contratos.'); }
+  })(); }, []);
+
+  const filtered = useMemo(() => (rows || []).filter((c) =>
+    (!fStatus || c.status === fStatus) &&
+    (!busca || [c.id, c.razaoSocial, c.objeto, c.cnpj, c.jiraIssueKey].some((v) => String(v || '').toLowerCase().includes(busca.toLowerCase())))
+  ), [rows, fStatus, busca]);
+
+  return (
+    <>
+      <ToolHeader light="Registro de" accent="Contratos" right={<Btn onClick={onNovo}><Plus size={16} /> Novo contrato</Btn>} />
+      <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-6xl w-full">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por id, fornecedor, objeto, CNPJ ou issue…"
+            className="h-10 flex-1 min-w-[260px] bg-field border border-line rounded-none px-3 text-[14px] text-text outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+          <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filtrar por status"
+            className="h-10 bg-field border border-line rounded-none px-3 text-[14px] text-text cursor-pointer focus:border-primary">
+            <option value="">Todos os status</option>
+            {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </div>
+
+        {rows === null ? (
+          <div className="flex items-center gap-2 text-text-secondary text-[14px] py-10"><Loader2 size={16} className="animate-spin" /> Carregando…</div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={FileSignature} title="Nenhum contrato" description="Gere o primeiro contrato a partir de um fornecedor elegível." action={<Btn onClick={onNovo}><Plus size={16} /> Novo contrato</Btn>} />
+        ) : (
+          <Card className="overflow-hidden">
+            <table className="w-full text-[14px]">
+              <thead className={tableHeadCls}><tr>
+                {['ID', 'Fornecedor', 'Objeto', 'Valor', 'Vigência', 'Status', 'Aditivos'].map((h) => <th key={h} className="px-4 py-2.5 font-semibold text-[12px]">{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {filtered.map((c) => (
+                  <tr key={c.id} className="border-t border-line hover:bg-surface-hover cursor-pointer" onClick={() => onAbrir(c.id)}>
+                    <td className="px-4 py-3 font-mono text-[12px] whitespace-nowrap">{c.id}</td>
+                    <td className="px-4 py-3"><div className="font-medium">{c.razaoSocial || '—'}</div><div className="text-[12px] text-text-secondary">{maskCnpj(c.cnpj)}</div></td>
+                    <td className="px-4 py-3 max-w-[260px] truncate text-text-secondary">{c.objeto || '—'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{c.valorTotalCentavos ? fmtMoeda(c.valorTotalCentavos) : '—'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-[12px]">{c.vigenciaFim ? `até ${fmtData(c.vigenciaFim)}` : '—'}</td>
+                    <td className="px-4 py-3">{statusChip(c.status)}</td>
+                    <td className="px-4 py-3 text-center">{c.qtdAditivos || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </main>
+    </>
+  );
+}
+
+// ── Wizard de geração (#134) ─────────────────────────────────────────────────────
+const PASSOS = ['Fornecedor', 'Documento', 'Conferência', 'Minuta', 'Assinatura'];
+
+function Stepper({ step }: { step: number }) {
+  return (
+    <ol className="flex items-center gap-2 mb-8 flex-wrap">
+      {PASSOS.map((p, i) => {
+        const n = i + 1; const done = n < step; const cur = n === step;
+        return (
+          <li key={p} className="flex items-center gap-2">
+            <span className={cn('w-6 h-6 inline-flex items-center justify-center text-[12px] border', cur ? 'bg-primary text-white border-primary' : done ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{done ? <Check size={13} /> : n}</span>
+            <span className={cn('text-[13px]', cur ? 'text-text font-semibold' : 'text-text-secondary')}>{p}</span>
+            {n < PASSOS.length && <ChevronRight size={14} className="text-text-secondary" />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; navigate?: (p: string) => void; onConcluir: (id: string) => void; onCancelar: () => void }) {
+  const [step, setStep] = useState(1);
+  const [contrato, setContrato] = useState<Contrato | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // passo 1
+  const [cnpj, setCnpj] = useState('');
+  const [eleg, setEleg] = useState<ElegibilidadeSnapshot | null>(null);
+  // passo 2
+  const [tipoDoc, setTipoDoc] = useState<'tr' | 'proposta'>('tr');
+  const [jiraKey, setJiraKey] = useState('');
+  const [jiraInfo, setJiraInfo] = useState<{ ok: boolean; resumo?: string; status?: string; alertaDone?: boolean; erro?: string } | null>(null);
+  const [oc, setOc] = useState('');
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  // passo 3
+  const [extr, setExtr] = useState<ExtracaoIA | null>(null);
+  const [ciencias, setCiencias] = useState<Set<string>>(new Set());
+  const [objeto, setObjeto] = useState('');
+  const [valorReais, setValorReais] = useState('');
+  const [vigFim, setVigFim] = useState('');
+  // passo 4
+  const [minuta, setMinuta] = useState('');
+  const [validacao, setValidacao] = useState<{ ok: boolean; bloqueios: string[]; avisos: string[] } | null>(null);
+
+  const refresh = async (id: string) => { const r = await apiFetch(`/api/contratos/${id}`); if (r.ok) setContrato(await r.json()); };
+
+  // PASSO 1 — cria o rascunho e avalia elegibilidade
+  const iniciar = async () => {
+    const d = onlyDigits(cnpj);
+    if (d.length !== 14) { addToast('error', 'Informe um CNPJ com 14 dígitos.'); return; }
+    setBusy(true); setEleg(null);
+    try {
+      let id = contrato?.id;
+      if (!id || contrato?.cnpj !== d) {
+        const r = await apiFetch('/api/contratos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cnpj: d }) });
+        if (!r.ok) { addToast('error', (await r.json().catch(() => ({})))?.error || 'Falha ao criar rascunho.'); return; }
+        const c = await r.json(); setContrato(c); id = c.id;
+      }
+      const re = await apiFetch(`/api/contratos/${id}/elegibilidade`);
+      const snap = await re.json();
+      setEleg(snap);
+      await refresh(id!);
+    } catch { addToast('error', 'Falha ao avaliar o fornecedor.'); } finally { setBusy(false); }
+  };
+
+  const validarJira = async () => {
+    const k = jiraKey.trim().toUpperCase();
+    if (!/^JUR-\d+$/.test(k)) { setJiraInfo({ ok: false, erro: 'Formato esperado JUR-<número>.' }); return; }
+    try {
+      const r = await apiFetch(`/api/contratos/jira/${k}`);
+      const b = await r.json();
+      if (r.ok && b.ok) setJiraInfo({ ok: true, resumo: b.issue?.summary, status: b.issue?.status, alertaDone: b.alertaDone });
+      else setJiraInfo({ ok: false, erro: b.error || 'Issue inválida.' });
+    } catch { setJiraInfo({ ok: false, erro: 'Falha ao consultar o Jira.' }); }
+  };
+
+  // PASSO 2 → 3 — salva doc/jira e roda a extração
+  const avancarParaExtracao = async () => {
+    if (!contrato) return;
+    if (!arquivo) { addToast('error', 'Envie o TR/Proposta (PDF/DOCX).'); return; }
+    setBusy(true);
+    try {
+      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tipoDocumentoEntrada: tipoDoc, ...(oc ? { ordemCompra: oc } : {}), ...(jiraKey ? { jiraIssueKey: jiraKey.trim().toUpperCase() } : {}) }) });
+      if (!p.ok) { addToast('error', (await p.json().catch(() => ({})))?.error || 'Falha ao salvar o documento/issue.'); return; }
+      const fd = new FormData(); fd.append('file', arquivo); fd.append('tipoDocumento', tipoDoc);
+      const e = await apiFetch(`/api/contratos/${contrato.id}/extrair`, { method: 'POST', body: fd });
+      if (!e.ok) { addToast('error', (await e.json().catch(() => ({})))?.error || 'Falha na extração.'); return; }
+      const ex: ExtracaoIA = await e.json();
+      setExtr(ex);
+      setObjeto(ex.objeto?.valor || '');
+      setValorReais(ex.valorTotalCentavos?.valor != null ? (ex.valorTotalCentavos.valor / 100).toFixed(2) : '');
+      setVigFim(ex.vigencia?.dataFim?.valor || '');
+      setCiencias(new Set());
+      await refresh(contrato.id);
+      setStep(3);
+    } catch { addToast('error', 'Falha ao processar o documento.'); } finally { setBusy(false); }
+  };
+
+  const alertasPendentes = useMemo(() => {
+    if (!extr) return [];
+    const items = [
+      ...extr.indiciosTrabalhistas.map((i, n) => ({ key: `trab-${n}`, label: `Radar trabalhista (${i.gravidade}): ${i.indicio}` })),
+      ...extr.conflitosComPadrao.map((c, n) => ({ key: `conf-${n}`, label: `Conflito: ${c.clausula}` })),
+      ...extr.alertas.map((a, n) => ({ key: `al-${n}`, label: a })),
+    ];
+    return items;
+  }, [extr]);
+
+  // PASSO 3 → 4 — grava campos finais e gera a minuta
+  const avancarParaMinuta = async () => {
+    if (!contrato) return;
+    if (alertasPendentes.some((a) => !ciencias.has(a.key))) { addToast('error', 'Dê ciência a todos os alertas antes de avançar.'); return; }
+    const valorCent = Math.round(parseFloat(valorReais.replace(',', '.')) * 100) || 0;
+    const parcelas = (extr?.parcelas || []).map((p) => ({ numero: p.numero, valorCentavos: p.valorCentavos, vencimento: p.vencimento ?? null, estimada: !p.vencimento }));
+    setBusy(true);
+    try {
+      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ objeto, valorTotalCentavos: valorCent, parcelas, vigenciaFim: vigFim || null, resumoEscopo: extr?.resumoEscopo?.valor || '', condicoesPagamento: extr?.condicoesPagamento?.valor || '', equipamentosFornecidosPelaContratante: extr?.equipamentosFornecidosPelaContratante?.valor || '', prorrogavel: !!extr?.vigencia?.prorrogavel?.valor }) });
+      if (!p.ok) { addToast('error', (await p.json().catch(() => ({})))?.error || 'Falha ao salvar os campos.'); return; }
+      await carregarMinuta(contrato.id);
+      setStep(4);
+    } catch { addToast('error', 'Falha ao salvar.'); } finally { setBusy(false); }
+  };
+
+  const carregarMinuta = async (id: string) => {
+    const v = await apiFetch(`/api/contratos/${id}/validar`); setValidacao(v.ok ? await v.json() : null);
+    const r = await apiFetch(`/api/contratos/${id}/minuta`);
+    if (r.ok) setMinuta((await r.json()).html || '');
+    else { const b = await r.json().catch(() => ({})); setMinuta(''); addToast('error', b.error || 'Não foi possível gerar a minuta.'); }
+  };
+
+  const salvarStatus = async (status: 'rascunho' | 'em_revisao') => {
+    if (!contrato) return;
+    setBusy(true);
+    try {
+      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status }) });
+      if (!p.ok) { addToast('error', 'Falha ao salvar.'); return; }
+      addToast('success', status === 'em_revisao' ? 'Enviado para revisão.' : 'Rascunho salvo.');
+      onConcluir(contrato.id);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <ToolHeader light="Novo" accent="contrato" right={<Btn variant="secondary" onClick={onCancelar}>Cancelar</Btn>} />
+      <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-4xl w-full">
+        <Stepper step={step} />
+
+        {step === 1 && (
+          <Card className="p-6">
+            <h2 className="text-[16px] font-semibold mb-1">Fornecedor</h2>
+            <p className="text-[13px] text-text-secondary mb-4">Informe o CNPJ. A elegibilidade é avaliada no servidor (Receita, diligência, KYS, CNAE, porte).</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1"><span className="text-[12px] text-text-secondary">CNPJ</span>
+                <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" className="h-10 w-[220px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></label>
+              <Btn onClick={iniciar} disabled={busy}>{busy ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} Avaliar elegibilidade</Btn>
+            </div>
+
+            {contrato?.dadosContratada?.razaoSocial && (
+              <div className="mt-4 text-[13px]"><span className="text-text-secondary">Fornecedor:</span> <strong>{contrato.dadosContratada.razaoSocial}</strong></div>
+            )}
+
+            {eleg && (
+              <div className="mt-5">
+                <div className="flex items-center gap-2 mb-3">
+                  {eleg.elegivel ? <Chip tone="success" icon={ShieldCheck}>Elegível</Chip> : <Chip tone="error" icon={ShieldAlert}>Inelegível</Chip>}
+                </div>
+                <ul className="space-y-2">
+                  {eleg.criterios.map((c) => <CriterioRow key={c.id} c={c} cnpj={onlyDigits(cnpj)} contratoId={contrato?.id} apiFetch={apiFetch} addToast={addToast} onReavaliar={iniciar} navigate={navigate} />)}
+                </ul>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {step === 2 && (
+          <Card className="p-6 space-y-4">
+            <h2 className="text-[16px] font-semibold">Documento de entrada</h2>
+            <div className="flex gap-3 items-center">
+              <span className="text-[13px] text-text-secondary">Tipo:</span>
+              {(['tr', 'proposta'] as const).map((t) => (
+                <button key={t} onClick={() => setTipoDoc(t)} className={cn('h-9 px-3 text-[13px] border', tipoDoc === t ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{t === 'tr' ? 'Termo de Referência' : 'Proposta Comercial'}</button>
+              ))}
+            </div>
+            <label className="block">
+              <span className="text-[12px] text-text-secondary">Arquivo (PDF ou DOCX)</span>
+              <div className="mt-1 flex items-center gap-3">
+                <input type="file" accept=".pdf,.docx" onChange={(e) => setArquivo(e.target.files?.[0] || null)} className="text-[13px]" />
+                {arquivo && <Chip tone="info" icon={FileText} size="sm">{arquivo.name}</Chip>}
+              </div>
+            </label>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex flex-col gap-1"><span className="text-[12px] text-text-secondary">Issue Jira (projeto JUR)</span>
+                <div className="flex gap-2">
+                  <input value={jiraKey} onChange={(e) => { setJiraKey(e.target.value); setJiraInfo(null); }} onBlur={validarJira} placeholder="JUR-123" className="h-10 w-[160px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" />
+                  <Btn variant="secondary" size="sm" onClick={validarJira}>Validar</Btn>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1"><span className="text-[12px] text-text-secondary">Nº da Ordem de Compra (opcional)</span>
+                <input value={oc} onChange={(e) => setOc(e.target.value)} className="h-10 w-[200px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></label>
+            </div>
+            {jiraInfo && (jiraInfo.ok
+              ? <div className="text-[13px] text-text-secondary">✓ <strong className="text-text">{jiraKey.toUpperCase()}</strong> — {jiraInfo.resumo} <Chip tone={jiraInfo.alertaDone ? 'warning' : 'neutral'} size="sm">{jiraInfo.status}</Chip>{jiraInfo.alertaDone && <span className="text-warning ml-2">issue concluída — confirme</span>}</div>
+              : <div className="text-[13px] text-error">{jiraInfo.erro}</div>)}
+          </Card>
+        )}
+
+        {step === 3 && extr && (
+          <Card className="p-6 space-y-5">
+            <h2 className="text-[16px] font-semibold">Conferência da extração</h2>
+            <p className="text-[13px] text-text-secondary">A IA apenas extraiu os dados (cada campo cita o trecho-fonte). Confira e edite o que for necessário.</p>
+
+            {extr.lacunas.length > 0 && (
+              <div className="border border-warning/40 bg-warning/5 p-3 text-[13px]"><strong className="text-warning">Lacunas:</strong> {extr.lacunas.join('; ')}.</div>
+            )}
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Campo label="Objeto"><textarea value={objeto} onChange={(e) => setObjeto(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary" /></Campo>
+              <Campo label="Valor total (R$)"><input value={valorReais} onChange={(e) => setValorReais(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>
+              <Campo label="Fim da vigência"><input type="date" value={vigFim} onChange={(e) => setVigFim(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>
+              <Campo label={`Parcelas (${extr.parcelas.length})`}><div className="text-[13px] text-text-secondary">{extr.parcelas.length ? extr.parcelas.map((p) => `${p.numero}: ${fmtMoeda(p.valorCentavos)}`).join(' · ') : '—'}</div></Campo>
+            </div>
+
+            {alertasPendentes.length > 0 && (
+              <div className="border border-line p-4">
+                <h3 className="text-[14px] font-semibold mb-2 flex items-center gap-2"><AlertTriangle size={15} className="text-warning" /> Alertas — ciência obrigatória</h3>
+                <ul className="space-y-2">
+                  {alertasPendentes.map((a) => (
+                    <li key={a.key} className="flex items-start gap-2 text-[13px]">
+                      <input type="checkbox" checked={ciencias.has(a.key)} onChange={(e) => { const n = new Set(ciencias); e.target.checked ? n.add(a.key) : n.delete(a.key); setCiencias(n); }} className="mt-0.5" />
+                      <span>{a.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {step === 4 && (
+          <Card className="p-6 space-y-4">
+            <h2 className="text-[16px] font-semibold">Minuta</h2>
+            {validacao && !validacao.ok && (
+              <div className="border border-error/40 bg-error/5 p-3 text-[13px]"><strong className="text-error">Pendências:</strong> {validacao.bloqueios.join('; ')}.</div>
+            )}
+            {validacao && validacao.avisos.length > 0 && (
+              <div className="border border-warning/40 bg-warning/5 p-3 text-[13px]"><strong className="text-warning">Avisos:</strong> {validacao.avisos.join('; ')}.</div>
+            )}
+            <div className="border border-line bg-white max-h-[480px] overflow-y-auto p-6" dangerouslySetInnerHTML={{ __html: minuta }} />
+            <div className="flex flex-wrap gap-3">
+              <Btn variant="secondary" onClick={() => contrato && window.open(`/api/contratos/${contrato.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Baixar PDF</Btn>
+              <Btn variant="secondary" onClick={() => salvarStatus('rascunho')} disabled={busy}>Salvar rascunho</Btn>
+              <Btn onClick={() => salvarStatus('em_revisao')} disabled={busy || (validacao ? !validacao.ok : false)}>Enviar para revisão</Btn>
+            </div>
+          </Card>
+        )}
+
+        {step === 5 && (
+          <Card className="p-6"><div className="flex items-center gap-2 text-text-secondary"><Lock size={16} /> Aprovação e assinatura (Documenso) chegam na Fase 3 (#139).</div></Card>
+        )}
+
+        {/* navegação */}
+        <div className="flex justify-between mt-6">
+          <Btn variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onCancelar()} disabled={busy}><ChevronLeft size={16} /> {step > 1 ? 'Voltar' : 'Cancelar'}</Btn>
+          {step === 1 && <Btn onClick={() => setStep(2)} disabled={!eleg?.elegivel}>Avançar <ChevronRight size={16} /></Btn>}
+          {step === 2 && <Btn onClick={avancarParaExtracao} disabled={busy || !arquivo}>{busy ? <Loader2 size={16} className="animate-spin" /> : null} Extrair e conferir <ChevronRight size={16} /></Btn>}
+          {step === 3 && <Btn onClick={avancarParaMinuta} disabled={busy}>{busy ? <Loader2 size={16} className="animate-spin" /> : null} Gerar minuta <ChevronRight size={16} /></Btn>}
+          {step === 4 && <Btn variant="secondary" onClick={() => setStep(5)}>Próximo <ChevronRight size={16} /></Btn>}
+        </div>
+      </main>
+    </>
+  );
+}
+
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="block"><span className="text-[12px] text-text-secondary">{label}</span><div className="mt-1">{children}</div></label>;
+}
+
+function CriterioRow({ c, cnpj, contratoId, apiFetch, addToast, onReavaliar, navigate }: { c: CriterioElegibilidade; cnpj: string; contratoId?: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onReavaliar: () => void; navigate?: (p: string) => void }) {
+  const [just, setJust] = useState('');
+  const [open, setOpen] = useState(false);
+  const podeJustificar = c.bloqueia && c.resultado === 'alerta' && !c.justificativa;
+  const justificar = async () => {
+    if (!contratoId || just.trim().length < 10) { addToast('error', 'Justificativa de no mínimo 10 caracteres.'); return; }
+    const r = await apiFetch(`/api/contratos/${contratoId}/elegibilidade/justificar`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ criterioId: c.id, justificativa: just.trim() }) });
+    if (r.ok) { addToast('success', 'Prosseguimento justificado.'); setOpen(false); onReavaliar(); }
+    else addToast('error', 'Falha ao registrar a justificativa.');
+  };
+  return (
+    <li className="border border-line p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[13px]"><Chip tone={CRIT_TONE[c.resultado] || 'neutral'} size="sm">{c.resultado}</Chip><strong>{c.nome}</strong></div>
+        {c.id === 'diligencia' && c.bloqueia && navigate && <button onClick={() => navigate(`/fornecedores/${cnpj}`)} className="text-[12px] text-primary inline-flex items-center gap-1">Abrir ficha <ExternalLink size={12} /></button>}
+      </div>
+      <div className="text-[12px] text-text-secondary mt-1">{c.detalhe}{c.justificativa && <span className="text-success"> · justificado por {c.aprovador}</span>}</div>
+      {podeJustificar && (open ? (
+        <div className="mt-2 flex gap-2">
+          <input value={just} onChange={(e) => setJust(e.target.value)} placeholder="Justificativa (mín. 10 caracteres)" className="h-9 flex-1 bg-field border border-line rounded-none px-2 text-[13px] outline-none focus:border-primary" />
+          <Btn size="sm" onClick={justificar}>Registrar</Btn>
+        </div>
+      ) : <button onClick={() => setOpen(true)} className="mt-2 text-[12px] text-primary">Justificar prosseguimento</button>)}
+    </li>
+  );
+}
+
+// ── Detalhe (#135) ───────────────────────────────────────────────────────────────
+function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo }: { id: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; navigate?: (p: string) => void; onVoltar: () => void; onNovoAditivo: () => void }) {
+  const [c, setC] = useState<Contrato | null>(null);
+  const [erro, setErro] = useState(false);
+  useEffect(() => { (async () => {
+    try { const r = await apiFetch(`/api/contratos/${id}`); if (r.ok) setC(await r.json()); else setErro(true); }
+    catch { setErro(true); }
+  })(); }, [id]);
+
+  if (erro) return <main className="p-10"><EmptyState icon={FileSignature} title="Contrato não encontrado" action={<Btn onClick={onVoltar}>Voltar</Btn>} /></main>;
+  if (!c) return <main className="p-10 text-text-secondary flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Carregando…</main>;
+
+  const jiraBase = ''; // o link absoluto é montado no backend; aqui só exibimos a key
+  return (
+    <>
+      <ToolHeader light="Contrato" accent={c.id} right={<div className="flex gap-2"><Btn variant="ghost" onClick={onVoltar}><ChevronLeft size={16} /> Voltar</Btn>{statusChip(c.status)}</div>} />
+      <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-4xl w-full space-y-5">
+        <Card className="p-5">
+          <div className="grid sm:grid-cols-2 gap-4 text-[14px]">
+            <Info label="Fornecedor" value={`${c.dadosContratada?.razaoSocial || '—'} (${maskCnpj(c.cnpj)})`} />
+            <Info label="Issue Jira" value={c.jira?.issueKey ? `${c.jira.issueKey} ${c.jira.status ? `· ${c.jira.status}` : ''}` : '—'} />
+            <Info label="Objeto" value={c.objeto || c.extracao?.objeto?.valor || '—'} />
+            <Info label="Valor" value={c.valorTotalCentavos ? fmtMoeda(c.valorTotalCentavos) : '—'} />
+            <Info label="Vigência" value={c.vigenciaFim ? `até ${fmtData(c.vigenciaFim)}` : '—'} />
+            <Info label="Ordem de compra" value={c.ordemCompra || '—'} />
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Minuta (PDF)</Btn>
+            <Btn variant="secondary" onClick={onNovoAditivo}><Plus size={16} /> Novo aditivo</Btn>
+          </div>
+        </Card>
+
+        {c.elegibilidadeSnapshot && (
+          <Card className="p-5">
+            <h3 className="text-[14px] font-semibold mb-3">Elegibilidade <span className="text-[12px] text-text-secondary font-normal">(congelada em {fmtData(c.elegibilidadeSnapshot.avaliadoEm)})</span></h3>
+            <ul className="space-y-1.5 text-[13px]">{c.elegibilidadeSnapshot.criterios.map((x) => <li key={x.id} className="flex items-center gap-2"><Chip tone={CRIT_TONE[x.resultado] || 'neutral'} size="sm">{x.resultado}</Chip>{x.nome}</li>)}</ul>
+          </Card>
+        )}
+
+        <Card className="p-5">
+          <h3 className="text-[14px] font-semibold mb-3 flex items-center gap-2"><Clock size={15} /> Linha do tempo</h3>
+          <ol className="space-y-2">
+            {(c.trilha || []).slice().reverse().map((e, i) => (
+              <li key={i} className="text-[13px] flex gap-3"><span className="text-text-secondary font-mono text-[12px] whitespace-nowrap">{fmtData(e.ts)} {String(e.ts).slice(11, 16)}</span><span><strong>{e.acao}</strong>{e.resumo ? ` — ${e.resumo}` : ''} <span className="text-text-secondary">· {e.usuario}</span></span></li>
+            ))}
+          </ol>
+        </Card>
+      </main>
+    </>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return <div><div className="text-[12px] text-text-secondary">{label}</div><div className="text-text">{value}</div></div>;
+}
+
+function AjudaView() {
+  return (
+    <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-3xl w-full">
+      <ToolHeader light="Como" accent="usar" />
+      <Card className="p-6 mt-6 text-[14px] space-y-3 leading-relaxed">
+        <p>A ferramenta <strong>Contratos</strong> gera contratos de prestação de serviços (PJ) a partir de um <strong>Termo de Referência</strong> ou <strong>Proposta</strong>, em 5 passos:</p>
+        <ol className="list-decimal pl-5 space-y-1 text-text-secondary">
+          <li><strong className="text-text">Fornecedor</strong> — só fornecedores <em>elegíveis</em> avançam (Receita ativa, diligência válida, KYS assinado).</li>
+          <li><strong className="text-text">Documento</strong> — envie o TR/Proposta e vincule a issue do Jira (projeto JUR).</li>
+          <li><strong className="text-text">Conferência</strong> — a IA <em>extrai</em> os dados (nunca redige); confira, resolva lacunas e dê ciência aos alertas (radar trabalhista).</li>
+          <li><strong className="text-text">Minuta</strong> — pré-visualize o contrato; as validações (soma de parcelas, datas) precisam passar.</li>
+          <li><strong className="text-text">Assinatura</strong> — aprovação humana + Documenso (Fase 3).</li>
+        </ol>
+        <p className="text-text-secondary">Os Termos e Condições são anexados imutáveis (verificados por SHA-256) e nunca passam pela IA.</p>
+      </Card>
+    </main>
+  );
+}

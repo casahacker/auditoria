@@ -25,7 +25,7 @@ import {
   ExternalLink,
   Link2,
   RefreshCw,
-  NotebookPen,
+  NotebookPen, FileSignature,
   CheckCircle2,
   Info,
   Printer,
@@ -43,15 +43,16 @@ import { AuditResult, FileData, AuditItem, AuthUser, BudgetLine, CNPJData } from
 import { processAudit, reprocessItems } from './services/auditService';
 import FeacApp from './feac/FeacApp';
 import FornecedoresApp from './fornecedores/FornecedoresApp';
+import ContratosApp from './contratos/ContratosApp';
 import { Btn, ToolSidebar, ToolHeader, SidebarItem, SkipLink } from './ui/kit';
 
 type Section = 'nova' | 'processando' | 'resultado' | 'historico' | 'pesquisa' | 'documentacao';
 
 // ── Multi-tool suite: top-level tool selector (sits above the audit's Section) ──
-type Tool = 'launcher' | 'audit' | 'feac' | 'fornecedores';
-const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', fornecedores: 'fornecedores' };
+type Tool = 'launcher' | 'audit' | 'feac' | 'fornecedores' | 'contratos';
+const TOOL_TO_PATH: Record<Tool, string> = { launcher: '', audit: 'auditoria', feac: 'feac', fornecedores: 'fornecedores', contratos: 'contratos' };
 // /diligencia e /conformidade redirecionam (soft) para o cockpit unificado de Fornecedores.
-const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', fornecedores: 'fornecedores', diligencia: 'fornecedores', conformidade: 'fornecedores' };
+const PATH_TO_TOOL: Record<string, Tool> = { auditoria: 'audit', feac: 'feac', fornecedores: 'fornecedores', diligencia: 'fornecedores', conformidade: 'fornecedores', contratos: 'contratos' };
 const AUDIT_PATH_SECTIONS = ['nova', 'processando', 'resultado', 'historico', 'pesquisa', 'documentacao'];
 const AUDIT_HEADERS: Record<Section, [string, string]> = {
   nova:         ['Configuração de', 'Nova Auditoria'],
@@ -324,6 +325,7 @@ export default function App() {
   const [activeTool, setActiveTool] = useState<Tool>(() => SHARE_TOKEN ? 'launcher' : (PATH_TO_TOOL[pathSegs()[0]] || 'launcher'));
   const [feacInitialId] = useState(() => { const s = pathSegs(); return s[0] === 'feac' && s[1] && s[1] !== 'nova' ? s[1] : ''; });
   const [fornInitialDoc] = useState(() => { const s = pathSegs(); if (s[0] !== 'fornecedores' && s[0] !== 'diligencia') return ''; const a = s[1]; return !a || ['historico', 'ajuda', 'kyc', 'convites', 'detalhe'].includes(a) ? '' : a; });
+  const [contratosInitial] = useState(() => { const s = pathSegs(); return s[0] === 'contratos' ? (s[1] || '') : ''; });
   const routeFirst = useRef(true);
   const routePop = useRef(false);
   const navigate = useCallback((p: string) => { if (window.location.pathname !== p) window.history.pushState({}, '', p); }, []);
@@ -337,6 +339,7 @@ export default function App() {
     if (activeTool === 'audit') p = '/auditoria/' + activeSection;
     else if (activeTool === 'feac') p = '/feac';
     else if (activeTool === 'fornecedores') p = '/fornecedores';
+    else if (activeTool === 'contratos') p = '/contratos';
     navigate(p);
   }, [activeTool, activeSection, navigate]);
   // back/forward
@@ -1772,6 +1775,10 @@ ${item.auditorNote ? `<div class="section"><h2>Anotação do Auditor</h2><div cl
 
     {activeTool === 'feac' && (
       <FeacApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialRecordId={feacInitialId} />
+    )}
+
+    {activeTool === 'contratos' && (
+      <ContratosApp user={user} apiFetch={apiFetch} addToast={addToast} onHome={() => setActiveTool('launcher')} navigate={navigate} initialView={contratosInitial} />
     )}
 
     {activeTool === 'audit' && (
@@ -3550,6 +3557,14 @@ function LauncherView({ user, onPick }: { user: AuthUser; onPick: (t: Tool) => v
       subtitle: 'Diligência + KYS/KYG num só lugar',
       description: 'Todos os fornecedores num cockpit: diligência (Receita Federal + listas de restrição CEIS/CNEP/CEPIM/Leniência) e conformidade KYS/KYG (cadastro verificado + assinatura via Documenso), com elegibilidade e gestão de assinaturas.',
       icon: Building2,
+      enabled: true,
+    },
+    {
+      id: 'contratos',
+      title: 'Contratos',
+      subtitle: 'Redator de contratos PJ + aditivos',
+      description: 'Gera o contrato de prestação de serviços (PJ) a partir do TR/Proposta: gate de elegibilidade, extração por IA (DeepSeek), validações determinísticas, T&C imutáveis e vínculo obrigatório à issue Jira (JUR). Aprovação humana e assinatura via Documenso.',
+      icon: FileSignature,
       enabled: true,
     },
   ];

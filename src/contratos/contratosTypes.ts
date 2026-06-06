@@ -46,6 +46,8 @@ export interface RepresentanteLegal {
   email?: string;
   nacionalidade?: string;
   estadoCivil?: string;
+  enderecoCompleto?: string;
+  telefone?: string;
 }
 export interface DadosContratada {
   cnpj: string;
