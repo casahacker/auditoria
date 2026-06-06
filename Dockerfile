@@ -16,6 +16,7 @@ COPY --from=builder /app/dist ./dist
 COPY server.ts feacRoutes.ts diligenciaRoutes.ts kycRoutes.ts kycPdf.ts contratosRoutes.ts ./
 COPY src/kyc/kycTypes.ts ./src/kyc/kycTypes.ts
 COPY src/contratos/contratosTypes.ts ./src/contratos/contratosTypes.ts
+COPY src/contratos/termosCondicoes.ts ./src/contratos/termosCondicoes.ts
 COPY assets ./assets
 # #103: commit da plataforma p/ o rodapé/memória do relatório (vazio se não informado no build).
 ARG APP_COMMIT=""

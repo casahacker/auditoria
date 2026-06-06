@@ -20,6 +20,7 @@ import fs from "fs";
 import { z } from "zod";
 import type { Contrato, ContratoStatus, EventoTrilha } from "./src/contratos/contratosTypes";
 import { resumoDoContrato } from "./src/contratos/contratosTypes";
+import { verificarTc, tcStatus } from "./src/contratos/termosCondicoes";
 
 export interface ContratosCtx {
   DATA_DIR: string;
@@ -107,6 +108,15 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   const SEQ_FILE = path.join(CONTRATOS_DIR, "_seq.json");
   fs.mkdirSync(CONTRATOS_DIR, { recursive: true });
 
+  // T&C imutáveis (#128): confere o SHA-256 do PDF oficial no boot e registra. Em caso
+  // de divergência a app NÃO cai — apenas a geração de pacotes é bloqueada (fail-safe).
+  const tc = verificarTc();
+  console.log(
+    `[Contratos] T&C v${tc.versao} — ${tc.ok ? "OK" : "FALHA"} ` +
+    `(sha256 ${tc.encontrado ? tc.encontrado.slice(0, 16) + "…" : "—"})` +
+    `${tc.ok ? "" : ` — geração de pacotes BLOQUEADA: ${tc.erro}`}`,
+  );
+
   // ── IDs sequenciais por ano (gravação atômica) ─────────────────────────────────
   // CH-CT-{ANO}-{SEQ 3díg} / CH-AD-{ANO}-{SEQ}. Síncrono de ponta a ponta: entre a
   // leitura e a escrita do contador NÃO há await, logo é atômico no event-loop e não
@@ -169,6 +179,16 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   const naoImplementado = (issue: string, oque: string): RequestHandler => (_req, res) =>
     res.status(501).json({ error: "Ainda não implementado", detalhe: `${oque} — previsto para a issue ${issue}.` });
 
+  // fail-safe dos T&C (#128): recusa montar pacotes se o hash divergir (não derruba a app).
+  const exigirTcOk: RequestHandler = (_req, res, next) => {
+    const s = tcStatus();
+    if (!s.ok) return res.status(503).json({
+      error: "Geração de pacotes bloqueada — T&C inválidos",
+      detalhe: s.erro, versaoTC: s.versao, esperado: s.esperado, encontrado: s.encontrado,
+    });
+    next();
+  };
+
   // ─────────────────────────── CRUD da fundação ───────────────────────────────────
 
   // Criar rascunho (passo 1 do wizard) — Seção 13.
@@ -207,6 +227,9 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
 
   // Validação da issue Jira (#133) — registrar antes de "/:id" para não colidir.
   app.get("/api/contratos/jira/:issueKey", requireAuth, naoImplementado("#133", "Validação da issue Jira (JUR)"));
+
+  // Status dos T&C imutáveis (#128) — antes de "/:id" p/ não casar com :id="tc".
+  app.get("/api/contratos/tc", requireAuth, (_req, res) => res.json(tcStatus()));
 
   // Detalhe — Seção 14.3.
   app.get("/api/contratos/:id", requireAuth, (req, res) => {
@@ -269,9 +292,9 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   // ─────────── stubs das demais sub-issues (501 documentado) ───────────
   app.get("/api/contratos/:id/elegibilidade", requireAuth, naoImplementado("#130", "Gate de elegibilidade no servidor"));
   app.post("/api/contratos/:id/extrair", writeLimiter, requireAuth, naoImplementado("#131", "Extração de dados do TR/Proposta (IA)"));
-  app.get("/api/contratos/:id/minuta", requireAuth, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
+  app.get("/api/contratos/:id/minuta", requireAuth, exigirTcOk, naoImplementado("#129", "Render da minuta (HTML/PDF)"));
   app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, naoImplementado("#139", "Aprovação humana (HITL)"));
-  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, naoImplementado("#139", "Envio para assinatura (Documenso)"));
+  app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, naoImplementado("#139", "Envio para assinatura (Documenso)"));
   app.get("/api/contratos/:id/aditivos", requireAuth, naoImplementado("#137", "Lista de aditivos"));
   app.post("/api/contratos/:id/aditivos", writeLimiter, requireAuth, naoImplementado("#137", "Criação de termo aditivo"));
 }
