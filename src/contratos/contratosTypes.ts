@@ -186,7 +186,7 @@ export interface JiraVinculo {
 }
 
 // ── Termo aditivo (Seção 5 / Fase 2 — #137/#138) ─────────────────────────────────
-export type TipoAditivo = "prorrogacao" | "valor" | "escopo" | "dados_cadastrais";
+export type TipoAditivo = "prorrogacao" | "valor_parcelas" | "escopo" | "dados_cadastrais";
 export interface Aditivo {
   id: string;                    // CH-AD-{ANO}-{SEQ}
   contratoId: string;            // CH-CT-{ANO}-{SEQ}
@@ -201,6 +201,8 @@ export interface Aditivo {
   parcelasNovas?: Parcela[];
   escopoNovo?: string;
   dadosCadastraisNovos?: Partial<DadosContratada>;
+  extracao?: ExtracaoIA;                          // só no aditivo de escopo (novo TR)
+  variacaoPercentual?: number;                    // aditivo de valor: % sobre o valor original
   elegibilidadeSnapshot?: ElegibilidadeSnapshot; // gate reavaliado
   versaoTC?: string;
   hashTC?: string;

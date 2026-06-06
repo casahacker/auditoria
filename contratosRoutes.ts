@@ -21,14 +21,14 @@ import multer from "multer";
 import mammoth from "mammoth";
 import type OpenAI from "openai";
 import { z } from "zod";
-import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo, AnexoRef } from "./src/contratos/contratosTypes";
+import type { Contrato, ContratoStatus, EventoTrilha, JiraVinculo, AnexoRef, Aditivo, Parcela, DadosContratada } from "./src/contratos/contratosTypes";
 import { resumoDoContrato } from "./src/contratos/contratosTypes";
-import { verificarTc, tcStatus } from "./src/contratos/termosCondicoes";
+import { verificarTc, tcStatus, tcSnapshot } from "./src/contratos/termosCondicoes";
 import { validarIssue, HTTP_POR_MOTIVO } from "./src/contratos/jiraClient";
-import { validarContratoParaGeracao } from "./src/contratos/validacoes";
+import { validarContratoParaGeracao, somaParcelasCentavos } from "./src/contratos/validacoes";
 import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/elegibilidade";
 import { extrairDados } from "./src/contratos/extracao";
-import { renderContratoHtml, renderContratoPdf } from "./src/contratos/render";
+import { renderContratoHtml, renderContratoPdf, renderAditivoHtml, renderAditivoPdf } from "./src/contratos/render";
 import { montarDadosContratada } from "./src/contratos/dadosContratada";
 
 export interface ContratosCtx {
@@ -109,6 +109,19 @@ const patchSchema = z.object({
   equipamentosFornecidosPelaContratante: z.string(),
 }).partial();
 
+// Aditivo (#137) — payload da criação (no multipart vem como campo `payload` JSON).
+const aditivoSchema = z.object({
+  tipo: z.enum(["prorrogacao", "valor_parcelas", "escopo", "dados_cadastrais"]),
+  jiraIssueKey: jiraKeyField.optional(),
+  descricao: z.string().max(2000).optional(),
+  vigenciaNovaFim: z.string().nullable().optional(),
+  valorNovoCentavos: z.number().int().nonnegative().optional(),
+  parcelasNovas: z.array(parcelaSchema).optional(),
+  escopoNovo: z.string().optional(),
+  dadosCadastraisNovos: dadosContratadaSchema.optional(),
+  confirmarSemAssinatura: z.boolean().optional(),
+});
+
 const zodError = (e: any) => ({
   error: "Dados inválidos",
   detalhes: e?.issues?.map((i: any) => ({ campo: i.path.join(".") || "(raiz)", msg: i.message })) || [String(e?.message || e)],
@@ -185,6 +198,15 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
       .filter((name) => { try { return fs.statSync(path.join(CONTRATOS_DIR, name)).isDirectory(); } catch { return false; } })
       .map((name) => readContrato(name))
       .filter((c): c is Contrato => !!c);
+
+  // ── aditivos: 1 diretório por contrato (#137) ─────────────────────────────────
+  const aditivoDir = (cid: string) => path.join(contratoDir(cid), "aditivos");
+  const aditivoPath = (cid: string, aid: string) => path.join(aditivoDir(cid), `${aid}.json`);
+  const readAditivo = (cid: string, aid: string): Aditivo | null => { try { return JSON.parse(fs.readFileSync(aditivoPath(cid, aid), "utf-8")); } catch { return null; } };
+  const writeAditivo = (cid: string, a: Aditivo) => { fs.mkdirSync(aditivoDir(cid), { recursive: true }); const f = aditivoPath(cid, a.id); const tmp = `${f}.tmp`; fs.writeFileSync(tmp, JSON.stringify(a, null, 2)); fs.renameSync(tmp, f); };
+  const listAditivos = (cid: string): Aditivo[] => (fs.existsSync(aditivoDir(cid)) ? fs.readdirSync(aditivoDir(cid)) : [])
+    .filter((f) => f.endsWith(".json")).map((f) => readAditivo(cid, f.replace(/\.json$/, ""))).filter((a): a is Aditivo => !!a)
+    .sort((a, b) => a.numeroOrdinal - b.numeroOrdinal);
 
   // ── trilha append-only (helper reaproveitável pelas demais issues) ─────────────
   const appendTrilha = (
@@ -493,6 +515,112 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
   });
   app.post("/api/contratos/:id/aprovar", writeLimiter, requireAuth, naoImplementado("#139", "Aprovação humana (HITL)"));
   app.post("/api/contratos/:id/enviar-assinatura", writeLimiter, requireAuth, exigirTcOk, exigirDeterministicoOk, exigirElegivel, naoImplementado("#139", "Envio para assinatura (Documenso)"));
-  app.get("/api/contratos/:id/aditivos", requireAuth, naoImplementado("#137", "Lista de aditivos"));
-  app.post("/api/contratos/:id/aditivos", writeLimiter, requireAuth, naoImplementado("#137", "Criação de termo aditivo"));
+  // ── Aditivos (#137) ───────────────────────────────────────────────────────────
+  app.get("/api/contratos/:id/aditivos", requireAuth, (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    if (!readContrato(id)) return res.status(404).json({ error: "Contrato não encontrado" });
+    res.json(listAditivos(id));
+  });
+
+  app.get("/api/contratos/:id/aditivos/:aid/minuta", requireAuth, exigirTcOk, async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const aid = sanitizeSegment(String(req.params.aid || "")); if (!aid) return res.status(400).json({ error: "ID inválido" });
+    const contrato = readContrato(id); const aditivo = readAditivo(id, aid);
+    if (!contrato || !aditivo) return res.status(404).json({ error: "Aditivo não encontrado" });
+    try {
+      if (String(req.query.formato || "html").toLowerCase() === "pdf") {
+        const pdf = await renderAditivoPdf(contrato, aditivo);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename="aditivo_${aditivo.id}.pdf"`);
+        return res.send(pdf);
+      }
+      res.json({ html: renderAditivoHtml(contrato, aditivo) });
+    } catch (e: any) { res.status(500).json({ error: `Falha ao renderizar o aditivo: ${e?.message || e}` }); }
+  });
+
+  app.post("/api/contratos/:id/aditivos", writeLimiter, requireAuth, docUpload.single("file"), async (req: any, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+
+    let raw: any;
+    if (req.file) { try { raw = JSON.parse(req.body?.payload || "{}"); } catch { return res.status(400).json({ error: "Campo payload (JSON) inválido." }); } }
+    else raw = req.body;
+    let body: z.infer<typeof aditivoSchema>;
+    try { body = aditivoSchema.parse(raw); } catch (e) { return res.status(400).json(zodError(e)); }
+
+    // só sobre contrato assinado (ou enviado_assinatura com confirmação explícita)
+    if (contrato.status !== "assinado" && !(contrato.status === "enviado_assinatura" && body.confirmarSemAssinatura)) {
+      return res.status(422).json({ error: `Aditivo só sobre contrato assinado (status atual: ${contrato.status}).` });
+    }
+
+    // Jira do aditivo (próprio ou herdado do contrato-mãe)
+    const jkey = body.jiraIssueKey || contrato.jira?.issueKey;
+    if (!jkey) return res.status(422).json({ error: "Vincule uma issue do projeto JUR ao aditivo." });
+    const rj = await resolverVinculoJira(jkey);
+    if (rj.erroBody) return res.status(rj.erroStatus || 502).json(rj.erroBody);
+
+    // gate de elegibilidade REAVALIADO na data do aditivo
+    const valorRef = body.valorNovoCentavos ?? contrato.valorTotalCentavos;
+    const snap = await avaliarElegibilidade(DATA_DIR, contrato.cnpj, contrato.objeto || contrato.extracao?.objeto?.valor || undefined, valorRef);
+    aplicarJustificativas(snap, contrato.elegibilidadeJustificativas);
+    if (!snap.elegivel) return res.status(422).json({ error: "Fornecedor inelegível na data do aditivo.", elegibilidade: snap });
+
+    // validações determinísticas por tipo
+    if (body.tipo === "prorrogacao") {
+      if (!body.vigenciaNovaFim) return res.status(400).json({ error: "Informe a nova data de fim da vigência." });
+      if (contrato.vigenciaFim && body.vigenciaNovaFim <= String(contrato.vigenciaFim).slice(0, 10)) return res.status(422).json({ error: "A nova vigência deve ser posterior à atual." });
+    } else if (body.tipo === "valor_parcelas") {
+      if (!body.valorNovoCentavos) return res.status(400).json({ error: "Informe o novo valor total." });
+      if (body.parcelasNovas?.length && somaParcelasCentavos(body.parcelasNovas) !== body.valorNovoCentavos) return res.status(422).json({ error: "A soma das novas parcelas difere do novo valor total." });
+    } else if (body.tipo === "escopo") {
+      if (!body.escopoNovo && !req.file) return res.status(400).json({ error: "Informe o novo escopo ou anexe o novo Termo de Referência." });
+    } else if (body.tipo === "dados_cadastrais") {
+      if (!body.dadosCadastraisNovos || !Object.keys(body.dadosCadastraisNovos).length) return res.status(400).json({ error: "Informe os dados cadastrais a atualizar." });
+    }
+
+    const user = sessionUser(req);
+    const aid = allocId("AD");
+    const now = nowIso();
+    const aditivo: Aditivo = {
+      id: aid, contratoId: contrato.id, numeroOrdinal: (contrato.aditivos?.length || 0) + 1,
+      tipo: body.tipo, status: "rascunho",
+      jira: { issueKey: jkey.toUpperCase(), ...(rj.jira || {}) },
+      ...(body.descricao ? { descricao: body.descricao } : {}),
+      ...(body.vigenciaNovaFim ? { vigenciaNovaFim: body.vigenciaNovaFim } : {}),
+      ...(body.valorNovoCentavos != null ? { valorNovoCentavos: body.valorNovoCentavos } : {}),
+      ...(body.parcelasNovas ? { parcelasNovas: body.parcelasNovas as Parcela[] } : {}),
+      ...(body.escopoNovo ? { escopoNovo: body.escopoNovo } : {}),
+      ...(body.dadosCadastraisNovos ? { dadosCadastraisNovos: body.dadosCadastraisNovos as Partial<DadosContratada> } : {}),
+      elegibilidadeSnapshot: snap, ...tcSnapshot(),
+      trilha: [], createdAt: now, createdBy: user, updatedAt: now,
+    };
+    if (body.tipo === "valor_parcelas" && contrato.valorTotalCentavos) {
+      aditivo.variacaoPercentual = +(((body.valorNovoCentavos! - contrato.valorTotalCentavos) / contrato.valorTotalCentavos) * 100).toFixed(2);
+    }
+    // escopo: anexa o novo TR + roda a extração (radar trabalhista) — best-effort
+    if (body.tipo === "escopo" && req.file) {
+      try {
+        const ext = path.extname(req.file.originalname || "").toLowerCase();
+        const nome = `aditivo-${aid}-tr${ext || ".bin"}`;
+        fs.mkdirSync(contratoDir(id), { recursive: true });
+        fs.writeFileSync(path.join(contratoDir(id), nome), req.file.buffer);
+        let texto = "";
+        if (ext === ".docx") texto = (await mammoth.extractRawText({ buffer: req.file.buffer })).value || "";
+        else if (ext === ".pdf") texto = await extractTextFromFile(path.join(contratoDir(id), nome));
+        else texto = req.file.buffer.toString("utf-8");
+        const r = await extrairDados(texto, "tr", { aiClient, parseJsonSafe });
+        if (r.ok && r.extracao) aditivo.extracao = r.extracao;
+        aditivo.anexos = { entrada: { nome, tipo: "entrada", mime: req.file.mimetype, tamanho: req.file.size, adicionadoEm: now } };
+      } catch { /* extração do novo TR é best-effort */ }
+    }
+
+    appendTrilha(aditivo, user, "criou_aditivo", `Aditivo de ${body.tipo} (${aditivo.numeroOrdinal}º)`);
+    writeAditivo(id, aditivo);
+    contrato.aditivos = [...(contrato.aditivos || []), aid];
+    contrato.updatedAt = now;
+    appendTrilha(contrato, user, "criou_aditivo", `Aditivo ${aid} (${body.tipo})`, { aditivoId: aid, tipo: body.tipo });
+    writeContrato(contrato);
+    res.status(201).json(aditivo);
+  });
 }

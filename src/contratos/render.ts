@@ -18,8 +18,11 @@ import fontkit from "@pdf-lib/fontkit";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import type { Contrato } from "./contratosTypes";
+import type { Contrato, Aditivo } from "./contratosTypes";
 import { montarBlocos, type Bloco } from "./templates/contratoPJ_v2026_05";
+import { montarBlocosAditivo } from "./templates/aditivoPJ_v2026_05";
+
+const jiraDe = (c: Contrato, ad?: Aditivo) => ad?.jira?.issueKey || c.jira?.issueKey || "JUR-—";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ASSETS = path.join(__dirname, "..", "..", "assets");
@@ -55,8 +58,7 @@ function wrap(font: PDFFont, text: string, size: number, maxW: number): string[]
   return out;
 }
 
-export async function renderContratoPdf(c: Contrato): Promise<Buffer> {
-  const blocos = montarBlocos(c);
+async function renderPdf(blocos: Bloco[], rodape: (n: number, total: number) => string): Promise<Buffer> {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit as any);
   const reg = await doc.embedFont(StandardFonts.Helvetica);
@@ -115,7 +117,7 @@ export async function renderContratoPdf(c: Contrato): Promise<Buffer> {
   // rodapé em TODAS as páginas (IBM Plex Mono), inclusive a de assinaturas.
   const paginas = doc.getPages(); const total = paginas.length;
   paginas.forEach((p, i) => {
-    const t = rodapeTexto(c, i + 1, total);
+    const t = rodape(i + 1, total);
     const size = 7;
     const tw = mono.widthOfTextAtSize(t, size);
     p.drawText(t, { x: (A4[0] - tw) / 2, y: M - 28, size, font: mono, color: SOFT });
@@ -124,11 +126,12 @@ export async function renderContratoPdf(c: Contrato): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
+export const renderContratoPdf = (c: Contrato): Promise<Buffer> => renderPdf(montarBlocos(c), (n, t) => rodapeTexto(c, n, t));
+
 // ── HTML (preview do passo 4) ───────────────────────────────────────────────────
 const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-export function renderContratoHtml(c: Contrato): string {
-  const blocos = montarBlocos(c);
+function renderHtml(blocos: Bloco[], rodapeStr: string): string {
   const corpo = blocos.map((b) => {
     switch (b.tipo) {
       case "titulo": return `<h1>${esc(b.texto)}</h1>`;
@@ -152,5 +155,14 @@ export function renderContratoHtml(c: Contrato): string {
     .minuta .assinaturas{display:flex;gap:40px;margin-top:48px}.minuta .col{flex:1;text-align:center}
     .minuta .linha{border-top:1px solid #171717;margin-bottom:8px}.minuta .nome{font-weight:600}.minuta .papel{font-size:12px;color:#555}
     .minuta .rodape{margin-top:24px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#888}
-  </style><div class="minuta">${html}<div class="rodape">${esc(rodapeTexto(c, 1, 1).replace(/Página 1 de 1/, "Rodapé em todas as páginas do PDF"))}</div></div></html>`;
+  </style><div class="minuta">${html}<div class="rodape">${esc(rodapeStr)}</div></div></html>`;
 }
+
+export const renderContratoHtml = (c: Contrato): string =>
+  renderHtml(montarBlocos(c), `${c.id} · ${c.jira?.issueKey || "JUR-—"} · rodapé em todas as páginas do PDF`);
+
+// ── Aditivo (#137) — mesmo renderizador, rodapé próprio com o id do aditivo ──────
+export const renderAditivoPdf = (c: Contrato, ad: Aditivo): Promise<Buffer> =>
+  renderPdf(montarBlocosAditivo(c, ad), (n, t) => `${ad.id} (${c.id}) · ${jiraDe(c, ad)} · Página ${n} de ${t}`);
+export const renderAditivoHtml = (c: Contrato, ad: Aditivo): string =>
+  renderHtml(montarBlocosAditivo(c, ad), `${ad.id} (${c.id}) · ${jiraDe(c, ad)} · rodapé em todas as páginas do PDF`);

@@ -26,14 +26,14 @@ export type Bloco =
   | { tipo: "nota"; texto: string };
 
 // dados fixos da CONTRATANTE
-const CASA_HACKER = "ASSOCIAÇÃO CASA HACKER, associação privada, inscrita no CNPJ sob o n° 36.038.079/0001-97, com sede na Rua Doutor Renato Paes de Barros, 618, Cj 01 — Itaim Bibi, São Paulo — SP, 04530-000, neste ato representada na forma de seu Estatuto Social, doravante denominada simplesmente “CASA HACKER”; e";
+export const CASA_HACKER = "ASSOCIAÇÃO CASA HACKER, associação privada, inscrita no CNPJ sob o n° 36.038.079/0001-97, com sede na Rua Doutor Renato Paes de Barros, 618, Cj 01 — Itaim Bibi, São Paulo — SP, 04530-000, neste ato representada na forma de seu Estatuto Social, doravante denominada simplesmente “CASA HACKER”; e";
 
-const ph = (v: any, placeholder: string): string => {
+export const ph = (v: any, placeholder: string): string => {
   const s = String(v ?? "").trim();
   return s || `[${placeholder}]`;
 };
 
-function qualificacaoContratada(c: Contrato): string {
+export function qualificacaoContratada(c: Contrato): string {
   const d = c.dadosContratada;
   const r = d?.representante;
   return [

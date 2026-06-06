@@ -24,6 +24,7 @@ COPY src/contratos/extracao.ts ./src/contratos/extracao.ts
 COPY src/contratos/render.ts ./src/contratos/render.ts
 COPY src/contratos/dadosContratada.ts ./src/contratos/dadosContratada.ts
 COPY src/contratos/templates/contratoPJ_v2026_05.ts ./src/contratos/templates/contratoPJ_v2026_05.ts
+COPY src/contratos/templates/aditivoPJ_v2026_05.ts ./src/contratos/templates/aditivoPJ_v2026_05.ts
 COPY assets ./assets
 # #103: commit da plataforma p/ o rodapé/memória do relatório (vazio se não informado no build).
 ARG APP_COMMIT=""
