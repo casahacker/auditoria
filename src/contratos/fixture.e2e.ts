@@ -7,7 +7,7 @@
  * Valida o pipeline ponta a ponta (extração → gate → minuta) contra o gabarito da
  * fixture "TR Assistente de Comunicação". A chamada ao DeepSeek ao vivo exige
  * DEEPSEEK_API_KEY (produção); aqui o gabarito é injetado como aiClient mock para
- * validar a plumbing (zod, lacunas, radar trabalhista, validações, render). O `.docx`
+ * validar a plumbing (zod, lacunas, checagem estrutural, validações, render). O `.docx`
  * real (se presente em referencia/contratos/) é lido com mammoth como bônus.
  */
 import express from "express";
@@ -43,13 +43,10 @@ const GABARITO = {
   localExecucao: { valor: "remoto", trechoFonte: "remoto" },
   equipamentosFornecidosPelaContratante: { valor: "laptop e celular corporativos + acessos", trechoFonte: "equipamentos" },
   lacunas: ["dados da contratada", "data de início", "issue JUR", "número da OC"],
-  alertas: [],
-  indiciosTrabalhistas: [
-    { indicio: "jornada de 30 horas semanais", trecho: "30 horas semanais", gravidade: "alta" },
-    { indicio: "tempo de resposta de até 4 horas", trecho: "responder em até 4 horas", gravidade: "media" },
-    { indicio: "direcionamentos contínuos da área de Comunicação", trecho: "sob direção da área de Comunicação", gravidade: "media" },
-    { indicio: "equipamentos corporativos", trecho: "laptop e celular corporativos", gravidade: "media" },
-    { indicio: "integração a rotinas/reuniões internas", trecho: "participar das reuniões internas", gravidade: "baixa" },
+  alertas: [
+    "O documento é um Termo de Referência, não um contrato assinado",
+    "Não há identificação da contratada no documento",
+    "Não há data de início nem de fim — apenas duração (6 meses)",
   ],
   conflitosComPadrao: [],
 };
@@ -79,8 +76,8 @@ async function main() {
   ok(ex.valorTotalCentavos.valor === 1_800_000, "valor total R$ 18.000,00");
   ok(ex.parcelas.length === 6 && ex.parcelas.every((p) => p.valorCentavos === 300_000), "6 parcelas de R$ 3.000,00");
   ok(["dados da contratada", "data de início", "issue JUR", "número da OC"].every((l) => ex.lacunas.includes(l)), "lacunas: contratada, início, JUR, OC");
-  const grav = ex.indiciosTrabalhistas.map((i) => i.gravidade);
-  ok(ex.indiciosTrabalhistas.length >= 5 && grav.includes("alta") && grav.filter((g) => g === "media").length >= 3 && grav.includes("baixa"), "radar trabalhista: ≥5 indícios (30h alta, ≥3 média, reuniões baixa)");
+  ok(!("indiciosTrabalhistas" in ex), "radar trabalhista removido do schema (#145)");
+  ok(ex.alertas.length >= 1 && ex.alertas.some((a) => /Termo de Referência/i.test(a)), "checagem estrutural: alertas de completude do TR");
 
   // 2) contrato gerado bate com o gabarito (render)
   const hoje = new Date().toISOString().slice(0, 10);

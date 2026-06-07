@@ -28,8 +28,9 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
    justificado** (justificativa + aprovador, na trilha).
 2. **Documento** — upload do TR/Proposta (PDF/DOCX) + **issue Jira (projeto JUR)**
    validada ao vivo + nº da Ordem de Compra (opcional).
-3. **Conferência** — a IA extrai os campos (cada um com o trecho-fonte); lacunas
-   destacadas; **alertas** (radar trabalhista + conflitos) exigem **ciência individual**.
+3. **Conferência** — a IA extrai os campos (cada um com o trecho-fonte) e confere a
+   **completude estrutural** do TR; lacunas destacadas; **alertas** (estruturais +
+   conflitos com o padrão) exigem **ciência individual**.
 4. **Minuta** — preview HTML + validações determinísticas; baixar PDF; salvar/enviar para
    revisão.
 5. **Aprovação e assinatura** — na **ficha do contrato**: *Gerar pacote* (Contrato + TR +
@@ -42,17 +43,22 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
 
 ## Termos aditivos (Fase 2)
 
-Sobre contratos **assinados**: `prorrogacao`, `valor_parcelas`, `escopo` (novo TR, roda o
-radar trabalhista) e `dados_cadastrais`. Numeração ordinal por contrato (`CH-AD-…`), gate
+Sobre contratos **assinados**: `prorrogacao`, `valor_parcelas`, `escopo` (novo TR, roda a
+checagem estrutural) e `dados_cadastrais`. Numeração ordinal por contrato (`CH-AD-…`), gate
 de elegibilidade **reavaliado** na data do aditivo, redação consolidada das cláusulas
 alteradas + ratificação das demais.
 
-## Radar trabalhista (anti-pejotização)
+## Checagem estrutural do TR ("o que não pode faltar")
 
-A extração aponta indícios do art. 3º da CLT (jornada fixa, exclusividade, subordinação,
-pessoalidade, habitualidade, tempo de resposta rígido, equipamentos corporativos,
-integração a rotinas) com trecho literal e gravidade (baixa/média/alta). **Não bloqueia**,
-mas exige ciência — é um alerta de risco de reconhecimento de vínculo empregatício.
+A extração confere se o documento traz os elementos mínimos para a redação do contrato:
+**objeto**, **valor total**, **forma de pagamento/parcelas**, **vigência/prazo** (início,
+fim ou duração), **identificação da CONTRATADA** (razão social, CNPJ, endereço), **nº da
+Ordem de Compra** e **condições de pagamento**. O que faltar entra em `lacunas`; observações
+estruturais (ex.: "é um TR, não um contrato assinado", "sem identificação da contratada",
+"sem datas — apenas duração") entram em `alertas`, que exigem **ciência individual**.
+
+> O **radar trabalhista** (anti-pejotização, art. 3º da CLT) foi **removido** em #145 — a
+> conferência foca na completude estrutural do TR, não em risco de vínculo empregatício.
 
 ## Tratamento de dados e IA (LGPD — Seção 15)
 
@@ -89,7 +95,7 @@ instância do KYS, com S3 ligado — e `CONTRATOS_DIRETOR_EMAIL`).
 | `src/contratos/jiraClient.ts` | validação + sincronização Jira |
 | `src/contratos/validacoes.ts` | validações determinísticas + formatação (`extenso`) |
 | `src/contratos/elegibilidade.ts` | gate de elegibilidade (servidor) |
-| `src/contratos/extracao.ts` | pipeline DeepSeek-V3 (zod, radar trabalhista) |
+| `src/contratos/extracao.ts` | pipeline DeepSeek-V3 (zod, checagem estrutural do TR) |
 | `src/contratos/dadosContratada.ts` | merge Receita + KYS da CONTRATADA |
 | `src/contratos/documenso.ts` | envio para assinatura (2 signatários + CC) |
 | `src/contratos/templates/contratoPJ_v2026_05.ts` · `aditivoPJ_v2026_05.ts` | templates versionados |

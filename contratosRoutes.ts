@@ -529,8 +529,8 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     contrato.extracao = r.extracao;
     contrato.updatedAt = nowIso();
     appendTrilha(contrato, user, "rodou_extracao",
-      `Extração concluída (${r.extracao.lacunas.length} lacuna(s), ${r.extracao.indiciosTrabalhistas.length} indício(s) trabalhista(s))`,
-      { lacunas: r.extracao.lacunas.length, indicios: r.extracao.indiciosTrabalhistas.length });
+      `Extração concluída (${r.extracao.lacunas.length} lacuna(s), ${r.extracao.alertas.length} alerta(s) estrutural(is))`,
+      { lacunas: r.extracao.lacunas.length, alertas: r.extracao.alertas.length });
     writeContrato(contrato);
     res.json(r.extracao);
   });
@@ -777,7 +777,7 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     if (body.tipo === "valor_parcelas" && contrato.valorTotalCentavos) {
       aditivo.variacaoPercentual = +(((body.valorNovoCentavos! - contrato.valorTotalCentavos) / contrato.valorTotalCentavos) * 100).toFixed(2);
     }
-    // escopo: anexa o novo TR + roda a extração (radar trabalhista) — best-effort
+    // escopo: anexa o novo TR + roda a extração (completude estrutural) — best-effort
     if (body.tipo === "escopo" && req.file) {
       try {
         const ext = path.extname(req.file.originalname || "").toLowerCase();

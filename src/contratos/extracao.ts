@@ -6,8 +6,9 @@
  *
  * A IA apenas EXTRAI os dados variáveis do TR/Proposta em JSON validado por zod; NUNCA
  * redige cláusula nem infere/estima/completa valores ausentes (valor=null). Aponta
- * lacunas e as 3 camadas de alerta (8.3): radar trabalhista (anti-pejotização, art. 3º
- * CLT) e conflitos com o padrão (só Proposta).
+ * lacunas e confere a COMPLETUDE ESTRUTURAL do documento ("o que não pode faltar":
+ * objeto, valor, parcelas, vigência, identificação da contratada, nº da OC) + conflitos
+ * com o padrão (só Proposta). O radar trabalhista (anti-pejotização) foi removido (#145).
  *
  * LGPD (3.6): SÓ o texto do documento de entrada vai à IA. Dados cadastrais do
  * fornecedor/representante e o conteúdo dos T&C NUNCA são enviados.
@@ -25,7 +26,6 @@ const campo = <T extends z.ZodTypeAny>(t: T) => z.object({ valor: t.nullable(), 
 const parcela = z.object({
   numero: z.number(), valorCentavos: z.number(), vencimento: z.string().nullable(), descricao: z.string().optional(),
 });
-const indicio = z.object({ indicio: z.string(), trecho: z.string(), gravidade: z.enum(["baixa", "media", "alta"]) });
 const conflito = z.object({ clausula: z.string(), trecho: z.string(), motivo: z.string() });
 
 export const ExtracaoSchema = z.object({
@@ -47,19 +47,18 @@ export const ExtracaoSchema = z.object({
   dadosContratadaNoDocumento: z.record(campo(z.string())).optional(),
   lacunas: z.array(z.string()).default([]),
   alertas: z.array(z.string()).default([]),
-  indiciosTrabalhistas: z.array(indicio).default([]),
   conflitosComPadrao: z.array(conflito).default([]),
 });
 
 const PROMPT_SISTEMA = (tipo: "tr" | "proposta") => `Você é um EXTRATOR de dados para contratos de prestação de serviços (PJ) da Casa Hacker.
-Sua única função é EXTRAIR informações do documento abaixo. Você NUNCA redige cláusulas, NUNCA infere, estima ou completa dados ausentes.
+Sua função é EXTRAIR informações do documento abaixo e CONFERIR a completude estrutural dele. Você NUNCA redige cláusulas, NUNCA infere, estima ou completa dados ausentes.
 
 Responda SOMENTE com um objeto JSON no schema (sem texto fora do JSON). Cada campo extraído tem a forma { "valor": <valor ou null>, "trechoFonte": "<citação LITERAL do documento>" }. Se a informação NÃO estiver no documento, use "valor": null e "trechoFonte": null. É PROIBIDO inventar.
 
 Regras de normalização:
 - Valores monetários em CENTAVOS inteiros (R$ 3.000,00 → 300000).
 - Datas no formato ISO "yyyy-mm-dd". Durações em MESES (número inteiro).
-- parcelas: lista [{ "numero", "valorCentavos", "vencimento" (ISO ou null), "descricao"? }]. Se o documento descreve uma regra (ex.: "mensal, até o 5º dia útil"), liste a quantidade de parcelas que der para inferir do valor total e da duração, com vencimento null.
+- parcelas: lista [{ "numero", "valorCentavos", "vencimento" (ISO ou null), "descricao"? }]. Se o documento descreve uma regra (ex.: "mensal, até o 5º dia útil do mês subsequente"), liste a quantidade de parcelas que der para inferir do valor total e da duração, com "vencimento": null e a regra em "descricao".
 
 Schema (chaves obrigatórias):
 {
@@ -68,15 +67,17 @@ Schema (chaves obrigatórias):
   "valorTotalCentavos": campo, "parcelas": [...], "condicoesPagamento": campo, "sla": campo,
   "localExecucao": campo, "equipamentosFornecidosPelaContratante": campo,
   ${tipo === "proposta" ? `"dadosContratadaNoDocumento": { "razaoSocial": campo, "cnpj": campo, ... } (só o que a Proposta declarar, para CONFERÊNCIA — não vira cláusula),` : ""}
-  "lacunas": ["<campo obrigatório ausente>"],
-  "alertas": ["<observação relevante>"],
-  "indiciosTrabalhistas": [{ "indicio": "...", "trecho": "<citação literal>", "gravidade": "baixa|media|alta" }],
+  "lacunas": ["<elemento obrigatório ausente>"],
+  "alertas": ["<observação estrutural relevante>"],
   "conflitosComPadrao": [{ "clausula": "...", "trecho": "...", "motivo": "..." }]
 }
 
-CAMADA b) RADAR TRABALHISTA (anti-pejotização — art. 3º da CLT): aponte em "indiciosTrabalhistas" qualquer indício de vínculo empregatício, com trecho literal e gravidade: jornada fixa/mínima, exclusividade, subordinação/direção contínua, pessoalidade (pessoa específica), habitualidade, tempo de resposta rígido, fornecimento de equipamentos corporativos, integração às rotinas/reuniões internas. NÃO bloqueia, mas precisa ser sinalizado.
-${tipo === "proposta" ? `CAMADA c) CONFLITOS COM O PADRÃO: em "conflitosComPadrao", aponte cláusulas da Proposta incompatíveis com um contrato de prestação de serviços padrão (ex.: exclusividade, multas atípicas, foro diferente, reajuste automático, propriedade intelectual divergente). Essas cláusulas NÃO entram no contrato.` : `CAMADA c) não se aplica a Termo de Referência.`}
-CAMADA a) LACUNAS: liste em "lacunas" os campos obrigatórios ausentes (ex.: "data de início", "dados da contratada", "número da OC").`;
+CHECAGEM ESTRUTURAL — "o que não pode faltar" no ${tipo === "proposta" ? "documento" : "Termo de Referência"}:
+Verifique se o documento traz, de forma clara, CADA elemento mínimo abaixo. Para cada item AUSENTE ou indefinido, adicione uma entrada objetiva em "lacunas":
+- objeto/escopo do serviço; valor total; forma de pagamento e parcelas; vigência/prazo (data de início, fim OU duração); identificação da CONTRATADA (razão social, CNPJ e endereço); número da Ordem de Compra (OC); condições de pagamento (nota fiscal, relatório, aprovação).
+Em "alertas", registre observações estruturais relevantes para a redação do contrato — por exemplo: "O documento é um Termo de Referência, não um contrato assinado"; "Não há identificação da contratada no documento"; "Não há data de início nem de fim — apenas duração"; "Cronograma de pagamento descrito por regra, sem datas".
+
+${tipo === "proposta" ? `CONFLITOS COM O PADRÃO: em "conflitosComPadrao", aponte cláusulas da Proposta incompatíveis com um contrato de prestação de serviços padrão (ex.: exclusividade, multas atípicas, foro diferente, reajuste automático, propriedade intelectual divergente). Essas cláusulas NÃO entram no contrato.` : `CONFLITOS COM O PADRÃO: não se aplica a Termo de Referência (devolva "conflitosComPadrao": []).`}`;
 
 export interface ExtrairDeps {
   aiClient: { chat: { completions: { create: (args: any) => Promise<any> } } };

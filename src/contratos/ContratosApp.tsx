@@ -261,12 +261,10 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
 
   const alertasPendentes = useMemo(() => {
     if (!extr) return [];
-    const items = [
-      ...extr.indiciosTrabalhistas.map((i, n) => ({ key: `trab-${n}`, label: `Radar trabalhista (${i.gravidade}): ${i.indicio}` })),
-      ...extr.conflitosComPadrao.map((c, n) => ({ key: `conf-${n}`, label: `Conflito: ${c.clausula}` })),
+    return [
+      ...extr.conflitosComPadrao.map((c, n) => ({ key: `conf-${n}`, label: `Conflito com o padrão: ${c.clausula}` })),
       ...extr.alertas.map((a, n) => ({ key: `al-${n}`, label: a })),
     ];
-    return items;
   }, [extr]);
 
   // PASSO 3 → 4 — grava campos finais e gera a minuta
@@ -633,7 +631,7 @@ function AditivoWizard({ contratoId, apiFetch, addToast, onConcluir, onCancelar 
             </div>}
             {tipo === 'escopo' && <>
               <Campo label="Nova descrição do objeto"><textarea value={escopo} onChange={(e) => setEscopo(e.target.value)} rows={3} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary" /></Campo>
-              <Campo label="Novo Termo de Referência (PDF/DOCX) — roda o radar trabalhista"><input type="file" accept=".pdf,.docx" onChange={(e) => setArquivo(e.target.files?.[0] || null)} className="text-[13px]" /></Campo>
+              <Campo label="Novo Termo de Referência (PDF/DOCX) — roda a checagem estrutural"><input type="file" accept=".pdf,.docx" onChange={(e) => setArquivo(e.target.files?.[0] || null)} className="text-[13px]" /></Campo>
             </>}
             {tipo === 'dados_cadastrais' && <Campo label="Dados a atualizar"><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary" /></Campo>}
             {tipo !== 'dados_cadastrais' && <Campo label="Observações (opcional)"><input value={descricao} onChange={(e) => setDescricao(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>}
@@ -657,7 +655,7 @@ function AjudaView() {
         <ol className="list-decimal pl-5 space-y-1 text-text-secondary">
           <li><strong className="text-text">Fornecedor</strong> — só fornecedores <em>elegíveis</em> avançam (Receita ativa, diligência válida, KYS assinado).</li>
           <li><strong className="text-text">Documento</strong> — envie o TR/Proposta e vincule a issue do Jira (projeto JUR).</li>
-          <li><strong className="text-text">Conferência</strong> — a IA <em>extrai</em> os dados (nunca redige); confira, resolva lacunas e dê ciência aos alertas (radar trabalhista).</li>
+          <li><strong className="text-text">Conferência</strong> — a IA <em>extrai</em> os dados (nunca redige); confira, resolva as lacunas estruturais ("o que não pode faltar" no TR) e dê ciência aos alertas.</li>
           <li><strong className="text-text">Minuta</strong> — pré-visualize o contrato; as validações (soma de parcelas, datas) precisam passar.</li>
           <li><strong className="text-text">Assinatura</strong> — aprovação humana + Documenso (Fase 3).</li>
         </ol>

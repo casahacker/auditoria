@@ -6,7 +6,7 @@ O `.docx` da fixture fica em `referencia/contratos/` (não versionado — `.giti
 O teste E2E roda com `npm run test:contratos:e2e` e valida o pipeline ponta a ponta
 (extração → gate → minuta) contra o gabarito abaixo. Como a chamada ao DeepSeek ao vivo
 exige `DEEPSEEK_API_KEY` (produção), o teste injeta o gabarito como `aiClient` mock e
-valida a **plumbing**: zod, lacunas, radar trabalhista, validações determinísticas e o
+valida a **plumbing**: zod, lacunas, checagem estrutural, validações determinísticas e o
 contrato gerado. A acurácia do modelo ao vivo é exercida em produção com a chave real.
 
 ## Gabarito da extração
@@ -22,16 +22,12 @@ contrato gerado. A acurácia do modelo ao vivo é exercida em produção com a c
 | `condicoesPagamento` | NF conforme CNAEs + Relatório Mensal + validação da Diretoria |
 | `equipamentosFornecidosPelaContratante` | laptop/celular corporativos + acessos |
 | `lacunas` | dados da contratada, data de início, issue JUR, nº da OC |
+| `alertas` | estruturais: "é um TR, não um contrato assinado"; "sem identificação da contratada"; "sem datas — apenas duração" |
 
-**Radar trabalhista** dispara ao menos:
-
-| Indício | Gravidade |
-|---|---|
-| 30h semanais | **alta** |
-| resposta ≤ 4h | média |
-| direcionamentos contínuos da área de Comunicação | média |
-| equipamentos corporativos | média |
-| rotinas/reuniões internas | baixa |
+**Checagem estrutural** ("o que não pode faltar" no TR) — a extração lista em `lacunas` os
+elementos mínimos ausentes (objeto, valor total, parcelas, vigência/prazo, identificação da
+CONTRATADA, nº da OC, condições de pagamento) e registra observações em `alertas`. O **radar
+trabalhista** (anti-pejotização) foi **removido** (#145).
 
 ## Gabarito do contrato (render)
 

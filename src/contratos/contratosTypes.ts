@@ -95,12 +95,6 @@ export interface CampoExtraido<T> {
   valor: T | null;               // null = ausente no documento (proibido inferir)
   trechoFonte: string | null;    // citação literal do TR/Proposta
 }
-export type GravidadeIndicio = "baixa" | "media" | "alta";
-export interface IndicioTrabalhista {
-  indicio: string;               // ex.: "jornada fixa de 30h semanais"
-  trecho: string;                // citação literal
-  gravidade: GravidadeIndicio;
-}
 export interface ConflitoComPadrao {
   clausula: string;
   trecho: string;
@@ -132,7 +126,6 @@ export interface ExtracaoIA {
   dadosContratadaNoDocumento?: Record<string, CampoExtraido<string>>; // só Proposta, p/ conferência
   lacunas: string[];
   alertas: string[];
-  indiciosTrabalhistas: IndicioTrabalhista[];
   conflitosComPadrao: ConflitoComPadrao[];
   // metadados da execução
   modelo?: string;               // ex.: "deepseek-chat"
