@@ -215,6 +215,12 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
   const [durValor, setDurValor] = useState('');
   const [vigFim, setVigFim] = useState('');
   const [parcelasEdit, setParcelasEdit] = useState<ParcelaEdit[]>([]);
+  // passo 3 — demais campos extraídos, conferíveis e editáveis (#152)
+  const [resumoEscopo, setResumoEscopo] = useState('');
+  const [condicoesPagamento, setCondicoesPagamento] = useState('');
+  const [sla, setSla] = useState('');
+  const [localExecucao, setLocalExecucao] = useState('');
+  const [equipamentos, setEquipamentos] = useState('');
   // passo 4
   const [minuta, setMinuta] = useState('');
   const [validacao, setValidacao] = useState<{ ok: boolean; bloqueios: string[]; avisos: string[] } | null>(null);
@@ -271,6 +277,11 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
       setDurValor(ex.vigencia?.duracaoMeses?.valor != null ? String(ex.vigencia.duracaoMeses.valor) : '');
       setVigFim(ex.vigencia?.dataFim?.valor || '');
       setParcelasEdit((ex.parcelas || []).map((p) => ({ numero: p.numero, valorCentavos: p.valorCentavos, vencimento: p.vencimento ?? null, estimada: !p.vencimento })));
+      setResumoEscopo(ex.resumoEscopo?.valor || '');
+      setCondicoesPagamento(ex.condicoesPagamento?.valor || '');
+      setSla(ex.sla?.valor || '');
+      setLocalExecucao(ex.localExecucao?.valor || '');
+      setEquipamentos(ex.equipamentosFornecidosPelaContratante?.valor || '');
       setCiencias(new Set());
       await refresh(contrato.id);
       setStep(3);
@@ -316,7 +327,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
     const vigEstimada = !!(vigInicio || dMeses || dDias);
     setBusy(true);
     try {
-      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ objeto, valorTotalCentavos: valorCent, parcelas, vigenciaInicio: vigInicio || null, vigenciaFim: vigFim || null, vigenciaEstimada: vigEstimada, vigenciaDuracaoMeses: dMeses, vigenciaDuracaoDias: dDias, resumoEscopo: extr?.resumoEscopo?.valor || '', condicoesPagamento: extr?.condicoesPagamento?.valor || '', equipamentosFornecidosPelaContratante: extr?.equipamentosFornecidosPelaContratante?.valor || '', prorrogavel: !!extr?.vigencia?.prorrogavel?.valor }) });
+      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ objeto, valorTotalCentavos: valorCent, parcelas, vigenciaInicio: vigInicio || null, vigenciaFim: vigFim || null, vigenciaEstimada: vigEstimada, vigenciaDuracaoMeses: dMeses, vigenciaDuracaoDias: dDias, resumoEscopo, condicoesPagamento, sla, localExecucao, equipamentosFornecidosPelaContratante: equipamentos, prorrogavel: !!extr?.vigencia?.prorrogavel?.valor }) });
       if (!p.ok) { addToast('error', (await p.json().catch(() => ({})))?.error || 'Falha ao salvar os campos.'); return; }
       await carregarMinuta(contrato.id);
       setStep(4);
@@ -423,8 +434,8 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
             )}
 
             <div className="grid sm:grid-cols-2 gap-4">
-              <Campo label="Objeto"><textarea value={objeto} onChange={(e) => setObjeto(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /></Campo>
-              <Campo label="Valor total (R$)"><input inputMode="decimal" value={valorReais} onChange={(e) => setValorReais(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /></Campo>
+              <Campo label="Objeto"><textarea value={objeto} onChange={(e) => setObjeto(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /><Fonte texto={extr.objeto?.trechoFonte} /></Campo>
+              <Campo label="Valor total (R$)"><input inputMode="decimal" value={valorReais} onChange={(e) => setValorReais(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /><Fonte texto={extr.valorTotalCentavos?.trechoFonte} /></Campo>
             </div>
 
             {/* Vigência por duração — começa só após a assinatura; fim calculado e estimado (#146) */}
@@ -433,6 +444,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
               <div className="grid sm:grid-cols-2 gap-4">
                 <Campo label="Data de início (estimada — pós-assinatura)">
                   <input type="date" value={vigInicio} onChange={(e) => onInicio(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                  <Fonte texto={extr.vigencia?.dataInicio?.trechoFonte} />
                 </Campo>
                 <Campo label="Prazo de vigência">
                   <div className="flex items-center gap-2">
@@ -443,6 +455,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
                       ))}
                     </div>
                   </div>
+                  <Fonte texto={extr.vigencia?.duracaoMeses?.trechoFonte} />
                 </Campo>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -452,6 +465,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
               </div>
               <Campo label="Fim da vigência (calculado — estimado, editável)">
                 <input type="date" value={vigFim} onChange={(e) => setVigFim(e.target.value)} className="h-10 w-full sm:w-[220px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                <Fonte texto={extr.vigencia?.dataFim?.trechoFonte} />
               </Campo>
               <p className="text-[12px] text-text-secondary">A data de fim é uma estimativa derivada do início + prazo; a vigência real começa na assinatura.</p>
             </fieldset>
@@ -478,6 +492,33 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
               )}
               <p className="text-[12px] text-text-secondary mt-2">Vencimentos propostos (mensais) a partir da data de início; ajuste se necessário.</p>
             </div>
+
+            {/* Demais campos extraídos — conferíveis e editáveis, com trecho-fonte (#152) */}
+            <fieldset className="border border-line p-4 space-y-4">
+              <legend className="text-[12px] text-text-secondary px-1">Escopo e condições (conferência)</legend>
+              <Campo label="Resumo do escopo">
+                <textarea value={resumoEscopo} onChange={(e) => setResumoEscopo(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                <Fonte texto={extr.resumoEscopo?.trechoFonte} />
+              </Campo>
+              <Campo label="Condições de pagamento">
+                <textarea value={condicoesPagamento} onChange={(e) => setCondicoesPagamento(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                <Fonte texto={extr.condicoesPagamento?.trechoFonte} />
+              </Campo>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Campo label="SLA / prazo de resposta">
+                  <input value={sla} onChange={(e) => setSla(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                  <Fonte texto={extr.sla?.trechoFonte} />
+                </Campo>
+                <Campo label="Local de execução">
+                  <input value={localExecucao} onChange={(e) => setLocalExecucao(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                  <Fonte texto={extr.localExecucao?.trechoFonte} />
+                </Campo>
+              </div>
+              <Campo label="Equipamentos fornecidos pela contratante">
+                <input value={equipamentos} onChange={(e) => setEquipamentos(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                <Fonte texto={extr.equipamentosFornecidosPelaContratante?.trechoFonte} />
+              </Campo>
+            </fieldset>
 
             {alertasPendentes.length > 0 && (
               <div className="border border-line p-4" role="group" aria-label="Alertas com ciência obrigatória">
@@ -536,6 +577,17 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block"><span className="text-[12px] text-text-secondary">{label}</span><div className="mt-1">{children}</div></label>;
+}
+
+// Trecho-fonte da extração: citação literal do TR/Proposta que originou o campo (#152).
+// Reforça o guard-rail "a IA só extrai; o humano confere". Vazio = não citado no documento.
+function Fonte({ texto }: { texto?: string | null }) {
+  const t = String(texto || '').trim();
+  return (
+    <span className="block mt-1 text-[11px] text-text-secondary italic">
+      {t ? <>Fonte: “{t}”</> : <span className="not-italic opacity-70">Sem trecho-fonte (não citado no documento)</span>}
+    </span>
+  );
 }
 
 function CriterioRow({ c, cnpj, contratoId, apiFetch, addToast, onReavaliar, navigate }: { c: CriterioElegibilidade; cnpj: string; contratoId?: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onReavaliar: () => void; navigate?: (p: string) => void }) {
