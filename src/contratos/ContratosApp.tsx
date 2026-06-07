@@ -39,6 +39,8 @@ const fmtData = (iso?: string | null) => { if (!iso) return '—'; const m = /^(
 // "3.000,00" | "3000,00" | "3000.00" | "3000" → centavos inteiros. Vírgula = decimal pt-BR.
 const reaisToCent = (s?: string) => { const t = String(s ?? '').trim(); if (!t) return 0; const norm = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t; return Math.round((parseFloat(norm) || 0) * 100); };
 const centToReais = (c?: number) => ((Math.trunc(Number(c) || 0)) / 100).toFixed(2);
+// Início estimado padrão (#162): 1º dia do mês seguinte — a vigência real começa na assinatura.
+const primeiroDiaProximoMes = (): string => { const d = new Date(); const m = d.getMonth(); const ano = m === 11 ? d.getFullYear() + 1 : d.getFullYear(); return `${ano}-${String(((m + 1) % 12) + 1).padStart(2, '0')}-01`; };
 
 const STATUS: Record<ContratoStatus, { tone: ChipTone; label: string }> = {
   rascunho: { tone: 'neutral', label: 'Rascunho' },
@@ -262,7 +264,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
         setExtr(ex);
         setObjeto(c.objeto || ex?.objeto?.valor || '');
         setValorReais(c.valorTotalCentavos != null ? centToReais(c.valorTotalCentavos) : '');
-        setVigInicio(c.vigenciaInicio || '');
+        setVigInicio(c.vigenciaInicio || primeiroDiaProximoMes());
         if (c.vigenciaDuracaoDias) { setDurUnidade('dias'); setDurValor(String(c.vigenciaDuracaoDias)); }
         else { setDurUnidade('meses'); setDurValor(c.vigenciaDuracaoMeses ? String(c.vigenciaDuracaoMeses) : (ex?.vigencia?.duracaoMeses?.valor != null ? String(ex.vigencia.duracaoMeses.valor) : '')); }
         setVigFim(c.vigenciaFim || '');
@@ -327,11 +329,15 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
       setExtr(ex);
       setObjeto(ex.objeto?.valor || '');
       setValorReais(ex.valorTotalCentavos?.valor != null ? (ex.valorTotalCentavos.valor / 100).toFixed(2) : '');
-      setVigInicio(ex.vigencia?.dataInicio?.valor || '');
+      // por padrão já exibe uma PREVISÃO: início estimado (1º do mês seguinte se o TR não trouxer),
+      // fim calculado pelo prazo e parcelas no 5º dia útil do mês subsequente (#162/#163). Tudo editável.
+      const inicioSeed = ex.vigencia?.dataInicio?.valor || primeiroDiaProximoMes();
+      const durMesesSeed = ex.vigencia?.duracaoMeses?.valor != null ? ex.vigencia.duracaoMeses.valor : 0;
+      setVigInicio(inicioSeed);
       setDurUnidade('meses');
-      setDurValor(ex.vigencia?.duracaoMeses?.valor != null ? String(ex.vigencia.duracaoMeses.valor) : '');
-      setVigFim(ex.vigencia?.dataFim?.valor || '');
-      setParcelasEdit((ex.parcelas || []).map((p) => ({ numero: p.numero, valorStr: centToReais(p.valorCentavos), vencimento: p.vencimento ?? null, estimada: !p.vencimento })));
+      setDurValor(durMesesSeed ? String(durMesesSeed) : '');
+      setVigFim(durMesesSeed ? addMeses(inicioSeed, durMesesSeed) : (ex.vigencia?.dataFim?.valor || ''));
+      setParcelasEdit(proporVencimentos((ex.parcelas || []).map((p) => ({ numero: p.numero, valorStr: centToReais(p.valorCentavos), vencimento: p.vencimento ?? null, estimada: !p.vencimento })), inicioSeed));
       setResumoEscopo(ex.resumoEscopo?.valor || '');
       setCondicoesPagamento(ex.condicoesPagamento?.valor || '');
       setSla(ex.sla?.valor || '');

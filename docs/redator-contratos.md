@@ -32,8 +32,10 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
    **completude estrutural** do TR; lacunas destacadas; **alertas** (estruturais +
    conflitos com o padrão) exigem **ciência individual**. A **vigência** é informada por
    **prazo (dias/meses)** — com botões rápidos (+1/+3/+6/+12 meses · +30/+60/+90 dias) — e
-   uma **data de início estimada**; o **fim** (pelo prazo) e os **vencimentos das parcelas**
-   (no **5º dia útil do mês subsequente** à prestação) são calculados, estimados e editáveis.
+   uma **data de início estimada** (sugerida por padrão — 1º dia do mês seguinte — quando o TR
+   não a traz); o **fim** (pelo prazo) e os **vencimentos das parcelas** (no **5º dia útil do
+   mês subsequente** à prestação) são calculados, estimados e editáveis — já pré-preenchidos ao
+   abrir a conferência.
    A vigência conta **da assinatura**, então a Cláusula 2ª usa o
    prazo relativo ("por X meses a contar da assinatura") com a data de fim apenas como
    previsão estimada — a minuta nunca sai com `[XX/XX/XXXX]`. Cada campo extraído exibe o
