@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileSignature, Building2, Loader2, ChevronRight, ChevronLeft, Plus, Check, AlertTriangle,
-  ShieldCheck, ShieldAlert, Upload, FileText, ExternalLink, HelpCircle, ListChecks, Clock, Lock, Trash2,
+  ShieldCheck, ShieldAlert, Upload, FileText, ExternalLink, HelpCircle, ListChecks, Clock, Lock, Trash2, Pencil,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
@@ -30,7 +30,7 @@ export interface ContratosAppProps {
   initialView?: string; // segmento após /contratos (novo | <id> | ajuda)
 }
 
-type Section = 'lista' | 'novo' | 'detalhe' | 'ajuda' | 'aditivo';
+type Section = 'lista' | 'novo' | 'detalhe' | 'ajuda' | 'aditivo' | 'editar';
 const segs = () => window.location.pathname.split('/').filter(Boolean);
 
 // formatação local (não arrasta a lib `extenso` para o bundle do front)
@@ -57,16 +57,17 @@ const CRIT_TONE: Record<string, ChipTone> = { ok: 'success', alerta: 'warning', 
 export default function ContratosApp({ user, apiFetch, addToast, onHome, navigate, initialView }: ContratosAppProps) {
   const seg0 = segs();
   const isAditivo = (seg0[2] || '').toLowerCase() === 'aditivo';
+  const isEditar = (seg0[2] || '').toLowerCase() === 'editar';
   const initial = (initialView || seg0[1] || '').toLowerCase();
-  const [section, setSection] = useState<Section>(isAditivo ? 'aditivo' : initial === 'novo' ? 'novo' : initial === 'ajuda' ? 'ajuda' : initial && initial.startsWith('ch-') ? 'detalhe' : 'lista');
+  const [section, setSection] = useState<Section>(isAditivo ? 'aditivo' : isEditar ? 'editar' : initial === 'novo' ? 'novo' : initial === 'ajuda' ? 'ajuda' : initial && initial.startsWith('ch-') ? 'detalhe' : 'lista');
   const [detalheId, setDetalheId] = useState<string>(initial.startsWith('ch-') ? initial.toUpperCase() : '');
 
   const go = (s: Section, id?: string) => {
     setSection(s);
-    if ((s === 'detalhe' || s === 'aditivo') && id) setDetalheId(id);
+    if ((s === 'detalhe' || s === 'aditivo' || s === 'editar') && id) setDetalheId(id);
     const alvo = (id || detalheId).toLowerCase();
     const path = s === 'lista' ? '/contratos' : s === 'novo' ? '/contratos/novo' : s === 'ajuda' ? '/contratos/ajuda'
-      : s === 'aditivo' ? `/contratos/${alvo}/aditivo/novo` : `/contratos/${alvo}`;
+      : s === 'aditivo' ? `/contratos/${alvo}/aditivo/novo` : s === 'editar' ? `/contratos/${alvo}/editar` : `/contratos/${alvo}`;
     navigate?.(path);
   };
 
@@ -81,9 +82,10 @@ export default function ContratosApp({ user, apiFetch, addToast, onHome, navigat
       </ToolSidebar>
 
       <div className="flex-1 ml-[256px] flex flex-col min-h-screen">
-        {section === 'lista' && <ListaView apiFetch={apiFetch} addToast={addToast} onAbrir={(id) => go('detalhe', id)} onNovo={() => go('novo')} onProrrogar={(id) => go('aditivo', id)} />}
+        {section === 'lista' && <ListaView apiFetch={apiFetch} addToast={addToast} onAbrir={(id) => go('detalhe', id)} onNovo={() => go('novo')} onProrrogar={(id) => go('aditivo', id)} onEditar={(id) => go('editar', id)} />}
         {section === 'novo' && <Wizard apiFetch={apiFetch} addToast={addToast} navigate={navigate} onConcluir={(id) => go('detalhe', id)} onCancelar={() => go('lista')} />}
-        {section === 'detalhe' && <DetalheView id={detalheId} apiFetch={apiFetch} addToast={addToast} navigate={navigate} onVoltar={() => go('lista')} onNovoAditivo={() => go('aditivo', detalheId)} />}
+        {section === 'editar' && <Wizard key={detalheId} contratoIdInicial={detalheId} apiFetch={apiFetch} addToast={addToast} navigate={navigate} onConcluir={(id) => go('detalhe', id)} onCancelar={() => go('detalhe', detalheId)} />}
+        {section === 'detalhe' && <DetalheView id={detalheId} apiFetch={apiFetch} addToast={addToast} navigate={navigate} onVoltar={() => go('lista')} onNovoAditivo={() => go('aditivo', detalheId)} onEditar={() => go('editar', detalheId)} />}
         {section === 'aditivo' && <AditivoWizard contratoId={detalheId} apiFetch={apiFetch} addToast={addToast} onConcluir={() => go('detalhe', detalheId)} onCancelar={() => go('detalhe', detalheId)} />}
         {section === 'ajuda' && <AjudaView />}
       </div>
@@ -92,7 +94,7 @@ export default function ContratosApp({ user, apiFetch, addToast, onHome, navigat
 }
 
 // ── Lista (#135) ────────────────────────────────────────────────────────────────
-function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onAbrir: (id: string) => void; onNovo: () => void; onProrrogar: (id: string) => void }) {
+function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar, onEditar }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onAbrir: (id: string) => void; onNovo: () => void; onProrrogar: (id: string) => void; onEditar: (id: string) => void }) {
   const [rows, setRows] = useState<ContratoResumo[] | null>(null);
   const [fStatus, setFStatus] = useState('');
   const [busca, setBusca] = useState('');
@@ -141,7 +143,7 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFe
           <Card className="overflow-hidden">
             <table className="w-full text-[14px]">
               <thead className={tableHeadCls}><tr>
-                {['ID', 'Fornecedor', 'Objeto', 'Valor', 'Vigência', 'Status', 'Aditivos'].map((h) => <th key={h} className="px-4 py-2.5 font-semibold text-[12px]">{h}</th>)}
+                {['ID', 'Fornecedor', 'Objeto', 'Valor', 'Vigência', 'Status', 'Aditivos', ''].map((h, i) => <th key={h || `act${i}`} className="px-4 py-2.5 font-semibold text-[12px]">{h}</th>)}
               </tr></thead>
               <tbody>
                 {filtered.map((c) => (
@@ -156,6 +158,9 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFe
                     <td className="px-4 py-3 whitespace-nowrap text-[12px]">{c.vigenciaFim ? `até ${fmtData(c.vigenciaFim)}` : '—'}</td>
                     <td className="px-4 py-3">{statusChip(c.status)}</td>
                     <td className="px-4 py-3 text-center">{c.qtdAditivos || 0}</td>
+                    <td className="px-4 py-3 text-right">
+                      {['rascunho', 'em_revisao'].includes(c.status) && <IconBtn label={`Editar contrato ${c.jiraIssueKey || c.id}`} onClick={(e) => { e.stopPropagation(); onEditar(c.id); }}><Pencil size={14} aria-hidden /></IconBtn>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -190,7 +195,7 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; navigate?: (p: string) => void; onConcluir: (id: string) => void; onCancelar: () => void }) {
+function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contratoIdInicial }: { apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; navigate?: (p: string) => void; onConcluir: (id: string) => void; onCancelar: () => void; contratoIdInicial?: string }) {
   const [step, setStep] = useState(1);
   const [contrato, setContrato] = useState<Contrato | null>(null);
   const [busy, setBusy] = useState(false);
@@ -229,6 +234,44 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
   const [validacao, setValidacao] = useState<{ ok: boolean; bloqueios: string[]; avisos: string[] } | null>(null);
 
   const refresh = async (id: string) => { const r = await apiFetch(`/api/contratos/${id}`); if (r.ok) setContrato(await r.json()); };
+
+  // Retomar/editar um rascunho existente (#154): carrega o contrato + a extração salva e
+  // semeia todos os campos do wizard, retomando no passo adequado (3 se já há extração).
+  useEffect(() => {
+    if (!contratoIdInicial) return;
+    (async () => {
+      setBusy(true);
+      try {
+        const r = await apiFetch(`/api/contratos/${contratoIdInicial}`);
+        if (!r.ok) { addToast('error', 'Falha ao carregar o rascunho.'); return; }
+        const c: Contrato = await r.json();
+        setContrato(c);
+        setCnpj(c.cnpj || '');
+        setEleg(c.elegibilidadeSnapshot || null);
+        setTipoDoc(c.tipoDocumentoEntrada === 'proposta' ? 'proposta' : 'tr');
+        if (c.jira?.issueKey) { setJiraKey(c.jira.issueKey); setJiraInfo({ ok: true, resumo: c.jira.resumo, status: c.jira.status, alertaDone: c.jira.categoriaStatus === 'Done' }); }
+        setOc(c.ordemCompra || '');
+        const ex = c.extracao || null;
+        setExtr(ex);
+        setObjeto(c.objeto || ex?.objeto?.valor || '');
+        setValorReais(c.valorTotalCentavos != null ? centToReais(c.valorTotalCentavos) : '');
+        setVigInicio(c.vigenciaInicio || '');
+        if (c.vigenciaDuracaoDias) { setDurUnidade('dias'); setDurValor(String(c.vigenciaDuracaoDias)); }
+        else { setDurUnidade('meses'); setDurValor(c.vigenciaDuracaoMeses ? String(c.vigenciaDuracaoMeses) : (ex?.vigencia?.duracaoMeses?.valor != null ? String(ex.vigencia.duracaoMeses.valor) : '')); }
+        setVigFim(c.vigenciaFim || '');
+        setParcelasEdit((c.parcelas || []).map((p) => ({ numero: p.numero, valorStr: centToReais(p.valorCentavos), vencimento: p.vencimento ?? null, estimada: p.estimada ?? !p.vencimento })));
+        setResumoEscopo(c.resumoEscopo || ex?.resumoEscopo?.valor || '');
+        setCondicoesPagamento(c.condicoesPagamento || ex?.condicoesPagamento?.valor || '');
+        setSla(c.sla || ex?.sla?.valor || '');
+        setLocalExecucao(c.localExecucao || ex?.localExecucao?.valor || '');
+        setEquipamentos(c.equipamentosFornecidosPelaContratante || ex?.equipamentosFornecidosPelaContratante?.valor || '');
+        setCiencias(new Set());
+        setStep(ex ? 3 : (c.elegibilidadeSnapshot?.elegivel ? 2 : 1));
+      } catch { addToast('error', 'Falha ao carregar o rascunho.'); }
+      finally { setBusy(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contratoIdInicial]);
 
   // PASSO 1 — cria o rascunho e avalia elegibilidade
   const iniciar = async () => {
@@ -681,7 +724,7 @@ function CriterioRow({ c, cnpj, contratoId, apiFetch, addToast, onReavaliar, nav
 }
 
 // ── Detalhe (#135) ───────────────────────────────────────────────────────────────
-function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo }: { id: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; navigate?: (p: string) => void; onVoltar: () => void; onNovoAditivo: () => void }) {
+function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo, onEditar }: { id: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; navigate?: (p: string) => void; onVoltar: () => void; onNovoAditivo: () => void; onEditar: () => void }) {
   const [c, setC] = useState<Contrato | null>(null);
   const [erro, setErro] = useState(false);
   const [aditivos, setAditivos] = useState<any[]>([]);
@@ -719,6 +762,7 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
             <Info label="Chave interna" value={c.id} />
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
+            {['rascunho', 'em_revisao'].includes(c.status) && <Btn variant="secondary" onClick={onEditar}><Pencil size={16} aria-hidden /> Editar</Btn>}
             <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Minuta (PDF)</Btn>
             {['rascunho', 'em_revisao'].includes(c.status) && <Btn variant="secondary" onClick={() => acao('POST', 'gerar-pdf', 'Pacote gerado (Contrato + TR + T&C).')}>Gerar pacote</Btn>}
             {c.anexos?.pacote && !c.aprovacao && <Btn onClick={() => { if (window.confirm('Aprovar este contrato? Sua aprovação fica registrada na trilha (HITL).')) acao('POST', 'aprovar', 'Contrato aprovado.'); }}><Check size={16} /> Aprovar (HITL)</Btn>}
