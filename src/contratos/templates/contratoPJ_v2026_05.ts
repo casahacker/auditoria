@@ -33,6 +33,13 @@ export const ph = (v: any, placeholder: string): string => {
   return s || `[${placeholder}]`;
 };
 
+/**
+ * Remove pontuação final (. ; ,) e espaços do fim de um texto antes de concatená-lo a
+ * outra oração — evita a redação quebrada "…Casa Hacker. que será realizada…" (#147),
+ * funcionando para objetos com OU sem ponto final.
+ */
+export const semPontuacaoFinal = (s: string): string => String(s ?? "").replace(/[\s.;,]+$/u, "").trim();
+
 export function qualificacaoContratada(c: Contrato): string {
   const d = c.dadosContratada;
   const r = d?.representante;
@@ -63,7 +70,8 @@ export function montarBlocos(c: Contrato): Bloco[] {
   blocos.push({ tipo: "paragrafo", texto: 'Resolvem as partes acima qualificadas, doravante denominadas em conjunto "Partes" e individualmente como "Parte", celebrar CONTRATO DE PRESTAÇÃO DE SERVIÇOS ("CONTRATO"), que será regido pelos seguintes termos:' });
 
   blocos.push({ tipo: "clausula", numero: "1ª", titulo: "OBJETO" });
-  blocos.push({ tipo: "paragrafo", texto: `O presente Contrato tem por objeto a prestação de serviços pela CONTRATADA, de ${ph(objeto, "DESCRIÇÃO DO SERVIÇO")} que será realizada conforme o Termo de Referência que integra o presente instrumento.` });
+  // Concatena o objeto extraído (que costuma vir com ponto final) sem gerar "…objeto. que será…" (#147).
+  blocos.push({ tipo: "paragrafo", texto: `O presente Contrato tem por objeto a prestação de serviços pela CONTRATADA — ${semPontuacaoFinal(ph(objeto, "DESCRIÇÃO DO SERVIÇO"))} —, conforme o Termo de Referência que integra o presente instrumento.` });
   blocos.push({ tipo: "paragrafo", texto: "O cronograma previsto no Termo de Referência poderá ser alterado mediante prévio acordo entre as partes." });
 
   blocos.push({ tipo: "clausula", numero: "2ª", titulo: "VIGÊNCIA" });
