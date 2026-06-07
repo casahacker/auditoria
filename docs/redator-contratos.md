@@ -30,7 +30,12 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
    validada ao vivo + nº da Ordem de Compra (opcional).
 3. **Conferência** — a IA extrai os campos (cada um com o trecho-fonte) e confere a
    **completude estrutural** do TR; lacunas destacadas; **alertas** (estruturais +
-   conflitos com o padrão) exigem **ciência individual**.
+   conflitos com o padrão) exigem **ciência individual**. A **vigência** é informada por
+   **prazo (dias/meses)** — com botões rápidos (+1/+3/+6/+12 meses · +30/+60/+90 dias) — e
+   uma **data de início estimada**; o fim e os **vencimentos das parcelas** são calculados
+   (estimados) e editáveis. A vigência conta **da assinatura**, então a Cláusula 2ª usa o
+   prazo relativo ("por X meses a contar da assinatura") com a data de fim apenas como
+   previsão estimada — a minuta nunca sai com `[XX/XX/XXXX]`.
 4. **Minuta** — preview HTML + validações determinísticas; baixar PDF; salvar/enviar para
    revisão.
 5. **Aprovação e assinatura** — na **ficha do contrato**: *Gerar pacote* (Contrato + TR +

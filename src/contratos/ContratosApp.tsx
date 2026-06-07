@@ -16,7 +16,10 @@ import { AuthUser } from '../types';
 import { Btn, IconBtn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, SidebarGroupLabel, SkipLink, EmptyState, tableHeadCls } from '../ui/kit';
 import type { ChipTone } from '../ui/kit';
 import { onlyDigits, maskCnpj } from '../kyc/kycTypes';
+import { addMeses, addDias, proporVencimentos } from './datas';
 import type { Contrato, ContratoResumo, ContratoStatus, ElegibilidadeSnapshot, CriterioElegibilidade, ExtracaoIA } from './contratosTypes';
+
+type ParcelaEdit = { numero: number; valorCentavos: number; vencimento: string | null; estimada?: boolean };
 
 export interface ContratosAppProps {
   user: AuthUser;
@@ -200,7 +203,11 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
   const [ciencias, setCiencias] = useState<Set<string>>(new Set());
   const [objeto, setObjeto] = useState('');
   const [valorReais, setValorReais] = useState('');
+  const [vigInicio, setVigInicio] = useState('');
+  const [durUnidade, setDurUnidade] = useState<'meses' | 'dias'>('meses');
+  const [durValor, setDurValor] = useState('');
   const [vigFim, setVigFim] = useState('');
+  const [parcelasEdit, setParcelasEdit] = useState<ParcelaEdit[]>([]);
   // passo 4
   const [minuta, setMinuta] = useState('');
   const [validacao, setValidacao] = useState<{ ok: boolean; bloqueios: string[]; avisos: string[] } | null>(null);
@@ -252,7 +259,11 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
       setExtr(ex);
       setObjeto(ex.objeto?.valor || '');
       setValorReais(ex.valorTotalCentavos?.valor != null ? (ex.valorTotalCentavos.valor / 100).toFixed(2) : '');
+      setVigInicio(ex.vigencia?.dataInicio?.valor || '');
+      setDurUnidade('meses');
+      setDurValor(ex.vigencia?.duracaoMeses?.valor != null ? String(ex.vigencia.duracaoMeses.valor) : '');
       setVigFim(ex.vigencia?.dataFim?.valor || '');
+      setParcelasEdit((ex.parcelas || []).map((p) => ({ numero: p.numero, valorCentavos: p.valorCentavos, vencimento: p.vencimento ?? null, estimada: !p.vencimento })));
       setCiencias(new Set());
       await refresh(contrato.id);
       setStep(3);
@@ -267,15 +278,38 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
     ];
   }, [extr]);
 
+  // Vigência por duração (#146): a vigência começa só após a assinatura, então o operador
+  // informa um prazo (dias/meses) + uma data de início estimada; o fim e os vencimentos das
+  // parcelas são calculados automaticamente (estimados) e ficam editáveis.
+  const recalcVigencia = (inicio: string, unidade: 'meses' | 'dias', valor: string) => {
+    const n = parseInt(valor, 10) || 0;
+    if (!inicio || n <= 0) return;
+    setVigFim(unidade === 'meses' ? addMeses(inicio, n) : addDias(inicio, n));
+    setParcelasEdit((prev) => proporVencimentos(prev, inicio));
+  };
+  const onInicio = (v: string) => { setVigInicio(v); recalcVigencia(v, durUnidade, durValor); };
+  const onDurValor = (v: string) => { setDurValor(v); recalcVigencia(vigInicio, durUnidade, v); };
+  const onDurUnidade = (u: 'meses' | 'dias') => { setDurUnidade(u); recalcVigencia(vigInicio, u, durValor); };
+  const bumpDuracao = (unidade: 'meses' | 'dias', delta: number) => {
+    const base = durUnidade === unidade ? (parseInt(durValor, 10) || 0) : 0;
+    const novo = String(Math.max(0, base + delta));
+    setDurUnidade(unidade); setDurValor(novo); recalcVigencia(vigInicio, unidade, novo);
+  };
+  const editarVencimento = (i: number, v: string) =>
+    setParcelasEdit((prev) => prev.map((p, idx) => (idx === i ? { ...p, vencimento: v || null, estimada: false } : p)));
+
   // PASSO 3 → 4 — grava campos finais e gera a minuta
   const avancarParaMinuta = async () => {
     if (!contrato) return;
     if (alertasPendentes.some((a) => !ciencias.has(a.key))) { addToast('error', 'Dê ciência a todos os alertas antes de avançar.'); return; }
     const valorCent = Math.round(parseFloat(valorReais.replace(',', '.')) * 100) || 0;
-    const parcelas = (extr?.parcelas || []).map((p) => ({ numero: p.numero, valorCentavos: p.valorCentavos, vencimento: p.vencimento ?? null, estimada: !p.vencimento }));
+    const parcelas = parcelasEdit.map((p) => ({ numero: p.numero, valorCentavos: p.valorCentavos, vencimento: p.vencimento ?? null, estimada: p.estimada ?? !p.vencimento }));
+    const dMeses = durUnidade === 'meses' ? (parseInt(durValor, 10) || 0) : 0;
+    const dDias = durUnidade === 'dias' ? (parseInt(durValor, 10) || 0) : 0;
+    const vigEstimada = !!(vigInicio || dMeses || dDias);
     setBusy(true);
     try {
-      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ objeto, valorTotalCentavos: valorCent, parcelas, vigenciaFim: vigFim || null, resumoEscopo: extr?.resumoEscopo?.valor || '', condicoesPagamento: extr?.condicoesPagamento?.valor || '', equipamentosFornecidosPelaContratante: extr?.equipamentosFornecidosPelaContratante?.valor || '', prorrogavel: !!extr?.vigencia?.prorrogavel?.valor }) });
+      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ objeto, valorTotalCentavos: valorCent, parcelas, vigenciaInicio: vigInicio || null, vigenciaFim: vigFim || null, vigenciaEstimada: vigEstimada, vigenciaDuracaoMeses: dMeses, vigenciaDuracaoDias: dDias, resumoEscopo: extr?.resumoEscopo?.valor || '', condicoesPagamento: extr?.condicoesPagamento?.valor || '', equipamentosFornecidosPelaContratante: extr?.equipamentosFornecidosPelaContratante?.valor || '', prorrogavel: !!extr?.vigencia?.prorrogavel?.valor }) });
       if (!p.ok) { addToast('error', (await p.json().catch(() => ({})))?.error || 'Falha ao salvar os campos.'); return; }
       await carregarMinuta(contrato.id);
       setStep(4);
@@ -375,10 +409,60 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
             )}
 
             <div className="grid sm:grid-cols-2 gap-4">
-              <Campo label="Objeto"><textarea value={objeto} onChange={(e) => setObjeto(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary" /></Campo>
-              <Campo label="Valor total (R$)"><input value={valorReais} onChange={(e) => setValorReais(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>
-              <Campo label="Fim da vigência"><input type="date" value={vigFim} onChange={(e) => setVigFim(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></Campo>
-              <Campo label={`Parcelas (${extr.parcelas.length})`}><div className="text-[13px] text-text-secondary">{extr.parcelas.length ? extr.parcelas.map((p) => `${p.numero}: ${fmtMoeda(p.valorCentavos)}`).join(' · ') : '—'}</div></Campo>
+              <Campo label="Objeto"><textarea value={objeto} onChange={(e) => setObjeto(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /></Campo>
+              <Campo label="Valor total (R$)"><input inputMode="decimal" value={valorReais} onChange={(e) => setValorReais(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /></Campo>
+            </div>
+
+            {/* Vigência por duração — começa só após a assinatura; fim calculado e estimado (#146) */}
+            <fieldset className="border border-line p-4 space-y-3">
+              <legend className="text-[12px] text-text-secondary px-1">Vigência — conta a partir da assinatura</legend>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Campo label="Data de início (estimada — pós-assinatura)">
+                  <input type="date" value={vigInicio} onChange={(e) => onInicio(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                </Campo>
+                <Campo label="Prazo de vigência">
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} value={durValor} onChange={(e) => onDurValor(e.target.value)} placeholder="0" aria-label="Quantidade do prazo de vigência" className="h-10 w-20 bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                    <div className="inline-flex" role="radiogroup" aria-label="Unidade do prazo de vigência">
+                      {(['meses', 'dias'] as const).map((u) => (
+                        <button key={u} type="button" role="radio" aria-checked={durUnidade === u} onClick={() => onDurUnidade(u)} className={cn('h-10 px-3 text-[13px] border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary', durUnidade === u ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{u}</button>
+                      ))}
+                    </div>
+                  </div>
+                </Campo>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[12px] text-text-secondary mr-1">Adicionar:</span>
+                {[1, 3, 6, 12].map((m) => <button key={`m${m}`} type="button" onClick={() => bumpDuracao('meses', m)} className="h-8 px-2.5 text-[12px] border border-line text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">+{m} {m === 1 ? 'mês' : 'meses'}</button>)}
+                {[30, 60, 90].map((d) => <button key={`d${d}`} type="button" onClick={() => bumpDuracao('dias', d)} className="h-8 px-2.5 text-[12px] border border-line text-text-secondary hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">+{d} dias</button>)}
+              </div>
+              <Campo label="Fim da vigência (calculado — estimado, editável)">
+                <input type="date" value={vigFim} onChange={(e) => setVigFim(e.target.value)} className="h-10 w-full sm:w-[220px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+              </Campo>
+              <p className="text-[12px] text-text-secondary">A data de fim é uma estimativa derivada do início + prazo; a vigência real começa na assinatura.</p>
+            </fieldset>
+
+            {/* Parcelas com vencimentos propostos a partir do início e editáveis (#146) */}
+            <div>
+              <div className="text-[13px] font-medium mb-2">Parcelas ({parcelasEdit.length})</div>
+              {parcelasEdit.length === 0 ? (
+                <p className="text-[13px] text-text-secondary">Nenhuma parcela extraída do documento.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {parcelasEdit.map((p, i) => (
+                    <li key={p.numero} className="flex flex-wrap items-center gap-3 text-[13px]">
+                      <span className="w-16 text-text-secondary">Parc. {p.numero}</span>
+                      <span className="w-28 font-mono">{fmtMoeda(p.valorCentavos)}</span>
+                      <label className="flex items-center gap-2">
+                        <span className="text-[12px] text-text-secondary">vence</span>
+                        <input type="date" value={p.vencimento || ''} onChange={(e) => editarVencimento(i, e.target.value)} aria-label={`Vencimento da parcela ${p.numero}`} className="h-9 bg-field border border-line rounded-none px-2 text-[13px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                      </label>
+                      {p.vencimento && p.estimada && <Chip tone="neutral" size="sm">estimado</Chip>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-[12px] text-text-secondary mt-2">Vencimentos propostos (mensais) a partir da data de início; ajuste se necessário.</p>
             </div>
 
             {alertasPendentes.length > 0 && (

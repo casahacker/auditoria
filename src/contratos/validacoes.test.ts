@@ -8,7 +8,7 @@
 import {
   valorPorExtenso, numeroPorExtenso, fmtMoeda, fmtData,
   somaParcelasCentavos, validarContratoParaGeracao,
-  isValidCnpj, calcularVigenciaFim, addDias, addMeses, validarJiraKey,
+  isValidCnpj, calcularVigenciaFim, addDias, addMeses, proporVencimentos, validarJiraKey,
   type ParcelaLike,
 } from "./validacoes";
 
@@ -36,8 +36,18 @@ eq(fmtData("2026-06-15T03:00:00Z"), "15/06/2026", "data ISO completa → dd/mm/a
 
 // ── datas / vigência ──
 eq(calcularVigenciaFim("2026-01-15", 6), "2026-07-15", "vigência fim = início + 6 meses");
+eq(calcularVigenciaFim("2026-01-15", 0, 90), "2026-04-15", "vigência fim = início + 90 dias (#146)");
 eq(addDias("2026-06-15", 30), "2026-07-15", "addDias +30");
 eq(addMeses("2026-01-31", 1), "2026-03-03", "addMeses +1 (overflow fevereiro)");
+
+// ── #146: proposta de vencimentos (mensais a partir do início; preserva os manuais) ──
+const vprops = proporVencimentos([
+  { numero: 1, valorCentavos: 100 },
+  { numero: 2, valorCentavos: 100, vencimento: "2026-05-05", estimada: false },
+], "2026-01-10");
+eq(vprops[0].vencimento, "2026-02-10", "proporVencimentos: parcela 1 = início + 1 mês");
+eq(vprops[0].estimada, true, "proporVencimentos: parcela proposta fica estimada");
+eq(vprops[1].vencimento, "2026-05-05", "proporVencimentos: parcela manual (estimada=false) preservada");
 eq(validarJiraKey("JUR-42"), true, "JUR-42 formato ok");
 eq(validarJiraKey("ABC-1"), false, "ABC-1 formato inválido");
 

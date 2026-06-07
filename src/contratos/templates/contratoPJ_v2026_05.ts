@@ -56,6 +56,32 @@ export function qualificacaoContratada(c: Contrato): string {
   ].join(" ");
 }
 
+/** Prazo de vigência por extenso ("6 (seis) meses" | "90 (noventa) dias" | ""). */
+function duracaoVigenciaPorExtenso(c: Contrato): string {
+  const m = Math.trunc(Number(c.vigenciaDuracaoMeses) || 0);
+  const d = Math.trunc(Number(c.vigenciaDuracaoDias) || 0);
+  if (m > 0) return `${m} (${numeroPorExtenso(m)}) ${m === 1 ? "mês" : "meses"}`;
+  if (d > 0) return `${d} (${numeroPorExtenso(d)}) dias`;
+  return "";
+}
+
+/**
+ * Cláusula 2ª (VIGÊNCIA) — a vigência começa SÓ na assinatura (data futura desconhecida na
+ * redação), então preferimos o prazo relativo ("por X meses a contar da assinatura") com a
+ * data de término apenas como PREVISÃO estimada. Sem prazo, cai na data fim (se houver) ou
+ * num texto remissivo ao TR — nunca em placeholder [XX/XX/XXXX] (#146).
+ */
+function textoVigencia(c: Contrato): string {
+  const dur = duracaoVigenciaPorExtenso(c);
+  const fim = c.vigenciaFim ? fmtData(c.vigenciaFim) : "";
+  const marca = c.vigenciaEstimada ? " (data estimada — confirmar na assinatura)" : "";
+  if (dur) {
+    return `O presente instrumento vigorará pelo prazo de ${dur}, a contar da data de assinatura por todas as partes${fim ? `, com término previsto para ${fim}${marca}` : ""}.`;
+  }
+  if (fim) return `O presente instrumento vigorará a partir da assinatura por todas as partes até ${fim}${marca}.`;
+  return "O presente instrumento vigorará a partir da assinatura por todas as partes, pelo prazo estabelecido no Termo de Referência que o integra.";
+}
+
 /** Monta os blocos do Contrato Padrão PJ a partir dos dados do contrato. */
 export function montarBlocos(c: Contrato): Bloco[] {
   const objeto = c.objeto || c.extracao?.objeto?.valor || "";
@@ -75,7 +101,7 @@ export function montarBlocos(c: Contrato): Bloco[] {
   blocos.push({ tipo: "paragrafo", texto: "O cronograma previsto no Termo de Referência poderá ser alterado mediante prévio acordo entre as partes." });
 
   blocos.push({ tipo: "clausula", numero: "2ª", titulo: "VIGÊNCIA" });
-  blocos.push({ tipo: "paragrafo", texto: `O presente instrumento vigorará a partir da assinatura por todas as partes até ${c.vigenciaFim ? fmtData(c.vigenciaFim) : "[DATA FINAL DA VIGÊNCIA DO CONTRATO]"}${c.vigenciaEstimada ? " (data estimada — confirmar na assinatura)" : ""}.` });
+  blocos.push({ tipo: "paragrafo", texto: textoVigencia(c) });
 
   blocos.push({ tipo: "clausula", numero: "3ª", titulo: "VALOR" });
   blocos.push({ tipo: "paragrafo", texto: `A CASA HACKER pagará à CONTRATADA o valor bruto de ${valorTotal > 0 ? `${fmtMoeda(valorTotal)} (${valorPorExtenso(valorTotal)})` : "[VALOR TOTAL] ([VALOR POR EXTENSO])"}, referente à totalidade da prestação de serviços.` });
@@ -86,7 +112,10 @@ export function montarBlocos(c: Contrato): Bloco[] {
   blocos.push({ tipo: "paragrafo", texto: `O pagamento do valor autorizado à CONTRATADA será realizado em ${n > 0 ? `${n} (${numeroPorExtenso(n)}) parcela(s)` : "[NÚMERO DE PARCELAS] ([NÚMERO POR EXTENSO])"} a saber:` });
   if (n) {
     for (const p of parcelas) {
-      blocos.push({ tipo: "item", texto: `Parcela ${p.numero}, valor ${fmtMoeda(p.valorCentavos)}, com vencimento em ${p.vencimento ? fmtData(p.vencimento) : "[XX/XX/XXXX]"}${p.estimada ? " (estimado)" : ""}, condicionado à entrega do relatório de execução dos serviços e aprovação da CASA HACKER;` });
+      const venc = p.vencimento
+        ? `com vencimento em ${fmtData(p.vencimento)}${p.estimada ? " (estimado)" : ""}`
+        : "com vencimento a definir após a assinatura";
+      blocos.push({ tipo: "item", texto: `Parcela ${p.numero}, valor ${fmtMoeda(p.valorCentavos)}, ${venc}, condicionado à entrega do relatório de execução dos serviços e aprovação da CASA HACKER;` });
     }
     const soma = somaParcelasCentavos(parcelas);
     if (soma !== valorTotal && valorTotal > 0) {

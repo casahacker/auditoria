@@ -13,8 +13,13 @@
  */
 import extenso from "extenso";
 import { isValidCpf, isValidCnpj } from "../kyc/kycTypes";
+import { iso10, addDias, addMeses, calcularVigenciaFim, proporVencimentos, type ParcelaLike } from "./datas";
 
 export { isValidCpf, isValidCnpj };
+// Helpers de data puros vivem em ./datas (sem `extenso`) e são re-exportados aqui para
+// não quebrar os imports existentes (templates, rotas, testes) — #146.
+export { iso10, addDias, addMeses, calcularVigenciaFim, proporVencimentos };
+export type { ParcelaLike };
 
 export const onlyDigits = (s: any): string => String(s ?? "").replace(/\D/g, "");
 
@@ -58,35 +63,10 @@ export function numeroPorExtenso(n: number): string {
 }
 
 // ── Datas ────────────────────────────────────────────────────────────────────────
-const iso10 = (d: any): string => String(d ?? "").slice(0, 10);
+// iso10/addDias/addMeses/calcularVigenciaFim/proporVencimentos vêm de ./datas (puros).
 const hojeIso = (): string => new Date().toISOString().slice(0, 10);
 
-/** Soma n dias a uma data yyyy-mm-dd (retorna yyyy-mm-dd). */
-export function addDias(isoDate: string, n: number): string {
-  const d = new Date(`${iso10(isoDate)}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Soma n meses a uma data yyyy-mm-dd (retorna yyyy-mm-dd). */
-export function addMeses(isoDate: string, n: number): string {
-  const d = new Date(`${iso10(isoDate)}T00:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-/**
- * Fim de vigência a partir da data de início + duração em meses (TR sem datas).
- * O resultado é "estimado — confirmar na assinatura" (marcação fica no contrato).
- */
-export function calcularVigenciaFim(inicioIso?: string | null, duracaoMeses?: number | null): string | null {
-  if (!inicioIso || !duracaoMeses) return null;
-  return addMeses(iso10(inicioIso), Number(duracaoMeses));
-}
-
 // ── Parcelas ──────────────────────────────────────────────────────────────────────
-export interface ParcelaLike { numero?: number; valorCentavos?: number; vencimento?: string | null }
-
 export function somaParcelasCentavos(parcelas?: ParcelaLike[]): number {
   return (parcelas || []).reduce((s, p) => s + (Number(p?.valorCentavos) || 0), 0);
 }

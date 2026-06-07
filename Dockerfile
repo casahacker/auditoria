@@ -18,6 +18,7 @@ COPY src/kyc/kycTypes.ts ./src/kyc/kycTypes.ts
 COPY src/contratos/contratosTypes.ts ./src/contratos/contratosTypes.ts
 COPY src/contratos/termosCondicoes.ts ./src/contratos/termosCondicoes.ts
 COPY src/contratos/jiraClient.ts ./src/contratos/jiraClient.ts
+COPY src/contratos/datas.ts ./src/contratos/datas.ts
 COPY src/contratos/validacoes.ts ./src/contratos/validacoes.ts
 COPY src/contratos/elegibilidade.ts ./src/contratos/elegibilidade.ts
 COPY src/contratos/extracao.ts ./src/contratos/extracao.ts

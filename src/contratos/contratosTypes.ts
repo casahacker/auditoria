@@ -234,9 +234,11 @@ export interface Contrato {
   // campos finais do contrato (após conferência/edição humana)
   objeto?: string;
   resumoEscopo?: string;
-  vigenciaInicio?: string;       // ISO
+  vigenciaInicio?: string;       // ISO (estimada — a vigência conta da assinatura)
   vigenciaFim?: string;          // ISO
   vigenciaEstimada?: boolean;    // "estimado — confirmar na assinatura"
+  vigenciaDuracaoMeses?: number; // prazo em meses (vigência conta da assinatura) — #146
+  vigenciaDuracaoDias?: number;  // prazo em dias (alternativa a meses) — #146
   prorrogavel?: boolean;
   prorrogacaoMaxMeses?: number;
   valorTotalCentavos?: number;

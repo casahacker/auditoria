@@ -110,6 +110,8 @@ const patchSchema = z.object({
   vigenciaInicio: z.string().nullable(),
   vigenciaFim: z.string().nullable(),
   vigenciaEstimada: z.boolean(),
+  vigenciaDuracaoMeses: z.number().int().nonnegative(),
+  vigenciaDuracaoDias: z.number().int().nonnegative(),
   prorrogavel: z.boolean(),
   prorrogacaoMaxMeses: z.number().int().nonnegative(),
   valorTotalCentavos: z.number().int().nonnegative(),
