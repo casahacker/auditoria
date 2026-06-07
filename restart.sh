@@ -1,29 +1,47 @@
 #!/usr/bin/env bash
+#
+# Deploy/restart do auditoria (suíte Auditoria — Casa Hacker).
+#
+# Reconstrói a imagem `localhost/auditoria:latest` (carimbando o APP_COMMIT no rodapé do
+# relatório) e reinicia o serviço SEMPRE via systemd.
+#
+# ⚠️  NUNCA suba com `podman-compose up -d` direto. O unit auditoria.service tem ExecStartPre
+#     que remove o container, a rede `auditoria_auditoria-net` e a **bridge kernel stale de
+#     10.89.11.0/24** antes do `up`. Pular essa limpeza derruba a app (network create exit
+#     125 — subnet em uso) depois que o `down` já matou o container.
+#
+# Uso:
+#   ./restart.sh             # build (com APP_COMMIT) + restart + health check
+#   ./restart.sh --no-build  # só reinicia o serviço (sem rebuild)
+#
 set -euo pipefail
 cd "$(dirname "$0")"
 
-echo "==> Parando container anterior..."
-sudo podman stop stack-audit 2>/dev/null || true
-sudo podman rm   stack-audit 2>/dev/null || true
+PORT=18088
+BUILD=1
+[ "${1:-}" = "--no-build" ] && BUILD=0
 
-echo "==> Garantindo permissões no volume de dados..."
-sudo mkdir -p /data/stack-audit/data
+if [ "$BUILD" = "1" ]; then
+  APP_COMMIT="$(git rev-parse --short HEAD)"
+  echo "==> Build da imagem (APP_COMMIT=$APP_COMMIT)..."
+  # /var só tem ~4GB → TMPDIR no /data; BUILDAH_FORMAT=docker p/ HEALTHCHECK + ARG.
+  sudo env TMPDIR=/data/podman-tmp/tmp BUILDAH_FORMAT=docker APP_COMMIT="$APP_COMMIT" \
+    podman-compose build
+fi
 
-echo "==> Subindo via podman compose..."
-sudo BUILDAH_FORMAT=docker podman compose up -d
+echo "==> Reiniciando o serviço (systemd limpa a bridge stale antes de subir)..."
+sudo systemctl restart auditoria.service
 
 echo "==> Aguardando health check (até 60s)..."
 for i in $(seq 1 12); do
   sleep 5
-  STATUS=$(curl -sf http://127.0.0.1:18088/api/health 2>/dev/null \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
-  if [ "$STATUS" = "ok" ]; then
-    echo "==> OK — serviço disponível em http://127.0.0.1:18088"
+  if curl -sf "http://127.0.0.1:${PORT}/api/health" 2>/dev/null | grep -q '"status":"ok"'; then
+    echo "==> OK — auditoria saudável em http://127.0.0.1:${PORT}${APP_COMMIT:+ (APP_COMMIT $APP_COMMIT)}"
     exit 0
   fi
   echo "   aguardando... ($i/12)"
 done
 
 echo "ERRO: serviço não respondeu após 60s. Últimos logs:"
-sudo podman logs --tail 30 stack-audit
+sudo podman logs --tail 30 auditoria
 exit 1
