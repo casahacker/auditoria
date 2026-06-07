@@ -202,6 +202,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
   // foco no título ao trocar de passo (a11y — leitores de tela anunciam a nova etapa) (#149)
   const headingRef = useRef<HTMLHeadingElement>(null);
   const prevStep = useRef(step);
+  const armedRef = useRef(false); // autosave (#155): só arma após o passo 3 ser semeado
   useEffect(() => { if (prevStep.current !== step) { prevStep.current = step; headingRef.current?.focus(); } }, [step]);
 
   // passo 1 — pré-preenche o CNPJ vindo da ficha do fornecedor (?cnpj=)
@@ -229,6 +230,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
   const [sla, setSla] = useState('');
   const [localExecucao, setLocalExecucao] = useState('');
   const [equipamentos, setEquipamentos] = useState('');
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'erro'>('idle');
   // passo 4
   const [minuta, setMinuta] = useState('');
   const [validacao, setValidacao] = useState<{ ok: boolean; bloqueios: string[]; avisos: string[] } | null>(null);
@@ -266,6 +268,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
         setLocalExecucao(c.localExecucao || ex?.localExecucao?.valor || '');
         setEquipamentos(c.equipamentosFornecidosPelaContratante || ex?.equipamentosFornecidosPelaContratante?.valor || '');
         setCiencias(new Set());
+        armedRef.current = false; setAutosaveStatus('idle');
         setStep(ex ? 3 : (c.elegibilidadeSnapshot?.elegivel ? 2 : 1));
       } catch { addToast('error', 'Falha ao carregar o rascunho.'); }
       finally { setBusy(false); }
@@ -330,6 +333,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
       setEquipamentos(ex.equipamentosFornecidosPelaContratante?.valor || '');
       setCiencias(new Set());
       await refresh(contrato.id);
+      armedRef.current = false; setAutosaveStatus('idle');
       setStep(3);
     } catch { addToast('error', 'Falha ao processar o documento.'); } finally { setBusy(false); }
   };
@@ -405,23 +409,52 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
   const somaParcelasCent = useMemo(() => parcelasEdit.reduce((s, p) => s + reaisToCent(p.valorStr), 0), [parcelasEdit]);
   const totalCent = reaisToCent(valorReais);
 
+  // Corpo do PATCH com os campos da conferência (passo 3) — reusado pelo "gerar minuta" e
+  // pelo autosave (#155). Não dispara as validações de geração (essas ficam em /minuta).
+  const payloadPasso3 = () => {
+    const dMeses = durUnidade === 'meses' ? (parseInt(durValor, 10) || 0) : 0;
+    const dDias = durUnidade === 'dias' ? (parseInt(durValor, 10) || 0) : 0;
+    return {
+      objeto, valorTotalCentavos: reaisToCent(valorReais),
+      parcelas: parcelasEdit.map((p) => ({ numero: p.numero, valorCentavos: reaisToCent(p.valorStr), vencimento: p.vencimento ?? null, estimada: p.estimada ?? !p.vencimento })),
+      vigenciaInicio: vigInicio || null, vigenciaFim: vigFim || null, vigenciaEstimada: !!(vigInicio || dMeses || dDias),
+      vigenciaDuracaoMeses: dMeses, vigenciaDuracaoDias: dDias,
+      resumoEscopo, condicoesPagamento, sla, localExecucao, equipamentosFornecidosPelaContratante: equipamentos,
+      prorrogavel: !!extr?.vigencia?.prorrogavel?.valor,
+    };
+  };
+
   // PASSO 3 → 4 — grava campos finais e gera a minuta
   const avancarParaMinuta = async () => {
     if (!contrato) return;
     if (alertasPendentes.some((a) => !ciencias.has(a.key))) { addToast('error', 'Dê ciência a todos os alertas antes de avançar.'); return; }
-    const valorCent = reaisToCent(valorReais);
-    const parcelas = parcelasEdit.map((p) => ({ numero: p.numero, valorCentavos: reaisToCent(p.valorStr), vencimento: p.vencimento ?? null, estimada: p.estimada ?? !p.vencimento }));
-    const dMeses = durUnidade === 'meses' ? (parseInt(durValor, 10) || 0) : 0;
-    const dDias = durUnidade === 'dias' ? (parseInt(durValor, 10) || 0) : 0;
-    const vigEstimada = !!(vigInicio || dMeses || dDias);
     setBusy(true);
     try {
-      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ objeto, valorTotalCentavos: valorCent, parcelas, vigenciaInicio: vigInicio || null, vigenciaFim: vigFim || null, vigenciaEstimada: vigEstimada, vigenciaDuracaoMeses: dMeses, vigenciaDuracaoDias: dDias, resumoEscopo, condicoesPagamento, sla, localExecucao, equipamentosFornecidosPelaContratante: equipamentos, prorrogavel: !!extr?.vigencia?.prorrogavel?.valor }) });
+      const p = await apiFetch(`/api/contratos/${contrato.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payloadPasso3()) });
       if (!p.ok) { addToast('error', (await p.json().catch(() => ({})))?.error || 'Falha ao salvar os campos.'); return; }
       await carregarMinuta(contrato.id);
       setStep(4);
     } catch { addToast('error', 'Falha ao salvar.'); } finally { setBusy(false); }
   };
+
+  // Autosave do passo 3 (#155): persiste as edições da conferência ~1,2s após a última
+  // alteração (PATCH simples, sem validações de geração). Não salva na primeira passada
+  // após semear (armedRef) — só quando o operador realmente edita.
+  useEffect(() => {
+    if (step !== 3 || !contrato || busy) return;
+    if (!armedRef.current) { armedRef.current = true; return; }
+    const id = contrato.id;
+    const body = JSON.stringify(payloadPasso3());
+    const t = setTimeout(async () => {
+      setAutosaveStatus('saving');
+      try {
+        const p = await apiFetch(`/api/contratos/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body });
+        setAutosaveStatus(p.ok ? 'saved' : 'erro');
+      } catch { setAutosaveStatus('erro'); }
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, contrato, busy, objeto, valorReais, vigInicio, durUnidade, durValor, vigFim, parcelasEdit, resumoEscopo, condicoesPagamento, sla, localExecucao, equipamentos]);
 
   const carregarMinuta = async (id: string) => {
     const v = await apiFetch(`/api/contratos/${id}/validar`); setValidacao(v.ok ? await v.json() : null);
@@ -516,7 +549,12 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
         {step === 3 && extr && (
           <Card className="p-6 space-y-5">
             <h2 ref={headingRef} tabIndex={-1} className="text-[16px] font-semibold outline-none">Conferência da extração</h2>
-            <p className="text-[13px] text-text-secondary">A IA apenas extraiu os dados (cada campo cita o trecho-fonte). Confira e edite o que for necessário.</p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[13px] text-text-secondary">A IA apenas extraiu os dados (cada campo cita o trecho-fonte). Confira e edite o que for necessário — as edições são salvas automaticamente.</p>
+              <span aria-live="polite" className="shrink-0 text-[12px] text-text-secondary mt-0.5">
+                {autosaveStatus === 'saving' ? 'Salvando…' : autosaveStatus === 'saved' ? '✓ Rascunho salvo' : autosaveStatus === 'erro' ? <span className="text-error">⚠ Falha ao salvar</span> : ''}
+              </span>
+            </div>
 
             {extr.lacunas.length > 0 && (
               <div className="border border-warning/40 bg-warning/5 p-3 text-[13px]"><strong className="text-warning">Lacunas:</strong> {extr.lacunas.join('; ')}.</div>
