@@ -35,7 +35,10 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
    uma **data de início estimada**; o fim e os **vencimentos das parcelas** são calculados
    (estimados) e editáveis. A vigência conta **da assinatura**, então a Cláusula 2ª usa o
    prazo relativo ("por X meses a contar da assinatura") com a data de fim apenas como
-   previsão estimada — a minuta nunca sai com `[XX/XX/XXXX]`.
+   previsão estimada — a minuta nunca sai com `[XX/XX/XXXX]`. O operador pode ainda **ligar
+   cláusulas opcionais** (confidencialidade, LGPD/DPA, propriedade intelectual, multa por
+   atraso, reajuste) de texto **fixo e versionado** (#157), inseridas na minuta com
+   numeração dinâmica, antes da cláusula de foro.
 4. **Minuta** — preview HTML + validações determinísticas; baixar PDF; salvar/enviar para
    revisão.
 5. **Aprovação e assinatura** — na **ficha do contrato**: *Gerar pacote* (Contrato + TR +
@@ -108,7 +111,8 @@ instância do KYS, com S3 ligado — e `CONTRATOS_DIRETOR_EMAIL`).
 | `src/contratos/extracao.ts` | pipeline DeepSeek-V3 (zod, checagem estrutural do TR) |
 | `src/contratos/dadosContratada.ts` | merge Receita + KYS da CONTRATADA |
 | `src/contratos/documenso.ts` | envio para assinatura (2 signatários + CC) |
-| `src/contratos/templates/contratoPJ_v2026_05.ts` · `aditivoPJ_v2026_05.ts` | templates versionados |
+| `src/contratos/templates/contratoPJ_v2026_05.ts` · `aditivoPJ_v2026_05.ts` | templates versionados (numeração de cláusulas dinâmica) |
+| `src/contratos/templates/clausulasOpcionais_v2026_05.ts` | catálogo de cláusulas opcionais versionadas (#157) — texto fixo, IA não redige |
 | `src/contratos/render.ts` | render HTML/PDF (rodapé IBM Plex Mono em todas as páginas) |
 | `src/contratos/ContratosApp.tsx` | frontend (lista, wizard, detalhe, aditivos, ajuda) |
 

@@ -97,6 +97,8 @@ async function main() {
   ok(/CLÁUSULA 5ª/.test(html) && /2026-05/.test(html), "Cláusula 5ª referencia T&C versão 2026-05");
   const pdf = await renderContratoPdf(contrato);
   ok(pdf.slice(0, 5).toString() === "%PDF-", "PDF do contrato gerado");
+  const htmlOpc = renderContratoHtml({ ...contrato, clausulasOpcionais: ["confidencialidade", "lgpd"] });
+  ok(/CLÁUSULA 6ª — CONFIDENCIALIDADE/.test(htmlOpc) && /CLÁUSULA 8ª — FORO/.test(htmlOpc), "#157 — cláusulas opcionais numeradas dinamicamente (FORO → 8ª)");
 
   // 3) gate (16.2): sem KYS/diligência válidos → não chega ao passo 3 (extrair → 422)
   const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ct-e2e-"));

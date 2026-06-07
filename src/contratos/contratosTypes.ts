@@ -254,6 +254,10 @@ export interface Contrato {
   versaoTC?: string;
   hashTC?: string;
 
+  // cláusulas opcionais selecionadas (#157) — ids do catálogo versionado
+  clausulasOpcionais?: string[];
+  versaoClausulasOpcionais?: string;
+
   anexos?: AnexosContrato;
   aditivos?: string[];           // IDs de aditivos (CH-AD-…)
 
