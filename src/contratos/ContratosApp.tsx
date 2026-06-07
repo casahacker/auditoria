@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileSignature, Building2, Loader2, ChevronRight, ChevronLeft, Plus, Check, AlertTriangle,
-  ShieldCheck, ShieldAlert, Upload, FileText, ExternalLink, HelpCircle, ListChecks, Clock, Lock,
+  ShieldCheck, ShieldAlert, Upload, FileText, ExternalLink, HelpCircle, ListChecks, Clock, Lock, Trash2,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
@@ -19,7 +19,7 @@ import { onlyDigits, maskCnpj } from '../kyc/kycTypes';
 import { addMeses, addDias, proporVencimentos } from './datas';
 import type { Contrato, ContratoResumo, ContratoStatus, ElegibilidadeSnapshot, CriterioElegibilidade, ExtracaoIA } from './contratosTypes';
 
-type ParcelaEdit = { numero: number; valorCentavos: number; vencimento: string | null; estimada?: boolean };
+type ParcelaEdit = { numero: number; valorStr: string; vencimento: string | null; estimada?: boolean };
 
 export interface ContratosAppProps {
   user: AuthUser;
@@ -36,6 +36,9 @@ const segs = () => window.location.pathname.split('/').filter(Boolean);
 // formatação local (não arrasta a lib `extenso` para o bundle do front)
 const fmtMoeda = (c?: number) => { const v = Math.abs(Math.trunc(Number(c) || 0)); return `R$ ${String(Math.trunc(v / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${String(v % 100).padStart(2, '0')}`; };
 const fmtData = (iso?: string | null) => { if (!iso) return '—'; const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso)); return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso); };
+// "3.000,00" | "3000,00" | "3000.00" | "3000" → centavos inteiros. Vírgula = decimal pt-BR.
+const reaisToCent = (s?: string) => { const t = String(s ?? '').trim(); if (!t) return 0; const norm = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t; return Math.round((parseFloat(norm) || 0) * 100); };
+const centToReais = (c?: number) => ((Math.trunc(Number(c) || 0)) / 100).toFixed(2);
 
 const STATUS: Record<ContratoStatus, { tone: ChipTone; label: string }> = {
   rascunho: { tone: 'neutral', label: 'Rascunho' },
@@ -276,7 +279,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
       setDurUnidade('meses');
       setDurValor(ex.vigencia?.duracaoMeses?.valor != null ? String(ex.vigencia.duracaoMeses.valor) : '');
       setVigFim(ex.vigencia?.dataFim?.valor || '');
-      setParcelasEdit((ex.parcelas || []).map((p) => ({ numero: p.numero, valorCentavos: p.valorCentavos, vencimento: p.vencimento ?? null, estimada: !p.vencimento })));
+      setParcelasEdit((ex.parcelas || []).map((p) => ({ numero: p.numero, valorStr: centToReais(p.valorCentavos), vencimento: p.vencimento ?? null, estimada: !p.vencimento })));
       setResumoEscopo(ex.resumoEscopo?.valor || '');
       setCondicoesPagamento(ex.condicoesPagamento?.valor || '');
       setSla(ex.sla?.valor || '');
@@ -316,12 +319,33 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
   const editarVencimento = (i: number, v: string) =>
     setParcelasEdit((prev) => prev.map((p, idx) => (idx === i ? { ...p, vencimento: v || null, estimada: false } : p)));
 
+  // edição de parcelas (#153): valor, adicionar/remover, dividir igualmente e Σ ao vivo.
+  const editarValorParcela = (i: number, v: string) =>
+    setParcelasEdit((prev) => prev.map((p, idx) => (idx === i ? { ...p, valorStr: v } : p)));
+  const removerParcela = (i: number) =>
+    setParcelasEdit((prev) => prev.filter((_, idx) => idx !== i).map((p, idx) => ({ ...p, numero: idx + 1 })));
+  const addParcela = () =>
+    setParcelasEdit((prev) => {
+      const numero = prev.length + 1;
+      const venc = vigInicio ? addMeses(vigInicio, numero) : null;
+      return [...prev, { numero, valorStr: '0,00', vencimento: venc, estimada: !!venc }];
+    });
+  const dividirIgualmente = () =>
+    setParcelasEdit((prev) => {
+      const total = reaisToCent(valorReais); const n = prev.length;
+      if (!total || !n) return prev;
+      const base = Math.floor(total / n);
+      return prev.map((p, i) => ({ ...p, valorStr: centToReais(i === n - 1 ? total - base * (n - 1) : base) }));
+    });
+  const somaParcelasCent = useMemo(() => parcelasEdit.reduce((s, p) => s + reaisToCent(p.valorStr), 0), [parcelasEdit]);
+  const totalCent = reaisToCent(valorReais);
+
   // PASSO 3 → 4 — grava campos finais e gera a minuta
   const avancarParaMinuta = async () => {
     if (!contrato) return;
     if (alertasPendentes.some((a) => !ciencias.has(a.key))) { addToast('error', 'Dê ciência a todos os alertas antes de avançar.'); return; }
-    const valorCent = Math.round(parseFloat(valorReais.replace(',', '.')) * 100) || 0;
-    const parcelas = parcelasEdit.map((p) => ({ numero: p.numero, valorCentavos: p.valorCentavos, vencimento: p.vencimento ?? null, estimada: p.estimada ?? !p.vencimento }));
+    const valorCent = reaisToCent(valorReais);
+    const parcelas = parcelasEdit.map((p) => ({ numero: p.numero, valorCentavos: reaisToCent(p.valorStr), vencimento: p.vencimento ?? null, estimada: p.estimada ?? !p.vencimento }));
     const dMeses = durUnidade === 'meses' ? (parseInt(durValor, 10) || 0) : 0;
     const dDias = durUnidade === 'dias' ? (parseInt(durValor, 10) || 0) : 0;
     const vigEstimada = !!(vigInicio || dMeses || dDias);
@@ -470,27 +494,44 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
               <p className="text-[12px] text-text-secondary">A data de fim é uma estimativa derivada do início + prazo; a vigência real começa na assinatura.</p>
             </fieldset>
 
-            {/* Parcelas com vencimentos propostos a partir do início e editáveis (#146) */}
+            {/* Parcelas editáveis — valor, datas, add/remover, dividir igualmente e Σ ao vivo (#146/#153) */}
             <div>
-              <div className="text-[13px] font-medium mb-2">Parcelas ({parcelasEdit.length})</div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div className="text-[13px] font-medium">Parcelas ({parcelasEdit.length})</div>
+                <div className="flex gap-2">
+                  <Btn variant="secondary" size="sm" onClick={dividirIgualmente} disabled={!parcelasEdit.length || !totalCent}>Dividir igualmente</Btn>
+                  <Btn variant="secondary" size="sm" onClick={addParcela}><Plus size={14} aria-hidden /> Parcela</Btn>
+                </div>
+              </div>
               {parcelasEdit.length === 0 ? (
-                <p className="text-[13px] text-text-secondary">Nenhuma parcela extraída do documento.</p>
+                <p className="text-[13px] text-text-secondary">Nenhuma parcela — adicione ao menos uma.</p>
               ) : (
                 <ul className="space-y-2">
                   {parcelasEdit.map((p, i) => (
-                    <li key={p.numero} className="flex flex-wrap items-center gap-3 text-[13px]">
-                      <span className="w-16 text-text-secondary">Parc. {p.numero}</span>
-                      <span className="w-28 font-mono">{fmtMoeda(p.valorCentavos)}</span>
+                    <li key={i} className="flex flex-wrap items-center gap-3 text-[13px]">
+                      <span className="w-14 text-text-secondary shrink-0">Parc. {p.numero}</span>
+                      <label className="flex items-center gap-1.5">
+                        <span className="text-[12px] text-text-secondary">R$</span>
+                        <input inputMode="decimal" value={p.valorStr} onChange={(e) => editarValorParcela(i, e.target.value)} aria-label={`Valor da parcela ${p.numero}`} className="h-9 w-28 bg-field border border-line rounded-none px-2 text-[13px] text-right outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+                      </label>
                       <label className="flex items-center gap-2">
                         <span className="text-[12px] text-text-secondary">vence</span>
                         <input type="date" value={p.vencimento || ''} onChange={(e) => editarVencimento(i, e.target.value)} aria-label={`Vencimento da parcela ${p.numero}`} className="h-9 bg-field border border-line rounded-none px-2 text-[13px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
                       </label>
                       {p.vencimento && p.estimada && <Chip tone="neutral" size="sm">estimado</Chip>}
+                      <IconBtn label={`Remover parcela ${p.numero}`} onClick={() => removerParcela(i)} className="ml-auto"><Trash2 size={14} aria-hidden /></IconBtn>
                     </li>
                   ))}
                 </ul>
               )}
-              <p className="text-[12px] text-text-secondary mt-2">Vencimentos propostos (mensais) a partir da data de início; ajuste se necessário.</p>
+              <div className="mt-2 text-[12px]" aria-live="polite">
+                <span className="text-text-secondary">Soma das parcelas: </span>
+                <span className="font-mono">{fmtMoeda(somaParcelasCent)}</span>
+                {totalCent > 0 && (somaParcelasCent === totalCent
+                  ? <span className="text-success ml-2">✓ confere com o total</span>
+                  : <span className="text-error ml-2">✗ difere do total ({fmtMoeda(totalCent)})</span>)}
+              </div>
+              <p className="text-[12px] text-text-secondary mt-1">Vencimentos propostos (mensais) a partir da data de início; edite valor e datas, adicione ou remova parcelas.</p>
             </div>
 
             {/* Demais campos extraídos — conferíveis e editáveis, com trecho-fonte (#152) */}
