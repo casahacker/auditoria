@@ -239,6 +239,35 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     writeContrato(c);
   };
 
+  // Finaliza a assinatura quando o Documenso confirma COMPLETED: baixa o PDF assinado,
+  // marca o contrato, registra a trilha e sincroniza/anexa no Jira. IDEMPOTENTE — usado
+  // tanto pelo polling (/assinatura/status) quanto pelo webhook (#156). Devolve true se
+  // concluiu agora. `statusConhecido` evita uma consulta extra quando o chamador já tem.
+  const concluirAssinatura = async (contrato: Contrato, ator: string, statusConhecido?: string): Promise<boolean> => {
+    const docId = contrato.documenso?.documentId;
+    if (!docId || contrato.status === "assinado") return false;
+    const st = statusConhecido || (await statusDocumento(docId));
+    if (st !== "COMPLETED") return false;
+    const buf = await baixarAssinado(docId);
+    if (buf) {
+      fs.writeFileSync(path.join(contratoDir(contrato.id), "assinado.pdf"), buf);
+      contrato.anexos = { ...(contrato.anexos || {}), assinado: { nome: "assinado.pdf", tipo: "assinado", mime: "application/pdf", tamanho: buf.length, adicionadoEm: nowIso() } };
+    }
+    contrato.status = "assinado";
+    contrato.documenso = { ...contrato.documenso, status: "COMPLETED", assinadoEm: nowIso() };
+    appendTrilha(contrato, ator, "assinatura_concluida", "Contrato assinado por todas as partes.");
+    contrato.updatedAt = nowIso(); writeContrato(contrato);
+    await syncJira(contrato, "assinatura_concluida", `Contrato ${contrato.id} ASSINADO por todas as partes.`);
+    const assinadoPath = path.join(contratoDir(contrato.id), "assinado.pdf");
+    if (contrato.jira?.issueKey && jiraSyncLigado() && fs.existsSync(assinadoPath)) {
+      const ar = await anexarIssue(contrato.jira.issueKey, `${contrato.id}-assinado.pdf`, fs.readFileSync(assinadoPath));
+      contrato.jiraSync = [...(contrato.jiraSync || []).filter((s) => s.marco !== "anexo_assinado"), { marco: "anexo_assinado", ok: ar.ok, ts: nowIso(), ...(ar.erro ? { erro: ar.erro } : {}) }];
+      appendTrilha(contrato, "sistema", ar.ok ? "jira_anexo" : "jira_anexo_falhou", `Anexo do PDF assinado: Jira ${ar.ok ? "ok" : `falhou (${ar.erro})`}`);
+      writeContrato(contrato);
+    }
+    return true;
+  };
+
   // ── rate limit (padrão da suíte) ───────────────────────────────────────────────
   const writeLimiter = rateLimit({
     windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false,
@@ -661,23 +690,35 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     const docId = contrato.documenso?.documentId;
     if (!docId) return res.json({ status: contrato.documenso?.fallback ? "manual" : "—", contrato: contrato.status });
     const st = await statusDocumento(docId);
-    if (st === "COMPLETED" && contrato.status !== "assinado") {
-      const buf = await baixarAssinado(docId);
-      if (buf) { fs.writeFileSync(path.join(contratoDir(id), "assinado.pdf"), buf); contrato.anexos = { ...(contrato.anexos || {}), assinado: { nome: "assinado.pdf", tipo: "assinado", mime: "application/pdf", tamanho: buf.length, adicionadoEm: nowIso() } }; }
-      contrato.status = "assinado";
-      contrato.documenso = { ...contrato.documenso, status: "COMPLETED", assinadoEm: nowIso() };
-      appendTrilha(contrato, sessionUser(req), "assinatura_concluida", "Contrato assinado por todas as partes.");
-      contrato.updatedAt = nowIso(); writeContrato(contrato);
-      await syncJira(contrato, "assinatura_concluida", `Contrato ${contrato.id} ASSINADO por todas as partes.`);
-      const assinadoPath = path.join(contratoDir(id), "assinado.pdf");
-      if (contrato.jira?.issueKey && jiraSyncLigado() && fs.existsSync(assinadoPath)) {
-        const ar = await anexarIssue(contrato.jira.issueKey, `${contrato.id}-assinado.pdf`, fs.readFileSync(assinadoPath));
-        contrato.jiraSync = [...(contrato.jiraSync || []).filter((s) => s.marco !== "anexo_assinado"), { marco: "anexo_assinado", ok: ar.ok, ts: nowIso(), ...(ar.erro ? { erro: ar.erro } : {}) }];
-        appendTrilha(contrato, "sistema", ar.ok ? "jira_anexo" : "jira_anexo_falhou", `Anexo do PDF assinado: Jira ${ar.ok ? "ok" : `falhou (${ar.erro})`}`);
-        writeContrato(contrato);
-      }
-    }
+    await concluirAssinatura(contrato, sessionUser(req), st);
     res.json({ status: st, contrato: contrato.status });
+  });
+
+  // Webhook do Documenso (#156): conclui a assinatura SEM polling. Protegido por segredo
+  // (DOCUMENSO_WEBHOOK_SECRET) no header X-Documenso-Secret ou em ?secret=. Server-to-server
+  // (sem requireAuth), idempotente. Eventos que não sejam de conclusão são só reconhecidos.
+  app.post("/api/contratos/webhooks/documenso", writeLimiter, async (req: any, res) => {
+    const segredo = process.env.DOCUMENSO_WEBHOOK_SECRET || "";
+    if (!segredo) return res.status(503).json({ error: "Webhook não configurado (DOCUMENSO_WEBHOOK_SECRET ausente)." });
+    const recebido = String(req.headers["x-documenso-secret"] || req.query.secret || "");
+    if (recebido !== segredo) return res.status(401).json({ error: "Segredo inválido" });
+
+    const body = req.body || {};
+    const evento = String(body.event || body.type || "");
+    const p = body.payload || body.data || body.document || body;
+    const externalId = p?.externalId || body?.externalId;
+    const documentId = Number(p?.id ?? p?.documentId ?? body?.documentId) || 0;
+
+    // localiza o contrato pelo externalId (== contrato.id) ou pelo documentId do Documenso.
+    let contrato: Contrato | null = externalId ? readContrato(sanitizeSegment(String(externalId)) || "") : null;
+    if (!contrato && documentId) contrato = listContratos().find((c) => c.documenso?.documentId === documentId) || null;
+    if (!contrato) return res.json({ ok: true, ignored: "contrato não localizado para o evento" });
+
+    if (/COMPLET/i.test(evento) || /COMPLET/i.test(String(p?.status))) {
+      try { await concluirAssinatura(contrato, "documenso-webhook"); }
+      catch (e: any) { return res.status(500).json({ error: `Falha ao concluir a assinatura: ${e?.message || e}` }); }
+    }
+    res.json({ ok: true, contrato: contrato.status });
   });
 
   // Reenvio manual da sincronização Jira (#140) — best-effort, visível no detalhe.

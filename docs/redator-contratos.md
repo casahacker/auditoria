@@ -44,7 +44,12 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
    **assinatura da Casa Hacker** (Diretor/representante legal, `geraldo@`) → **assinatura da
    Contratada** (representante legal) → **CC** (`juridico@`). Se o Documenso não suportar o
    upload, há **fallback** (baixar o pacote para envio manual). Configurável por
-   `CONTRATOS_APROVADORES` / `CONTRATOS_DIRETOR_EMAIL` / `CONTRATOS_CC_EMAIL`.
+   `CONTRATOS_APROVADORES` / `CONTRATOS_DIRETOR_EMAIL` / `CONTRATOS_CC_EMAIL`. A conclusão da
+   assinatura é detectada automaticamente por **webhook do Documenso** (#156): configure no
+   Documenso um webhook do evento `DOCUMENT_COMPLETED` para
+   `POST /api/contratos/webhooks/documenso` com o segredo `DOCUMENSO_WEBHOOK_SECRET` (header
+   `X-Documenso-Secret` ou `?secret=`) — o contrato vira *assinado* sozinho. O botão
+   *Verificar assinatura* (polling) segue como fallback.
 
 ## Termos aditivos (Fase 2)
 

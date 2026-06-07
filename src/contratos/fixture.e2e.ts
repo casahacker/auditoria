@@ -119,6 +119,15 @@ async function main() {
   const ex2 = await j("POST", `/api/contratos/${id}/extrair`, { texto: "TR: 30 horas semanais...", tipoDocumento: "tr" });
   ok(ex2.status === 200 && ex2.body.valorTotalCentavos?.valor === 1_800_000, "elegível → extrair roda e devolve o gabarito");
 
+  // 4) webhook do Documenso (#156): segredo obrigatório; autenticado e idempotente.
+  const wh = (secret: string | null, payload: any) => fetch(base + "/api/contratos/webhooks/documenso", {
+    method: "POST", headers: { "content-type": "application/json", ...(secret ? { "x-documenso-secret": secret } : {}) }, body: JSON.stringify(payload),
+  });
+  process.env.DOCUMENSO_WEBHOOK_SECRET = "wh-secret";
+  ok((await wh("errado", { event: "DOCUMENT_COMPLETED", payload: { externalId: id } })).status === 401, "#156 — webhook com segredo inválido → 401");
+  ok((await wh("wh-secret", { event: "DOCUMENT_OPENED", payload: { externalId: "CH-CT-9999-999" } })).status === 200, "#156 — webhook autenticado p/ contrato inexistente → 200 (ignorado)");
+  delete process.env.DOCUMENSO_WEBHOOK_SECRET;
+
   server.close();
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
   console.log(`\n${fail === 0 ? "✅ DoD da Fase 1 OK" : "❌ FALHOU"} — ${pass} passaram, ${fail} falharam`);
