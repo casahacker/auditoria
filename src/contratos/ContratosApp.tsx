@@ -111,7 +111,7 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFe
       <ToolHeader light="Registro de" accent="Contratos" right={<Btn onClick={onNovo}><Plus size={16} /> Novo contrato</Btn>} />
       <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-6xl w-full">
         {vencendo.length > 0 && (
-          <div className="border border-warning/40 bg-warning/5 p-4 mb-5">
+          <div className="border border-warning/40 bg-warning/5 p-4 mb-5" role="region" aria-label="Contratos com vigência expirando">
             <div className="flex items-center gap-2 text-[14px] font-semibold text-warning mb-2"><Clock size={16} aria-hidden /> {vencendo.length} contrato(s) com vigência expirando em ≤45 dias</div>
             <ul className="space-y-1.5">{vencendo.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
@@ -121,7 +121,7 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFe
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3 mb-5">
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por id, fornecedor, objeto, CNPJ ou issue…"
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar contratos" placeholder="Buscar por id, fornecedor, objeto, CNPJ ou issue…"
             className="h-10 flex-1 min-w-[260px] bg-field border border-line rounded-none px-3 text-[14px] text-text outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
           <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filtrar por status"
             className="h-10 bg-field border border-line rounded-none px-3 text-[14px] text-text cursor-pointer focus:border-primary">
@@ -144,7 +144,7 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFe
                 {filtered.map((c) => (
                   <tr key={c.id} className="border-t border-line hover:bg-surface-hover cursor-pointer" onClick={() => onAbrir(c.id)}>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="font-mono text-[12px]">{c.jiraIssueKey || c.id}</div>
+                      <button onClick={(e) => { e.stopPropagation(); onAbrir(c.id); }} aria-label={`Abrir contrato ${c.jiraIssueKey || c.id}`} className="font-mono text-[12px] text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{c.jiraIssueKey || c.id}</button>
                       {c.jiraIssueKey && <div className="font-mono text-[11px] text-text-secondary">{c.id}</div>}
                     </td>
                     <td className="px-4 py-3"><div className="font-medium">{c.razaoSocial || '—'}</div><div className="text-[12px] text-text-secondary">{maskCnpj(c.cnpj)}</div></td>
@@ -169,18 +169,21 @@ const PASSOS = ['Fornecedor', 'Documento', 'Conferência', 'Minuta', 'Assinatura
 
 function Stepper({ step }: { step: number }) {
   return (
-    <ol className="flex items-center gap-2 mb-8 flex-wrap">
-      {PASSOS.map((p, i) => {
-        const n = i + 1; const done = n < step; const cur = n === step;
-        return (
-          <li key={p} className="flex items-center gap-2">
-            <span className={cn('w-6 h-6 inline-flex items-center justify-center text-[12px] border', cur ? 'bg-primary text-white border-primary' : done ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{done ? <Check size={13} /> : n}</span>
-            <span className={cn('text-[13px]', cur ? 'text-text font-semibold' : 'text-text-secondary')}>{p}</span>
-            {n < PASSOS.length && <ChevronRight size={14} className="text-text-secondary" />}
-          </li>
-        );
-      })}
-    </ol>
+    <nav aria-label="Etapas do contrato" className="mb-8">
+      <ol className="flex items-center gap-2 flex-wrap">
+        {PASSOS.map((p, i) => {
+          const n = i + 1; const done = n < step; const cur = n === step;
+          return (
+            <li key={p} className="flex items-center gap-2" aria-current={cur ? 'step' : undefined}>
+              <span aria-hidden className={cn('w-6 h-6 inline-flex items-center justify-center text-[12px] border', cur ? 'bg-primary text-white border-primary' : done ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{done ? <Check size={13} /> : n}</span>
+              <span className={cn('text-[13px]', cur ? 'text-text font-semibold' : 'text-text-secondary')}>{p}</span>
+              <span className="sr-only">{cur ? '— etapa atual' : done ? '— concluída' : '— pendente'}</span>
+              {n < PASSOS.length && <ChevronRight size={14} className="text-text-secondary" aria-hidden />}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
 
@@ -188,6 +191,10 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
   const [step, setStep] = useState(1);
   const [contrato, setContrato] = useState<Contrato | null>(null);
   const [busy, setBusy] = useState(false);
+  // foco no título ao trocar de passo (a11y — leitores de tela anunciam a nova etapa) (#149)
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const prevStep = useRef(step);
+  useEffect(() => { if (prevStep.current !== step) { prevStep.current = step; headingRef.current?.focus(); } }, [step]);
 
   // passo 1 — pré-preenche o CNPJ vindo da ficha do fornecedor (?cnpj=)
   const [cnpj, setCnpj] = useState(() => { try { return new URLSearchParams(window.location.search).get('cnpj') || ''; } catch { return ''; } });
@@ -334,20 +341,27 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
     } finally { setBusy(false); }
   };
 
+  // Cancelar: confirma só quando há edições não salvas na conferência (o rascunho em si já
+  // está persistido no servidor desde o passo 1, então voltar entre passos não perde nada).
+  const cancelar = () => {
+    if (step >= 3 && !window.confirm('Sair da conferência? As edições não salvas nesta etapa serão perdidas — o rascunho permanece na lista.')) return;
+    onCancelar();
+  };
+
   return (
     <>
-      <ToolHeader light="Novo" accent="contrato" right={<Btn variant="secondary" onClick={onCancelar}>Cancelar</Btn>} />
+      <ToolHeader light="Novo" accent="contrato" right={<Btn variant="secondary" onClick={cancelar}>Cancelar</Btn>} />
       <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-4xl w-full">
         <Stepper step={step} />
 
         {step === 1 && (
           <Card className="p-6">
-            <h2 className="text-[16px] font-semibold mb-1">Fornecedor</h2>
+            <h2 ref={headingRef} tabIndex={-1} className="text-[16px] font-semibold mb-1 outline-none">Fornecedor</h2>
             <p className="text-[13px] text-text-secondary mb-4">Informe o CNPJ. A elegibilidade é avaliada no servidor (Receita, diligência, KYS, CNAE, porte).</p>
             <div className="flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1"><span className="text-[12px] text-text-secondary">CNPJ</span>
-                <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" className="h-10 w-[220px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></label>
-              <Btn onClick={iniciar} disabled={busy}>{busy ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} Avaliar elegibilidade</Btn>
+                <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !busy) iniciar(); }} inputMode="numeric" placeholder="00.000.000/0000-00" className="h-10 w-[220px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /></label>
+              <Btn onClick={iniciar} disabled={busy} aria-busy={busy}>{busy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <ShieldCheck size={16} aria-hidden />} Avaliar elegibilidade</Btn>
             </div>
 
             {contrato?.dadosContratada?.razaoSocial && (
@@ -355,7 +369,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
             )}
 
             {eleg && (
-              <div className="mt-5">
+              <div className="mt-5" aria-live="polite">
                 <div className="flex items-center gap-2 mb-3">
                   {eleg.elegivel ? <Chip tone="success" icon={ShieldCheck}>Elegível</Chip> : <Chip tone="error" icon={ShieldAlert}>Inelegível</Chip>}
                 </div>
@@ -369,11 +383,11 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
 
         {step === 2 && (
           <Card className="p-6 space-y-4">
-            <h2 className="text-[16px] font-semibold">Documento de entrada</h2>
-            <div className="flex gap-3 items-center">
-              <span className="text-[13px] text-text-secondary">Tipo:</span>
+            <h2 ref={headingRef} tabIndex={-1} className="text-[16px] font-semibold outline-none">Documento de entrada</h2>
+            <div className="flex gap-3 items-center" role="radiogroup" aria-label="Tipo do documento de entrada">
+              <span className="text-[13px] text-text-secondary" aria-hidden>Tipo:</span>
               {(['tr', 'proposta'] as const).map((t) => (
-                <button key={t} onClick={() => setTipoDoc(t)} className={cn('h-9 px-3 text-[13px] border', tipoDoc === t ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{t === 'tr' ? 'Termo de Referência' : 'Proposta Comercial'}</button>
+                <button key={t} type="button" role="radio" aria-checked={tipoDoc === t} onClick={() => setTipoDoc(t)} className={cn('h-9 px-3 text-[13px] border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary', tipoDoc === t ? 'border-primary text-primary' : 'border-line text-text-secondary')}>{t === 'tr' ? 'Termo de Referência' : 'Proposta Comercial'}</button>
               ))}
             </div>
             <label className="block">
@@ -386,22 +400,22 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
             <div className="flex flex-wrap gap-4">
               <label className="flex flex-col gap-1"><span className="text-[12px] text-text-secondary">Issue Jira (projeto JUR)</span>
                 <div className="flex gap-2">
-                  <input value={jiraKey} onChange={(e) => { setJiraKey(e.target.value); setJiraInfo(null); }} onBlur={validarJira} placeholder="JUR-123" className="h-10 w-[160px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" />
+                  <input value={jiraKey} onChange={(e) => { setJiraKey(e.target.value); setJiraInfo(null); }} onBlur={validarJira} placeholder="JUR-123" className="h-10 w-[160px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
                   <Btn variant="secondary" size="sm" onClick={validarJira}>Validar</Btn>
                 </div>
               </label>
               <label className="flex flex-col gap-1"><span className="text-[12px] text-text-secondary">Nº da Ordem de Compra (opcional)</span>
-                <input value={oc} onChange={(e) => setOc(e.target.value)} className="h-10 w-[200px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary" /></label>
+                <input value={oc} onChange={(e) => setOc(e.target.value)} className="h-10 w-[200px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /></label>
             </div>
-            {jiraInfo && (jiraInfo.ok
+            <div aria-live="polite">{jiraInfo && (jiraInfo.ok
               ? <div className="text-[13px] text-text-secondary">✓ <strong className="text-text">{jiraKey.toUpperCase()}</strong> — {jiraInfo.resumo} <Chip tone={jiraInfo.alertaDone ? 'warning' : 'neutral'} size="sm">{jiraInfo.status}</Chip>{jiraInfo.alertaDone && <span className="text-warning ml-2">issue concluída — confirme</span>}</div>
-              : <div className="text-[13px] text-error">{jiraInfo.erro}</div>)}
+              : <div className="text-[13px] text-error">{jiraInfo.erro}</div>)}</div>
           </Card>
         )}
 
         {step === 3 && extr && (
           <Card className="p-6 space-y-5">
-            <h2 className="text-[16px] font-semibold">Conferência da extração</h2>
+            <h2 ref={headingRef} tabIndex={-1} className="text-[16px] font-semibold outline-none">Conferência da extração</h2>
             <p className="text-[13px] text-text-secondary">A IA apenas extraiu os dados (cada campo cita o trecho-fonte). Confira e edite o que for necessário.</p>
 
             {extr.lacunas.length > 0 && (
@@ -466,13 +480,15 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
             </div>
 
             {alertasPendentes.length > 0 && (
-              <div className="border border-line p-4">
-                <h3 className="text-[14px] font-semibold mb-2 flex items-center gap-2"><AlertTriangle size={15} className="text-warning" /> Alertas — ciência obrigatória</h3>
+              <div className="border border-line p-4" role="group" aria-label="Alertas com ciência obrigatória">
+                <h3 className="text-[14px] font-semibold mb-2 flex items-center gap-2"><AlertTriangle size={15} className="text-warning" aria-hidden /> Alertas — ciência obrigatória</h3>
                 <ul className="space-y-2">
                   {alertasPendentes.map((a) => (
-                    <li key={a.key} className="flex items-start gap-2 text-[13px]">
-                      <input type="checkbox" checked={ciencias.has(a.key)} onChange={(e) => { const n = new Set(ciencias); e.target.checked ? n.add(a.key) : n.delete(a.key); setCiencias(n); }} className="mt-0.5" />
-                      <span>{a.label}</span>
+                    <li key={a.key} className="text-[13px]">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" checked={ciencias.has(a.key)} onChange={(e) => { const n = new Set(ciencias); e.target.checked ? n.add(a.key) : n.delete(a.key); setCiencias(n); }} className="mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                        <span>{a.label}</span>
+                      </label>
                     </li>
                   ))}
                 </ul>
@@ -483,35 +499,35 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
 
         {step === 4 && (
           <Card className="p-6 space-y-4">
-            <h2 className="text-[16px] font-semibold">Minuta</h2>
+            <h2 ref={headingRef} tabIndex={-1} className="text-[16px] font-semibold outline-none">Minuta</h2>
             {validacao && !validacao.ok && (
-              <div className="border border-error/40 bg-error/5 p-3 text-[13px]"><strong className="text-error">Pendências:</strong> {validacao.bloqueios.join('; ')}.</div>
+              <div role="alert" className="border border-error/40 bg-error/5 p-3 text-[13px]"><strong className="text-error">Pendências:</strong> {validacao.bloqueios.join('; ')}.</div>
             )}
             {validacao && validacao.avisos.length > 0 && (
-              <div className="border border-warning/40 bg-warning/5 p-3 text-[13px]"><strong className="text-warning">Avisos:</strong> {validacao.avisos.join('; ')}.</div>
+              <div aria-live="polite" className="border border-warning/40 bg-warning/5 p-3 text-[13px]"><strong className="text-warning">Avisos:</strong> {validacao.avisos.join('; ')}.</div>
             )}
-            <div className="border border-line bg-white max-h-[480px] overflow-y-auto p-6" dangerouslySetInnerHTML={{ __html: minuta }} />
+            <div role="region" aria-label="Pré-visualização da minuta" tabIndex={0} className="border border-line bg-white max-h-[480px] overflow-y-auto p-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" dangerouslySetInnerHTML={{ __html: minuta }} />
             <div className="flex flex-wrap gap-3">
-              <Btn variant="secondary" onClick={() => contrato && window.open(`/api/contratos/${contrato.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Baixar PDF</Btn>
-              <Btn variant="secondary" onClick={() => salvarStatus('rascunho')} disabled={busy}>Salvar rascunho</Btn>
-              <Btn onClick={() => salvarStatus('em_revisao')} disabled={busy || (validacao ? !validacao.ok : false)}>Enviar para revisão</Btn>
+              <Btn variant="secondary" onClick={() => contrato && window.open(`/api/contratos/${contrato.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} aria-hidden /> Baixar PDF</Btn>
+              <Btn variant="secondary" onClick={() => salvarStatus('rascunho')} disabled={busy} aria-busy={busy}>Salvar rascunho</Btn>
+              <Btn onClick={() => salvarStatus('em_revisao')} disabled={busy || (validacao ? !validacao.ok : false)} aria-busy={busy}>Enviar para revisão</Btn>
             </div>
           </Card>
         )}
 
         {step === 5 && (
-          <Card className="p-6 space-y-2"><div className="flex items-center gap-2 text-[14px] font-semibold"><Lock size={16} /> Aprovação e assinatura</div>
+          <Card className="p-6 space-y-2"><h2 ref={headingRef} tabIndex={-1} className="flex items-center gap-2 text-[16px] font-semibold outline-none"><Lock size={16} aria-hidden /> Aprovação e assinatura</h2>
             <p className="text-[13px] text-text-secondary">Salve/Envie para revisão no passo anterior. A <strong>aprovação humana</strong> (obrigatória) e o <strong>envio ao Documenso</strong> são feitos na <strong>ficha do contrato</strong> (botões Gerar pacote → Aprovar → Enviar para assinatura), para permitir revisão por outra pessoa.</p>
           </Card>
         )}
 
         {/* navegação */}
         <div className="flex justify-between mt-6">
-          <Btn variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onCancelar()} disabled={busy}><ChevronLeft size={16} /> {step > 1 ? 'Voltar' : 'Cancelar'}</Btn>
-          {step === 1 && <Btn onClick={() => setStep(2)} disabled={!eleg?.elegivel}>Avançar <ChevronRight size={16} /></Btn>}
-          {step === 2 && <Btn onClick={avancarParaExtracao} disabled={busy || !arquivo}>{busy ? <Loader2 size={16} className="animate-spin" /> : null} Extrair e conferir <ChevronRight size={16} /></Btn>}
-          {step === 3 && <Btn onClick={avancarParaMinuta} disabled={busy}>{busy ? <Loader2 size={16} className="animate-spin" /> : null} Gerar minuta <ChevronRight size={16} /></Btn>}
-          {step === 4 && <Btn variant="secondary" onClick={() => setStep(5)}>Próximo <ChevronRight size={16} /></Btn>}
+          <Btn variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : cancelar()} disabled={busy}><ChevronLeft size={16} aria-hidden /> {step > 1 ? 'Voltar' : 'Cancelar'}</Btn>
+          {step === 1 && <Btn onClick={() => setStep(2)} disabled={!eleg?.elegivel}>Avançar <ChevronRight size={16} aria-hidden /></Btn>}
+          {step === 2 && <Btn onClick={avancarParaExtracao} disabled={busy || !arquivo} aria-busy={busy}>{busy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : null} Extrair e conferir <ChevronRight size={16} aria-hidden /></Btn>}
+          {step === 3 && <Btn onClick={avancarParaMinuta} disabled={busy} aria-busy={busy}>{busy ? <Loader2 size={16} className="animate-spin" aria-hidden /> : null} Gerar minuta <ChevronRight size={16} aria-hidden /></Btn>}
+          {step === 4 && <Btn variant="secondary" onClick={() => setStep(5)}>Próximo <ChevronRight size={16} aria-hidden /></Btn>}
         </div>
       </main>
     </>
@@ -591,7 +607,7 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
             <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Minuta (PDF)</Btn>
             {['rascunho', 'em_revisao'].includes(c.status) && <Btn variant="secondary" onClick={() => acao('POST', 'gerar-pdf', 'Pacote gerado (Contrato + TR + T&C).')}>Gerar pacote</Btn>}
             {c.anexos?.pacote && !c.aprovacao && <Btn onClick={() => { if (window.confirm('Aprovar este contrato? Sua aprovação fica registrada na trilha (HITL).')) acao('POST', 'aprovar', 'Contrato aprovado.'); }}><Check size={16} /> Aprovar (HITL)</Btn>}
-            {c.status === 'aprovado' && <Btn onClick={() => acao('POST', 'enviar-assinatura', 'Enviado para assinatura.')}><Upload size={16} /> Enviar para assinatura</Btn>}
+            {c.status === 'aprovado' && <Btn onClick={() => { if (window.confirm('Enviar o contrato para assinatura via Documenso? Serão disparados e-mails aos aprovadores e signatários.')) acao('POST', 'enviar-assinatura', 'Enviado para assinatura.'); }}><Upload size={16} aria-hidden /> Enviar para assinatura</Btn>}
             {c.status === 'enviado_assinatura' && !c.documenso?.fallback && <Btn variant="secondary" onClick={() => acao('GET', 'assinatura/status', 'Status verificado.')}>Verificar assinatura</Btn>}
             {c.documenso?.fallback && <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/anexos/pacote.pdf`, '_blank')}><FileText size={16} /> Baixar pacote (envio manual)</Btn>}
             {c.anexos?.assinado && <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/anexos/assinado.pdf`, '_blank')}><FileText size={16} /> Baixar assinado</Btn>}

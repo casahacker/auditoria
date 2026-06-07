@@ -9,7 +9,7 @@ um **launcher** com três ferramentas:
 | **Auditoria de Prestação de Contas** | Conciliação de NF, comprovantes e orçamento por rubrica, com IA (RAPC). | *(no app: seção "Documentação")* |
 | **Processador de Prestação de Contas — SGPP / FEAC** | Concilia, trata documentos (mescla + carimbo + PDF/A-2b), Declaração de Rateio e relatório FEAC. | [processador-feac-sgpp.md](processador-feac-sgpp.md) |
 | **Cockpit de Fornecedores** | Diligência (Receita + listas de restrição) **e** Conformidade KYS/KYG (cadastro verificado + assinatura) por fornecedor, num só lugar. | [diligencia-fornecedores.md](diligencia-fornecedores.md) · [conformidade-kys-kyg.md](conformidade-kys-kyg.md) |
-| **Contratos** | Redige contratos de prestação de serviços (PJ) e termos aditivos a partir de um TR/Proposta: gate de elegibilidade, extração por IA, T&C imutáveis, aprovação humana + Documenso, vínculo a issue Jira (JUR). | [redator-contratos.md](redator-contratos.md) · [contratos-fixture.md](contratos-fixture.md) |
+| **Contratos** | Redige contratos de prestação de serviços (PJ) e termos aditivos a partir de um TR/Proposta: gate de elegibilidade, extração por IA, T&C imutáveis, aprovação humana + Documenso, vínculo a issue Jira (JUR). | [redator-contratos.md](redator-contratos.md) · [contratos-fixture.md](contratos-fixture.md) · [contratos-ux-a11y.md](contratos-ux-a11y.md) |
 
 Cada ferramenta também tem uma seção **"Como usar"** dentro do próprio app.
 
