@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileSignature, Building2, Loader2, ChevronRight, ChevronLeft, Plus, Check, AlertTriangle,
-  ShieldCheck, ShieldAlert, Upload, FileText, ExternalLink, HelpCircle, ListChecks, Clock, Lock, Trash2, Pencil,
+  ShieldCheck, ShieldAlert, Upload, FileText, ExternalLink, HelpCircle, ListChecks, Clock, Lock, Trash2, Pencil, X,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AuthUser } from '../types';
@@ -233,6 +233,11 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
   const [equipamentos, setEquipamentos] = useState('');
   const [clausulasOpc, setClausulasOpc] = useState<string[]>([]);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'erro'>('idle');
+  // visualizador do documento de entrada com destaque do trecho-fonte (#160)
+  const [textoEntrada, setTextoEntrada] = useState('');
+  const [viewerAberto, setViewerAberto] = useState(false);
+  const [fonteAtiva, setFonteAtiva] = useState('');
+  const markRef = useRef<HTMLElement>(null);
   // passo 4
   const [minuta, setMinuta] = useState('');
   const [validacao, setValidacao] = useState<{ ok: boolean; bloqueios: string[]; avisos: string[] } | null>(null);
@@ -270,6 +275,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
         setLocalExecucao(c.localExecucao || ex?.localExecucao?.valor || '');
         setEquipamentos(c.equipamentosFornecidosPelaContratante || ex?.equipamentosFornecidosPelaContratante?.valor || '');
         setClausulasOpc(c.clausulasOpcionais || []);
+        setTextoEntrada(''); setViewerAberto(false); setFonteAtiva('');
         setCiencias(new Set());
         armedRef.current = false; setAutosaveStatus('idle');
         setStep(ex ? 3 : (c.elegibilidadeSnapshot?.elegivel ? 2 : 1));
@@ -335,6 +341,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
       setLocalExecucao(ex.localExecucao?.valor || '');
       setEquipamentos(ex.equipamentosFornecidosPelaContratante?.valor || '');
       setClausulasOpc([]);
+      setTextoEntrada(''); setViewerAberto(false); setFonteAtiva('');
       setCiencias(new Set());
       await refresh(contrato.id);
       armedRef.current = false; setAutosaveStatus('idle');
@@ -412,6 +419,24 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
     });
   const somaParcelasCent = useMemo(() => parcelasEdit.reduce((s, p) => s + reaisToCent(p.valorStr), 0), [parcelasEdit]);
   const totalCent = reaisToCent(valorReais);
+
+  // Visualizador do documento de entrada (#160): carrega o texto sob demanda e destaca o
+  // trecho-fonte do campo clicado (funciona p/ PDF e DOCX, sem pdf.js no bundle).
+  const carregarTextoEntrada = async (): Promise<string> => {
+    if (textoEntrada || !contrato) return textoEntrada;
+    try { const r = await apiFetch(`/api/contratos/${contrato.id}/texto-entrada`); if (r.ok) { const t = (await r.json()).texto || ''; setTextoEntrada(t); return t; } } catch { /* */ }
+    return '';
+  };
+  const verFonte = async (trecho: string) => {
+    const t = String(trecho || '').trim(); if (!t) return;
+    await carregarTextoEntrada(); setFonteAtiva(t); setViewerAberto(true);
+  };
+  const alternarViewer = async () => { if (!viewerAberto) await carregarTextoEntrada(); setFonteAtiva(''); setViewerAberto((v) => !v); };
+  useEffect(() => {
+    if (!viewerAberto || !fonteAtiva) return;
+    const t = setTimeout(() => markRef.current?.scrollIntoView({ block: 'center' }), 60);
+    return () => clearTimeout(t);
+  }, [viewerAberto, fonteAtiva, textoEntrada]);
 
   // Corpo do PATCH com os campos da conferência (passo 3) — reusado pelo "gerar minuta" e
   // pelo autosave (#155). Não dispara as validações de geração (essas ficam em /minuta).
@@ -565,9 +590,25 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
               <div className="border border-warning/40 bg-warning/5 p-3 text-[13px]"><strong className="text-warning">Lacunas:</strong> {extr.lacunas.join('; ')}.</div>
             )}
 
+            {/* Visualizador do documento de entrada com destaque do trecho-fonte (#160) */}
+            <div>
+              <Btn variant="secondary" size="sm" onClick={alternarViewer}><FileText size={14} aria-hidden /> {viewerAberto ? 'Ocultar documento de entrada' : 'Ver documento de entrada'}</Btn>
+            </div>
+            {viewerAberto && (
+              <div className="border border-line">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-line bg-surface-hover">
+                  <span className="text-[12px] font-medium">Documento de entrada (texto extraído)</span>
+                  <IconBtn label="Fechar visualizador" onClick={() => setViewerAberto(false)}><X size={14} aria-hidden /></IconBtn>
+                </div>
+                <div role="region" aria-label="Texto do documento de entrada" tabIndex={0} className="max-h-[300px] overflow-y-auto p-3 text-[12px] whitespace-pre-wrap text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                  {textoEntrada ? destacar(textoEntrada, fonteAtiva, markRef) : 'Sem texto disponível para este documento.'}
+                </div>
+              </div>
+            )}
+
             <div className="grid sm:grid-cols-2 gap-4">
-              <Campo label="Objeto"><textarea value={objeto} onChange={(e) => setObjeto(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /><Fonte texto={extr.objeto?.trechoFonte} /></Campo>
-              <Campo label="Valor total (R$)"><input inputMode="decimal" value={valorReais} onChange={(e) => setValorReais(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /><Fonte texto={extr.valorTotalCentavos?.trechoFonte} /></Campo>
+              <Campo label="Objeto"><textarea value={objeto} onChange={(e) => setObjeto(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /><Fonte texto={extr.objeto?.trechoFonte} onVer={verFonte} /></Campo>
+              <Campo label="Valor total (R$)"><input inputMode="decimal" value={valorReais} onChange={(e) => setValorReais(e.target.value)} placeholder="0,00" className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" /><Fonte texto={extr.valorTotalCentavos?.trechoFonte} onVer={verFonte} /></Campo>
             </div>
 
             {/* Vigência por duração — começa só após a assinatura; fim calculado e estimado (#146) */}
@@ -576,7 +617,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
               <div className="grid sm:grid-cols-2 gap-4">
                 <Campo label="Data de início (estimada — pós-assinatura)">
                   <input type="date" value={vigInicio} onChange={(e) => onInicio(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
-                  <Fonte texto={extr.vigencia?.dataInicio?.trechoFonte} />
+                  <Fonte texto={extr.vigencia?.dataInicio?.trechoFonte} onVer={verFonte} />
                 </Campo>
                 <Campo label="Prazo de vigência">
                   <div className="flex items-center gap-2">
@@ -587,7 +628,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
                       ))}
                     </div>
                   </div>
-                  <Fonte texto={extr.vigencia?.duracaoMeses?.trechoFonte} />
+                  <Fonte texto={extr.vigencia?.duracaoMeses?.trechoFonte} onVer={verFonte} />
                 </Campo>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -597,7 +638,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
               </div>
               <Campo label="Fim da vigência (calculado — estimado, editável)">
                 <input type="date" value={vigFim} onChange={(e) => setVigFim(e.target.value)} className="h-10 w-full sm:w-[220px] bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
-                <Fonte texto={extr.vigencia?.dataFim?.trechoFonte} />
+                <Fonte texto={extr.vigencia?.dataFim?.trechoFonte} onVer={verFonte} />
               </Campo>
               <p className="text-[12px] text-text-secondary">A data de fim é uma estimativa derivada do início + prazo; a vigência real começa na assinatura.</p>
             </fieldset>
@@ -647,25 +688,25 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
               <legend className="text-[12px] text-text-secondary px-1">Escopo e condições (conferência)</legend>
               <Campo label="Resumo do escopo">
                 <textarea value={resumoEscopo} onChange={(e) => setResumoEscopo(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
-                <Fonte texto={extr.resumoEscopo?.trechoFonte} />
+                <Fonte texto={extr.resumoEscopo?.trechoFonte} onVer={verFonte} />
               </Campo>
               <Campo label="Condições de pagamento">
                 <textarea value={condicoesPagamento} onChange={(e) => setCondicoesPagamento(e.target.value)} rows={2} className="w-full bg-field border border-line rounded-none px-3 py-2 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
-                <Fonte texto={extr.condicoesPagamento?.trechoFonte} />
+                <Fonte texto={extr.condicoesPagamento?.trechoFonte} onVer={verFonte} />
               </Campo>
               <div className="grid sm:grid-cols-2 gap-4">
                 <Campo label="SLA / prazo de resposta">
                   <input value={sla} onChange={(e) => setSla(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
-                  <Fonte texto={extr.sla?.trechoFonte} />
+                  <Fonte texto={extr.sla?.trechoFonte} onVer={verFonte} />
                 </Campo>
                 <Campo label="Local de execução">
                   <input value={localExecucao} onChange={(e) => setLocalExecucao(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
-                  <Fonte texto={extr.localExecucao?.trechoFonte} />
+                  <Fonte texto={extr.localExecucao?.trechoFonte} onVer={verFonte} />
                 </Campo>
               </div>
               <Campo label="Equipamentos fornecidos pela contratante">
                 <input value={equipamentos} onChange={(e) => setEquipamentos(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
-                <Fonte texto={extr.equipamentosFornecidosPelaContratante?.trechoFonte} />
+                <Fonte texto={extr.equipamentosFornecidosPelaContratante?.trechoFonte} onVer={verFonte} />
               </Campo>
             </fieldset>
 
@@ -746,13 +787,23 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 
 // Trecho-fonte da extração: citação literal do TR/Proposta que originou o campo (#152).
 // Reforça o guard-rail "a IA só extrai; o humano confere". Vazio = não citado no documento.
-function Fonte({ texto }: { texto?: string | null }) {
+// Com onVer (#160), oferece "ver no documento" para destacar o trecho na entrada.
+function Fonte({ texto, onVer }: { texto?: string | null; onVer?: (t: string) => void }) {
   const t = String(texto || '').trim();
   return (
     <span className="block mt-1 text-[11px] text-text-secondary italic">
-      {t ? <>Fonte: “{t}”</> : <span className="not-italic opacity-70">Sem trecho-fonte (não citado no documento)</span>}
+      {t ? <>Fonte: “{t}”{onVer && <> · <button type="button" onClick={() => onVer(t)} className="not-italic text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">ver no documento</button></>}</> : <span className="not-italic opacity-70">Sem trecho-fonte (não citado no documento)</span>}
     </span>
   );
+}
+
+// Destaca (com <mark>) a 1ª ocorrência do trecho-fonte no texto do documento (#160).
+function destacar(texto: string, trecho: string, ref: React.RefObject<HTMLElement>): React.ReactNode {
+  const tr = String(trecho || '').trim();
+  if (!texto || !tr) return texto;
+  const i = texto.toLowerCase().indexOf(tr.toLowerCase());
+  if (i < 0) return texto;
+  return <>{texto.slice(0, i)}<mark ref={ref} className="bg-warning/40 text-text">{texto.slice(i, i + tr.length)}</mark>{texto.slice(i + tr.length)}</>;
 }
 
 function CriterioRow({ c, cnpj, contratoId, apiFetch, addToast, onReavaliar, navigate }: { c: CriterioElegibilidade; cnpj: string; contratoId?: string; apiFetch: ContratosAppProps['apiFetch']; addToast: ContratosAppProps['addToast']; onReavaliar: () => void; navigate?: (p: string) => void }) {

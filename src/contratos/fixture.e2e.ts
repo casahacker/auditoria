@@ -120,6 +120,8 @@ async function main() {
   fs.writeFileSync(path.join(DATA_DIR, "kyc", "k.json"), JSON.stringify({ id: "k", type: "kys", status: "assinado", kys: { cnpj: "11222333000181" }, signedAt: new Date().toISOString(), fiscalYear: ano, validUntil: new Date(ano, 11, 31).toISOString() }));
   const ex2 = await j("POST", `/api/contratos/${id}/extrair`, { texto: "TR: 30 horas semanais...", tipoDocumento: "tr" });
   ok(ex2.status === 200 && ex2.body.valorTotalCentavos?.valor === 1_800_000, "elegível → extrair roda e devolve o gabarito");
+  const te = await j("GET", `/api/contratos/${id}/texto-entrada`);
+  ok(te.status === 200 && typeof te.body.texto === "string", "#160 — endpoint de texto da entrada responde (200)");
 
   // 4) webhook do Documenso (#156): segredo obrigatório; autenticado e idempotente.
   const wh = (secret: string | null, payload: any) => fetch(base + "/api/contratos/webhooks/documenso", {

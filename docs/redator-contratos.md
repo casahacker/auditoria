@@ -38,7 +38,8 @@ Comercial**, com guard-rails jurídicos rígidos. Épico #126.
    previsão estimada — a minuta nunca sai com `[XX/XX/XXXX]`. O operador pode ainda **ligar
    cláusulas opcionais** (confidencialidade, LGPD/DPA, propriedade intelectual, multa por
    atraso, reajuste) de texto **fixo e versionado** (#157), inseridas na minuta com
-   numeração dinâmica, antes da cláusula de foro.
+   numeração dinâmica, antes da cláusula de foro. Cada campo extraído exibe o **trecho-fonte**
+   e um *ver no documento* que destaca a citação no texto extraído da entrada (#152/#160).
 4. **Minuta** — preview HTML + validações determinísticas; baixar PDF; salvar/enviar para
    revisão.
 5. **Aprovação e assinatura** — na **ficha do contrato**: *Gerar pacote* (Contrato + TR +

@@ -442,6 +442,26 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     res.sendFile(fp);
   });
 
+  // Texto extraído do documento de entrada (#160) — para o visualizador com destaque do
+  // trecho-fonte na conferência (serve PDF e DOCX, sem pdf.js no front).
+  app.get("/api/contratos/:id/texto-entrada", requireAuth, async (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const c = readContrato(id);
+    if (!c) return res.status(404).json({ error: "Contrato não encontrado" });
+    const entrada = c.anexos?.entrada;
+    if (!entrada) return res.json({ texto: "" });
+    const fp = path.join(contratoDir(id), entrada.nome);
+    if (!fs.existsSync(fp)) return res.json({ texto: "" });
+    try {
+      const ext = path.extname(entrada.nome).toLowerCase();
+      let texto = "";
+      if (ext === ".docx") texto = (await mammoth.extractRawText({ path: fp })).value || "";
+      else if (ext === ".pdf") texto = await extractTextFromFile(fp);
+      else texto = fs.readFileSync(fp, "utf-8");
+      res.json({ texto });
+    } catch (e: any) { res.status(422).json({ error: `Não foi possível ler o documento: ${e?.message || e}` }); }
+  });
+
   // Validações determinísticas (#132) — usado pelo passo 4 do wizard (preview da minuta).
   app.get("/api/contratos/:id/validar", requireAuth, (req, res) => {
     const id = idParam(req, res); if (!id) return;
