@@ -46,6 +46,8 @@ services:
       - CONTRATOS_APROVADORES=${CONTRATOS_APROVADORES:-melissa.suda@casahacker.org,everton.justo@casahacker.org}
       - CONTRATOS_DIRETOR_EMAIL=${CONTRATOS_DIRETOR_EMAIL:-geraldo@casahacker.org}
       - CONTRATOS_CC_EMAIL=${CONTRATOS_CC_EMAIL:-juridico@casahacker.org}
+      # Contratos (#156) — segredo do webhook de conclusão de assinatura do Documenso
+      - DOCUMENSO_WEBHOOK_SECRET=${DOCUMENSO_WEBHOOK_SECRET:-}
     deploy:
       resources:
         limits:
