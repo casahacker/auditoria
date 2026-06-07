@@ -17,7 +17,6 @@ import { Btn, IconBtn, Chip, Card, ToolSidebar, ToolHeader, SidebarItem, Sidebar
 import type { ChipTone } from '../ui/kit';
 import { onlyDigits, maskCnpj } from '../kyc/kycTypes';
 import { addMeses, addDias, proporVencimentos } from './datas';
-import { CLAUSULAS_OPCIONAIS } from './templates/clausulasOpcionais_v2026_05';
 import type { Contrato, ContratoResumo, ContratoStatus, ElegibilidadeSnapshot, CriterioElegibilidade, ExtracaoIA } from './contratosTypes';
 
 type ParcelaEdit = { numero: number; valorStr: string; vencimento: string | null; estimada?: boolean };
@@ -231,7 +230,6 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
   const [sla, setSla] = useState('');
   const [localExecucao, setLocalExecucao] = useState('');
   const [equipamentos, setEquipamentos] = useState('');
-  const [clausulasOpc, setClausulasOpc] = useState<string[]>([]);
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'erro'>('idle');
   // visualizador do documento de entrada com destaque do trecho-fonte (#160)
   const [textoEntrada, setTextoEntrada] = useState('');
@@ -274,7 +272,6 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
         setSla(c.sla || ex?.sla?.valor || '');
         setLocalExecucao(c.localExecucao || ex?.localExecucao?.valor || '');
         setEquipamentos(c.equipamentosFornecidosPelaContratante || ex?.equipamentosFornecidosPelaContratante?.valor || '');
-        setClausulasOpc(c.clausulasOpcionais || []);
         setTextoEntrada(''); setViewerAberto(false); setFonteAtiva('');
         setCiencias(new Set());
         armedRef.current = false; setAutosaveStatus('idle');
@@ -340,7 +337,6 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
       setSla(ex.sla?.valor || '');
       setLocalExecucao(ex.localExecucao?.valor || '');
       setEquipamentos(ex.equipamentosFornecidosPelaContratante?.valor || '');
-      setClausulasOpc([]);
       setTextoEntrada(''); setViewerAberto(false); setFonteAtiva('');
       setCiencias(new Set());
       await refresh(contrato.id);
@@ -449,7 +445,6 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
       vigenciaInicio: vigInicio || null, vigenciaFim: vigFim || null, vigenciaEstimada: !!(vigInicio || dMeses || dDias),
       vigenciaDuracaoMeses: dMeses, vigenciaDuracaoDias: dDias,
       resumoEscopo, condicoesPagamento, sla, localExecucao, equipamentosFornecidosPelaContratante: equipamentos,
-      clausulasOpcionais: clausulasOpc,
       prorrogavel: !!extr?.vigencia?.prorrogavel?.valor,
     };
   };
@@ -484,7 +479,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
     }, 1200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, contrato, busy, objeto, valorReais, vigInicio, durUnidade, durValor, vigFim, parcelasEdit, resumoEscopo, condicoesPagamento, sla, localExecucao, equipamentos, clausulasOpc]);
+  }, [step, contrato, busy, objeto, valorReais, vigInicio, durUnidade, durValor, vigFim, parcelasEdit, resumoEscopo, condicoesPagamento, sla, localExecucao, equipamentos]);
 
   const carregarMinuta = async (id: string) => {
     const v = await apiFetch(`/api/contratos/${id}/validar`); setValidacao(v.ok ? await v.json() : null);
@@ -708,22 +703,6 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
                 <input value={equipamentos} onChange={(e) => setEquipamentos(e.target.value)} className="h-10 w-full bg-field border border-line rounded-none px-3 text-[14px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
                 <Fonte texto={extr.equipamentosFornecidosPelaContratante?.trechoFonte} onVer={verFonte} />
               </Campo>
-            </fieldset>
-
-            {/* Cláusulas opcionais (#157) — texto fixo versionado; o operador liga/desliga */}
-            <fieldset className="border border-line p-4">
-              <legend className="text-[12px] text-text-secondary px-1">Cláusulas opcionais</legend>
-              <ul className="grid sm:grid-cols-2 gap-2">
-                {CLAUSULAS_OPCIONAIS.map((oc) => (
-                  <li key={oc.id}>
-                    <label className="flex items-start gap-2 text-[13px] cursor-pointer">
-                      <input type="checkbox" checked={clausulasOpc.includes(oc.id)} onChange={(e) => setClausulasOpc((prev) => e.target.checked ? [...prev, oc.id] : prev.filter((x) => x !== oc.id))} className="mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
-                      <span>{oc.rotulo}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[12px] text-text-secondary mt-2">Texto padrão versionado; quando ligadas, entram na minuta (numeradas) antes da cláusula de foro.</p>
             </fieldset>
 
             {alertasPendentes.length > 0 && (

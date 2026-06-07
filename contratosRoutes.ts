@@ -35,7 +35,6 @@ import { avaliarElegibilidade, aplicarJustificativas } from "./src/contratos/ele
 import { extrairDados } from "./src/contratos/extracao";
 import { renderContratoHtml, renderContratoPdf, renderAditivoHtml, renderAditivoPdf } from "./src/contratos/render";
 import { montarDadosContratada } from "./src/contratos/dadosContratada";
-import { ehClausulaOpcionalValida, VERSAO_CLAUSULAS_OPCIONAIS } from "./src/contratos/templates/clausulasOpcionais_v2026_05";
 
 export interface ContratosCtx {
   DATA_DIR: string;
@@ -121,8 +120,6 @@ const patchSchema = z.object({
   sla: z.string(),
   localExecucao: z.string(),
   equipamentosFornecidosPelaContratante: z.string(),
-  // cláusulas opcionais (#157): só ids válidos do catálogo são persistidos.
-  clausulasOpcionais: z.array(z.string()).transform((a) => a.filter(ehClausulaOpcionalValida)),
 }).partial();
 
 // Aditivo (#137) — payload da criação (no multipart vem como campo `payload` JSON).
@@ -632,7 +629,6 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
         pacote: { nome: "pacote.pdf", tipo: "pacote", mime: "application/pdf", tamanho: pacoteBuf.length, hash: hashPacote, adicionadoEm: now },
       };
       Object.assign(contrato, tcSnapshot());
-      if (contrato.clausulasOpcionais?.length) contrato.versaoClausulasOpcionais = VERSAO_CLAUSULAS_OPCIONAIS;
       contrato.updatedAt = now;
       appendTrilha(contrato, sessionUser(req), "gerou_pacote", `Pacote gerado (SHA-256 ${hashPacote.slice(0, 12)}…)`, { hashMinuta, hashPacote });
       writeContrato(contrato);

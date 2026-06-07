@@ -14,7 +14,6 @@
  */
 import type { Contrato } from "../contratosTypes";
 import { fmtMoeda, fmtData, valorPorExtenso, numeroPorExtenso, somaParcelasCentavos } from "../validacoes";
-import { clausulasOpcionaisSelecionadas } from "./clausulasOpcionais_v2026_05";
 
 export const VERSAO_TEMPLATE = "2026-05";
 
@@ -89,8 +88,7 @@ export function montarBlocos(c: Contrato): Bloco[] {
   const valorTotal = c.valorTotalCentavos || 0;
   const parcelas = Array.isArray(c.parcelas) ? c.parcelas : [];
   const blocos: Bloco[] = [];
-  // Numeração de cláusulas DINÂMICA (#157): cresce conforme as cláusulas (inclusive as
-  // opcionais) são adicionadas, mantendo "1ª, 2ª, …" sempre coerente.
+  // Numeração de cláusulas sequencial (1ª, 2ª, …) atribuída conforme são adicionadas.
   let nCl = 0;
   const clausula = (titulo: string): Bloco => ({ tipo: "clausula", numero: `${++nCl}ª`, titulo });
 
@@ -135,12 +133,6 @@ export function montarBlocos(c: Contrato): Bloco[] {
 
   blocos.push(clausula("TERMOS E CONDIÇÕES APLICÁVEIS À PRESTAÇÃO DE SERVIÇOS À CASA HACKER"));
   blocos.push({ tipo: "paragrafo", texto: `O presente Contrato é regido, em caráter complementar e indissociável, aos Termos e Condições Aplicáveis à Prestação de Serviços à Casa Hacker (versão ${c.versaoTC || VERSAO_TEMPLATE}, “Termos e Condições”), que a este se anexam, formando um todo único para todos os efeitos legais. As Partes, por meio de seus representantes legais devidamente constituídos, declaram, sob as penas da lei, ter plena ciência, inequívoca compreensão e expressa anuência a todas as cláusulas e condições estipuladas nos referidos Termos e Condições.` });
-
-  // Cláusulas opcionais (#157) — inseridas antes do FORO, com numeração dinâmica.
-  for (const oc of clausulasOpcionaisSelecionadas(c.clausulasOpcionais)) {
-    blocos.push(clausula(oc.titulo));
-    for (const par of oc.paragrafos) blocos.push({ tipo: "paragrafo", texto: par });
-  }
 
   blocos.push(clausula("FORO"));
   blocos.push({ tipo: "paragrafo", texto: "Fica eleito o foro da cidade de São Paulo, Estado de São Paulo, com exclusão de qualquer outro, por mais privilegiado que seja ou venha a ser, para dirimir eventuais dúvidas ou controvérsias, oriundas deste contrato, que não possam ser solucionadas por via amigável." });
