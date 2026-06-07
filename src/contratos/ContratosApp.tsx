@@ -291,13 +291,35 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar }: { apiF
     } catch { addToast('error', 'Falha ao processar o documento.'); } finally { setBusy(false); }
   };
 
+  // Validação cruzada Proposta × cadastro (Cockpit/KYS) (#159): a IA guarda o que a
+  // Proposta DECLARA (extr.dadosContratadaNoDocumento); aqui comparamos com o merge
+  // determinístico (contrato.dadosContratada) e sinalizamos divergências.
+  const divergencias = useMemo(() => {
+    const doc = extr?.dadosContratadaNoDocumento; const cad = contrato?.dadosContratada;
+    if (!doc || !cad) return [] as { campo: string; doc: string; cad: string }[];
+    const out: { campo: string; doc: string; cad: string }[] = [];
+    const cmp = (campo: string, docVal: string | null | undefined, cadVal: string | undefined, digits = false) => {
+      const dv = String(docVal ?? '').trim(); const cv = String(cadVal ?? '').trim();
+      if (!dv || !cv) return;
+      const a = digits ? onlyDigits(dv) : dv.toLowerCase().replace(/\s+/g, ' ');
+      const b = digits ? onlyDigits(cv) : cv.toLowerCase().replace(/\s+/g, ' ');
+      if (a !== b) out.push({ campo, doc: dv, cad: cv });
+    };
+    cmp('CNPJ', doc.cnpj?.valor, cad.cnpj, true);
+    cmp('Razão social', doc.razaoSocial?.valor, cad.razaoSocial);
+    cmp('Representante', doc.representante?.valor ?? doc.representanteLegal?.valor ?? doc.nomeRepresentante?.valor, cad.representante?.nome);
+    cmp('CPF do representante', doc.cpf?.valor ?? doc.cpfRepresentante?.valor, cad.representante?.cpf, true);
+    return out;
+  }, [extr, contrato]);
+
   const alertasPendentes = useMemo(() => {
     if (!extr) return [];
     return [
+      ...divergencias.map((d, n) => ({ key: `div-${n}`, label: `Divergência Proposta × cadastro — ${d.campo}: documento "${d.doc}" vs cadastro "${d.cad}"` })),
       ...extr.conflitosComPadrao.map((c, n) => ({ key: `conf-${n}`, label: `Conflito com o padrão: ${c.clausula}` })),
       ...extr.alertas.map((a, n) => ({ key: `al-${n}`, label: a })),
     ];
-  }, [extr]);
+  }, [extr, divergencias]);
 
   // Vigência por duração (#146): a vigência começa só após a assinatura, então o operador
   // informa um prazo (dias/meses) + uma data de início estimada; o fim e os vencimentos das
