@@ -13,12 +13,12 @@
  */
 import extenso from "extenso";
 import { isValidCpf, isValidCnpj } from "../kyc/kycTypes";
-import { iso10, addDias, addMeses, calcularVigenciaFim, proporVencimentos, type ParcelaLike } from "./datas";
+import { iso10, addDias, addMeses, calcularVigenciaFim, proporVencimentos, quintoDiaUtil, ehDiaUtil, type ParcelaLike } from "./datas";
 
 export { isValidCpf, isValidCnpj };
 // Helpers de data puros vivem em ./datas (sem `extenso`) e são re-exportados aqui para
 // não quebrar os imports existentes (templates, rotas, testes) — #146.
-export { iso10, addDias, addMeses, calcularVigenciaFim, proporVencimentos };
+export { iso10, addDias, addMeses, calcularVigenciaFim, proporVencimentos, quintoDiaUtil, ehDiaUtil };
 export type { ParcelaLike };
 
 export const onlyDigits = (s: any): string => String(s ?? "").replace(/\D/g, "");

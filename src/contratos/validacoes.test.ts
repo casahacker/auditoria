@@ -8,7 +8,7 @@
 import {
   valorPorExtenso, numeroPorExtenso, fmtMoeda, fmtData,
   somaParcelasCentavos, validarContratoParaGeracao,
-  isValidCnpj, calcularVigenciaFim, addDias, addMeses, proporVencimentos, validarJiraKey,
+  isValidCnpj, calcularVigenciaFim, addDias, addMeses, proporVencimentos, quintoDiaUtil, validarJiraKey,
   type ParcelaLike,
 } from "./validacoes";
 
@@ -45,7 +45,8 @@ const vprops = proporVencimentos([
   { numero: 1, valorCentavos: 100 },
   { numero: 2, valorCentavos: 100, vencimento: "2026-05-05", estimada: false },
 ], "2026-01-10");
-eq(vprops[0].vencimento, "2026-02-10", "proporVencimentos: parcela 1 = início + 1 mês");
+eq(quintoDiaUtil(2026, 1), "2026-02-06", "5º dia útil de fev/2026 (#163)");
+eq(vprops[0].vencimento, "2026-02-06", "proporVencimentos: parcela 1 = 5º dia útil do mês subsequente (#163)");
 eq(vprops[0].estimada, true, "proporVencimentos: parcela proposta fica estimada");
 eq(vprops[1].vencimento, "2026-05-05", "proporVencimentos: parcela manual (estimada=false) preservada");
 eq(validarJiraKey("JUR-42"), true, "JUR-42 formato ok");

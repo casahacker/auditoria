@@ -402,9 +402,8 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
     setParcelasEdit((prev) => prev.filter((_, idx) => idx !== i).map((p, idx) => ({ ...p, numero: idx + 1 })));
   const addParcela = () =>
     setParcelasEdit((prev) => {
-      const numero = prev.length + 1;
-      const venc = vigInicio ? addMeses(vigInicio, numero) : null;
-      return [...prev, { numero, valorStr: '0,00', vencimento: venc, estimada: !!venc }];
+      const novas = [...prev, { numero: prev.length + 1, valorStr: '0,00', vencimento: null, estimada: true }];
+      return vigInicio ? proporVencimentos(novas, vigInicio) : novas;
     });
   const dividirIgualmente = () =>
     setParcelasEdit((prev) => {
@@ -675,7 +674,7 @@ function Wizard({ apiFetch, addToast, navigate, onConcluir, onCancelar, contrato
                   ? <span className="text-success ml-2">✓ confere com o total</span>
                   : <span className="text-error ml-2">✗ difere do total ({fmtMoeda(totalCent)})</span>)}
               </div>
-              <p className="text-[12px] text-text-secondary mt-1">Vencimentos propostos (mensais) a partir da data de início; edite valor e datas, adicione ou remova parcelas.</p>
+              <p className="text-[12px] text-text-secondary mt-1">Vencimentos propostos no 5º dia útil do mês subsequente à prestação (a partir da data de início); edite valor e datas, adicione ou remova parcelas.</p>
             </div>
 
             {/* Demais campos extraídos — conferíveis e editáveis, com trecho-fonte (#152) */}

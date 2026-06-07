@@ -40,16 +40,33 @@ export function calcularVigenciaFim(inicioIso?: string | null, duracaoMeses?: nu
   return null;
 }
 
+/** Dia útil = segunda a sexta (não considera feriados — é uma estimativa, o operador ajusta). */
+export const ehDiaUtil = (d: Date): boolean => { const w = d.getUTCDay(); return w >= 1 && w <= 5; };
+
+/** 5º dia útil (seg–sex) do mês `mes0` (0-based) de `ano`, em yyyy-mm-dd. */
+export function quintoDiaUtil(ano: number, mes0: number): string {
+  let uteis = 0;
+  for (let dia = 1; dia <= 31; dia++) {
+    const d = new Date(Date.UTC(ano, mes0, dia));
+    if (d.getUTCMonth() !== mes0) break; // estourou o mês
+    if (ehDiaUtil(d)) { uteis++; if (uteis === 5) return d.toISOString().slice(0, 10); }
+  }
+  return new Date(Date.UTC(ano, mes0 + 1, 0)).toISOString().slice(0, 10); // fallback (não ocorre: todo mês tem ≥5 dias úteis)
+}
+
 /**
- * Propõe vencimentos MENSAIS (estimados) para as parcelas sem data confirmada, a partir de
- * uma data-base (parcela i → base + i meses). Determinístico — para a minuta não sair com
- * placeholders [XX/XX/XXXX]. Preserva as parcelas com vencimento confirmado manualmente
- * (estimada === false); as demais voltam marcadas como `estimada: true` e são editáveis.
+ * Propõe vencimentos (estimados) para as parcelas sem data confirmada pela regra PADRÃO:
+ * **5º dia útil do mês subsequente ao da prestação** (parcela i, 0-based → 5º dia útil do mês
+ * de início + i + 1). Determinístico — para a minuta não sair com [XX/XX/XXXX]. Preserva as
+ * parcelas confirmadas manualmente (estimada === false); as demais voltam `estimada: true`,
+ * editáveis. As datas são estritamente crescentes (meses consecutivos).
  */
 export function proporVencimentos<T extends ParcelaLike>(parcelas: T[], baseIso?: string | null): T[] {
   if (!baseIso) return parcelas;
-  const base = iso10(baseIso);
-  return parcelas.map((p, i) =>
-    (p.estimada === false && p.vencimento) ? p : { ...p, vencimento: addMeses(base, i + 1), estimada: true },
-  );
+  const base = new Date(`${iso10(baseIso)}T00:00:00Z`);
+  return parcelas.map((p, i) => {
+    if (p.estimada === false && p.vencimento) return p;
+    const m = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + i + 1, 1));
+    return { ...p, vencimento: quintoDiaUtil(m.getUTCFullYear(), m.getUTCMonth()), estimada: true };
+  });
 }
