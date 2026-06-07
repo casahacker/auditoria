@@ -112,7 +112,7 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFe
             <div className="flex items-center gap-2 text-[14px] font-semibold text-warning mb-2"><Clock size={16} aria-hidden /> {vencendo.length} contrato(s) com vigência expirando em ≤45 dias</div>
             <ul className="space-y-1.5">{vencendo.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
-                <button onClick={() => onAbrir(c.id)} className="text-left hover:text-primary"><span className="font-mono text-[12px]">{c.id}</span> <span className="text-text-secondary">· {c.razaoSocial || maskCnpj(c.cnpj)} · vence {fmtData(c.vigenciaFim)}</span></button>
+                <button onClick={() => onAbrir(c.id)} className="text-left hover:text-primary"><span className="font-mono text-[12px]">{c.jiraIssueKey || c.id}</span> <span className="text-text-secondary">· {c.razaoSocial || maskCnpj(c.cnpj)} · vence {fmtData(c.vigenciaFim)}</span></button>
                 <Btn variant="secondary" size="sm" onClick={() => onProrrogar(c.id)}>Criar aditivo de prorrogação</Btn>
               </li>))}</ul>
           </div>
@@ -140,7 +140,10 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar }: { apiFe
               <tbody>
                 {filtered.map((c) => (
                   <tr key={c.id} className="border-t border-line hover:bg-surface-hover cursor-pointer" onClick={() => onAbrir(c.id)}>
-                    <td className="px-4 py-3 font-mono text-[12px] whitespace-nowrap">{c.id}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-mono text-[12px]">{c.jiraIssueKey || c.id}</div>
+                      {c.jiraIssueKey && <div className="font-mono text-[11px] text-text-secondary">{c.id}</div>}
+                    </td>
                     <td className="px-4 py-3"><div className="font-medium">{c.razaoSocial || '—'}</div><div className="text-[12px] text-text-secondary">{maskCnpj(c.cnpj)}</div></td>
                     <td className="px-4 py-3 max-w-[260px] truncate text-text-secondary">{c.objeto || '—'}</td>
                     <td className="px-4 py-3 whitespace-nowrap">{c.valorTotalCentavos ? fmtMoeda(c.valorTotalCentavos) : '—'}</td>
@@ -490,16 +493,17 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
   const jiraBase = ''; // o link absoluto é montado no backend; aqui só exibimos a key
   return (
     <>
-      <ToolHeader light="Contrato" accent={c.id} right={<div className="flex gap-2"><Btn variant="ghost" onClick={onVoltar}><ChevronLeft size={16} /> Voltar</Btn>{statusChip(c.status)}</div>} />
+      <ToolHeader light="Contrato" accent={c.jira?.issueKey || c.id} right={<div className="flex gap-2"><Btn variant="ghost" onClick={onVoltar}><ChevronLeft size={16} /> Voltar</Btn>{statusChip(c.status)}</div>} />
       <main id="main-content" className="flex-1 p-6 sm:p-10 max-w-4xl w-full space-y-5">
         <Card className="p-5">
           <div className="grid sm:grid-cols-2 gap-4 text-[14px]">
             <Info label="Fornecedor" value={`${c.dadosContratada?.razaoSocial || '—'} (${maskCnpj(c.cnpj)})`} />
-            <Info label="Issue Jira" value={c.jira?.issueKey ? `${c.jira.issueKey} ${c.jira.status ? `· ${c.jira.status}` : ''}` : '—'} />
+            <Info label="Issue Jira (identificador)" value={c.jira?.issueKey ? `${c.jira.issueKey}${c.jira.status ? ` · ${c.jira.status}` : ''}` : '—'} />
             <Info label="Objeto" value={c.objeto || c.extracao?.objeto?.valor || '—'} />
             <Info label="Valor" value={c.valorTotalCentavos ? fmtMoeda(c.valorTotalCentavos) : '—'} />
             <Info label="Vigência" value={c.vigenciaFim ? `até ${fmtData(c.vigenciaFim)}` : '—'} />
             <Info label="Ordem de compra" value={c.ordemCompra || '—'} />
+            <Info label="Chave interna" value={c.id} />
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
             <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/minuta?formato=pdf`, '_blank')}><FileText size={16} /> Minuta (PDF)</Btn>
@@ -534,7 +538,7 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
           {aditivos.length === 0 ? <p className="text-[13px] text-text-secondary">Nenhum aditivo.{c.status !== 'assinado' && ' Aditivos só sobre contrato assinado.'}</p>
             : <ul className="space-y-2">{aditivos.map((a: any) => (
                 <li key={a.id} className="flex items-center justify-between gap-2 text-[13px] border-b border-line pb-2 last:border-0">
-                  <div><span className="font-mono text-[12px]">{a.id}</span> <span className="text-text-secondary">· {a.numeroOrdinal}º · {a.tipo}</span>{a.variacaoPercentual != null && <span className="text-text-secondary"> · {a.variacaoPercentual > 0 ? '+' : ''}{a.variacaoPercentual}%</span>}</div>
+                  <div><span className="font-mono text-[12px]">{a.jira?.issueKey || c.jira?.issueKey || a.id}</span> <span className="text-text-secondary">· {a.numeroOrdinal}º aditivo · {a.tipo}</span>{a.variacaoPercentual != null && <span className="text-text-secondary"> · {a.variacaoPercentual > 0 ? '+' : ''}{a.variacaoPercentual}%</span>} <span className="font-mono text-[11px] text-text-secondary">({a.id})</span></div>
                   <a href={`/api/contratos/${id}/aditivos/${a.id}/minuta?formato=pdf`} target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-1 text-[12px]"><FileText size={12} /> minuta</a>
                 </li>))}</ul>}
         </Card>

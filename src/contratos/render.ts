@@ -34,8 +34,11 @@ const GRAY = rgb(0.45, 0.45, 0.45);
 const SOFT = rgb(0.55, 0.55, 0.55);
 const LINE = rgb(0.8, 0.8, 0.8);
 
+// O identificador do contrato é a issue Jira (JUR-…); o CH-CT-… é só chave interna e
+// NÃO aparece no rodapé (#148). A minuta/pacote só gera com a issue vinculada (gate),
+// então o JUR está sempre presente aqui.
 const rodapeTexto = (c: Contrato, n: number, total: number) =>
-  `${c.id} · ${c.jira?.issueKey || "JUR-—"} · Página ${n} de ${total}`;
+  `${c.jira?.issueKey || "JUR-—"} · Página ${n} de ${total}`;
 
 // ── PDF ───────────────────────────────────────────────────────────────────────
 // Helvetica (WinAnsi) cobre o PT-BR; saneia só os caracteres fora do Latin-1.
@@ -159,10 +162,10 @@ function renderHtml(blocos: Bloco[], rodapeStr: string): string {
 }
 
 export const renderContratoHtml = (c: Contrato): string =>
-  renderHtml(montarBlocos(c), `${c.id} · ${c.jira?.issueKey || "JUR-—"} · rodapé em todas as páginas do PDF`);
+  renderHtml(montarBlocos(c), `${c.jira?.issueKey || "JUR-—"} · rodapé em todas as páginas do PDF`);
 
-// ── Aditivo (#137) — mesmo renderizador, rodapé próprio com o id do aditivo ──────
+// ── Aditivo (#137) — mesmo renderizador; rodapé com o JUR + nº ordinal (sem CH-AD/CH-CT) (#148) ──
 export const renderAditivoPdf = (c: Contrato, ad: Aditivo): Promise<Buffer> =>
-  renderPdf(montarBlocosAditivo(c, ad), (n, t) => `${ad.id} (${c.id}) · ${jiraDe(c, ad)} · Página ${n} de ${t}`);
+  renderPdf(montarBlocosAditivo(c, ad), (n, t) => `${jiraDe(c, ad)} · Aditivo nº ${ad.numeroOrdinal} · Página ${n} de ${t}`);
 export const renderAditivoHtml = (c: Contrato, ad: Aditivo): string =>
-  renderHtml(montarBlocosAditivo(c, ad), `${ad.id} (${c.id}) · ${jiraDe(c, ad)} · rodapé em todas as páginas do PDF`);
+  renderHtml(montarBlocosAditivo(c, ad), `${jiraDe(c, ad)} · Aditivo nº ${ad.numeroOrdinal} · rodapé em todas as páginas do PDF`);
