@@ -131,6 +131,10 @@ async function main() {
   ok((await wh("wh-secret", { event: "DOCUMENT_OPENED", payload: { externalId: "CH-CT-9999-999" } })).status === 200, "#156 — webhook autenticado p/ contrato inexistente → 200 (ignorado)");
   delete process.env.DOCUMENSO_WEBHOOK_SECRET;
 
+  // 5) exclusão (#165): rascunho pode ser excluído antes do envio; depois some (404).
+  ok((await j("DELETE", `/api/contratos/${id}`)).status === 200, "#165 — excluir rascunho → 200");
+  ok((await j("GET", `/api/contratos/${id}`)).status === 404, "#165 — contrato excluído some (404)");
+
   server.close();
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
   console.log(`\n${fail === 0 ? "✅ DoD da Fase 1 OK" : "❌ FALHOU"} — ${pass} passaram, ${fail} falharam`);

@@ -427,6 +427,26 @@ export function registerContratosRoutes(app: Express, ctx: ContratosCtx) {
     res.json(contrato);
   });
 
+  // Excluir contrato (#165) — só ANTES do envio para assinatura. Remove o diretório inteiro
+  // (inclui anexos/aditivos). Bloqueia (422) a partir de enviado_assinatura.
+  const STATUS_EXCLUIVEIS: ContratoStatus[] = ["rascunho", "em_revisao", "aprovado", "cancelado"];
+  app.delete("/api/contratos/:id", writeLimiter, requireAuth, (req, res) => {
+    const id = idParam(req, res); if (!id) return;
+    const contrato = readContrato(id);
+    if (!contrato) return res.status(404).json({ error: "Contrato não encontrado" });
+    if (!STATUS_EXCLUIVEIS.includes(contrato.status)) {
+      return res.status(422).json({ error: `Não é possível excluir um contrato no status "${contrato.status}". A exclusão é permitida apenas antes do envio para assinatura.` });
+    }
+    const user = sessionUser(req);
+    try {
+      fs.rmSync(contratoDir(id), { recursive: true, force: true });
+      console.log(`[Contratos] Contrato ${id} (status ${contrato.status}, ${contrato.jira?.issueKey || "sem JUR"}) EXCLUÍDO por ${user}`);
+      res.json({ ok: true, id });
+    } catch (e: any) {
+      res.status(500).json({ error: `Falha ao excluir: ${e?.message || e}` });
+    }
+  });
+
   // Download de anexo do contrato (entrada/minuta/pacote/assinado) — Seção 14.3.
   app.get("/api/contratos/:id/anexos/:filename", requireAuth, (req, res) => {
     const id = idParam(req, res); if (!id) return;

@@ -113,6 +113,15 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar, onEditar 
     (!busca || [c.id, c.razaoSocial, c.objeto, c.cnpj, c.jiraIssueKey].some((v) => String(v || '').toLowerCase().includes(busca.toLowerCase())))
   ), [rows, fStatus, busca]);
 
+  const excluirRow = async (cid: string, label: string) => {
+    if (!window.confirm(`Excluir o contrato ${label}? Esta ação não pode ser desfeita.`)) return;
+    try {
+      const r = await apiFetch(`/api/contratos/${cid}`, { method: 'DELETE' });
+      if (r.ok) { addToast('success', 'Contrato excluído.'); setRows((prev) => (prev || []).filter((x) => x.id !== cid)); }
+      else addToast('error', (await r.json().catch(() => ({})))?.error || 'Falha ao excluir.');
+    } catch { addToast('error', 'Falha ao excluir.'); }
+  };
+
   return (
     <>
       <ToolHeader light="Registro de" accent="Contratos" right={<Btn onClick={onNovo}><Plus size={16} /> Novo contrato</Btn>} />
@@ -160,8 +169,11 @@ function ListaView({ apiFetch, addToast, onAbrir, onNovo, onProrrogar, onEditar 
                     <td className="px-4 py-3 whitespace-nowrap text-[12px]">{c.vigenciaFim ? `até ${fmtData(c.vigenciaFim)}` : '—'}</td>
                     <td className="px-4 py-3">{statusChip(c.status)}</td>
                     <td className="px-4 py-3 text-center">{c.qtdAditivos || 0}</td>
-                    <td className="px-4 py-3 text-right">
-                      {['rascunho', 'em_revisao'].includes(c.status) && <IconBtn label={`Editar contrato ${c.jiraIssueKey || c.id}`} onClick={(e) => { e.stopPropagation(); onEditar(c.id); }}><Pencil size={14} aria-hidden /></IconBtn>}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        {['rascunho', 'em_revisao'].includes(c.status) && <IconBtn label={`Editar contrato ${c.jiraIssueKey || c.id}`} onClick={(e) => { e.stopPropagation(); onEditar(c.id); }}><Pencil size={14} aria-hidden /></IconBtn>}
+                        {['rascunho', 'em_revisao', 'aprovado', 'cancelado'].includes(c.status) && <IconBtn label={`Excluir contrato ${c.jiraIssueKey || c.id}`} onClick={(e) => { e.stopPropagation(); excluirRow(c.id, c.jiraIssueKey || c.id); }}><Trash2 size={14} aria-hidden /></IconBtn>}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -836,6 +848,15 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
       if (r.ok) { addToast('success', okMsg); await reload(); } else addToast('error', b.error || 'Falha na ação.');
     } catch { addToast('error', 'Falha na ação.'); }
   };
+  const excluir = async () => {
+    if (!c) return;
+    if (!window.confirm(`Excluir o contrato ${c.jira?.issueKey || c.id}? Esta ação não pode ser desfeita.`)) return;
+    try {
+      const r = await apiFetch(`/api/contratos/${id}`, { method: 'DELETE' });
+      if (r.ok) { addToast('success', 'Contrato excluído.'); onVoltar(); }
+      else addToast('error', (await r.json().catch(() => ({})))?.error || 'Falha ao excluir.');
+    } catch { addToast('error', 'Falha ao excluir.'); }
+  };
 
   if (erro) return <main className="p-10"><EmptyState icon={FileSignature} title="Contrato não encontrado" action={<Btn onClick={onVoltar}>Voltar</Btn>} /></main>;
   if (!c) return <main className="p-10 text-text-secondary flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Carregando…</main>;
@@ -866,6 +887,7 @@ function DetalheView({ id, apiFetch, addToast, navigate, onVoltar, onNovoAditivo
             {c.anexos?.assinado && <Btn variant="secondary" onClick={() => window.open(`/api/contratos/${c.id}/anexos/assinado.pdf`, '_blank')}><FileText size={16} /> Baixar assinado</Btn>}
             {c.status === 'assinado' && <Btn variant="secondary" onClick={onNovoAditivo}><Plus size={16} /> Novo aditivo</Btn>}
             {c.jira?.issueKey && <Btn variant="secondary" onClick={() => acao('POST', 'jira/reenviar', 'Reenviado ao Jira.')}>Reenviar ao Jira</Btn>}
+            {['rascunho', 'em_revisao', 'aprovado', 'cancelado'].includes(c.status) && <Btn variant="danger" onClick={excluir}><Trash2 size={16} aria-hidden /> Excluir</Btn>}
           </div>
           {c.jiraSync && c.jiraSync.length > 0 && (
             <div className="mt-3 text-[12px] text-text-secondary">
